@@ -16,13 +16,13 @@ Story goal: Initialize the project environment and base infrastructure.
 
 Story goal: Establish core architectural components (DB, Config, Logging).
 
-- [ ] T005 [P] Configure Pydantic Settings for environment variables in `core/config.py`
-- [ ] T006 [P] Setup SQLAlchemy async engine and session factory in `services/database.py`
-- [ ] T007 Define SQLAlchemy models in `models/schema.py` (Product, TextEmbedding, Conversation, SemanticCache) with `agent_v1` schema
-- [ ] T008 Initialize Alembic and create initial migration to create `agent_v1` schema and tables in `migrations/`
-- [ ] T009 [P] Configure Logfire for structured JSON logging to Stdout in `core/logging.py`
-- [ ] T010 [P] Implement async exception handling and middleware in `api/middleware.py`
-- [ ] T011 Initialize FastAPI app with Logfire and database session management in `api/main.py`
+- [X] T005 [P] Configure Pydantic Settings for environment variables in `core/config.py`
+- [X] T006 [P] Setup SQLAlchemy async engine and session factory in `services/database.py`
+- [X] T007 Define SQLAlchemy models in `models/schema.py` (Product, TextEmbedding, Conversation, SemanticCache) with `agent_v1` schema
+- [X] T008 Initialize Alembic and create initial migration to create `agent_v1` schema and tables in `migrations/`
+- [X] T009 [P] Configure Logfire for structured JSON logging to Stdout in `core/logging.py`
+- [X] T010 [P] Implement async exception handling and middleware in `api/middleware.py`
+- [X] T011 Initialize FastAPI app with Logfire and database session management in `api/main.py`
 
 ## Phase 3: [US1] Project Environment Readiness
 

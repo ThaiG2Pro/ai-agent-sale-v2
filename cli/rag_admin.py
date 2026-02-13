@@ -4,8 +4,8 @@
 This is a minimal, dependency-free starting point. Expand to call
 your ingestion routines, vector index builder, and pgvector search.
 """
+
 import argparse
-import sys
 
 
 def cmd_ingest(path: str) -> int:
@@ -21,7 +21,7 @@ def cmd_build_index() -> int:
 
 
 def cmd_search(query: str, topk: int) -> int:
-    print(f"[rag_admin] search: query=\"{query}\" topk={topk}")
+    print(f'[rag_admin] search: query="{query}" topk={topk}')
     # TODO: perform vector+FTS hybrid search and print results with citations
     return 0
 
@@ -32,8 +32,6 @@ def main(argv=None):
 
     p_ingest = sub.add_parser("ingest", help="Ingest documents into RAG pipeline")
     p_ingest.add_argument("path", help="Path to files or folder")
-
-    p_build = sub.add_parser("build-index", help="Build or rebuild vector index")
 
     p_search = sub.add_parser("search", help="Run a quick hybrid search")
     p_search.add_argument("query", help="Query text")
