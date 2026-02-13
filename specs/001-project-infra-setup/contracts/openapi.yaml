@@ -1,0 +1,77 @@
+openapi: 3.0.3
+info:
+  title: AI Sales Agent Foundation API
+  version: 1.0.0
+  description: Core infrastructure endpoints for health and admin.
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Verifies system responsiveness and database connectivity.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string, example: "ok"}
+                  db: {type: string, example: "connected"}
+                  latency_ms: {type: number, example: 5.2}
+
+  /admin/rag/ingest:
+    post:
+      summary: Ingest text for RAG
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, metadata]
+              properties:
+                text: {type: string}
+                metadata: {type: object}
+      responses:
+        '201':
+          description: Created
+
+  /admin/rag/search:
+    post:
+      summary: Test vector search
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: {type: string}
+                top_k: {type: integer, default: 5}
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    text: {type: string}
+                    score: {type: number}
+                    metadata: {type: object}
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Key

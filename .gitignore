@@ -41,8 +41,6 @@ lib/
 *.onnx
 *.pt
 *.safetensors
-data/
-models/
 
 # --- BUILD & DISTRIBUTION ---
 __pycache__/
@@ -65,13 +63,9 @@ htmlcov/
 
 # my local
 mise.toml
-docs/
-docs/mission
 reports/
-#specs/
 GEMINI.md 
 
-.gemini/ 
-.github/ 
-.specify/
-specs
+.gemini/
+.github/
+docs/

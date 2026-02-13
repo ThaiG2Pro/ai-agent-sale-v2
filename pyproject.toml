@@ -1,7 +1,7 @@
 [project]
 name = "ai-agent-sale-v2"
 version = "0.1.0"
-description = "Add your description here"
+description = "SME-Ready AI Sales Agent (2026)"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -11,12 +11,34 @@ dependencies = [
     "litellm",
     "sqlalchemy[asyncio]>=2.0.30",
     "asyncpg",
-    "pgvector>=0.8.0",
+    "pgvector",
     "pymupdf",
     "crawl4ai",
     "httpx",
     "logfire",
     "numpy",
-    "pytest",
     "python-dotenv",
+    "pydantic-settings",
+    "alembic",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "B", "ASYNC"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
