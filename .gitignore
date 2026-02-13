@@ -1,0 +1,77 @@
+# =================================================================
+# STRATEGIC DEFENSIVE CONFIGURATION - PYTHON TEMPLATE (2025-2026)
+# =================================================================
+
+# --- SECRETS & CREDENTIALS (Tối quan trọng) ---
+.env
+.env.*
+.envrc
+auth.json
+secrets.toml
+# Ngoại lệ: Cho phép file ví dụ để team nắm được cấu trúc
+!.env.example
+
+# Khóa bảo mật và chứng chỉ
+*.pem
+*.key
+*.pub
+*.crt
+*.pfx
+
+# --- AI-NATIVE EDITORS & MODERN IDEs ---
+.vscode/
+.idea/
+.cursor/        # Cursor AI editor
+.windsurf/      # Windsurf AI agent config
+.idx/           # Google IDX
+*.swp
+.DS_Store
+
+# --- PYTHON ENVIRONMENTS (Rye, Poetry, Venv) ---
+.venv/
+venv/
+env/
+.python-version
+bin/
+lib/
+# Ghi chú: Có thể commit poetry.lock/pdm.lock tùy chiến lược của team
+
+# --- AI/ML MODELS & DATA (Loại bỏ tệp lớn) ---
+*.h5
+*.onnx
+*.pt
+*.safetensors
+data/
+models/
+
+# --- BUILD & DISTRIBUTION ---
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- TESTING & QUALITY ---
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/   # Ruff linter (chuẩn mới 2025)
+
+
+# my local
+mise.toml
+docs/
+docs/mission
+reports/
+#specs/
+GEMINI.md 
+
+.gemini/ 
+.github/ 
+.specify/
+specs

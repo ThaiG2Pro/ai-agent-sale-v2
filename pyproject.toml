@@ -1,0 +1,22 @@
+[project]
+name = "ai-agent-sale-v2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "langgraph",
+    "litellm",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg",
+    "pgvector>=0.8.0",
+    "pymupdf",
+    "crawl4ai",
+    "httpx",
+    "logfire",
+    "numpy",
+    "pytest",
+    "python-dotenv",
+]

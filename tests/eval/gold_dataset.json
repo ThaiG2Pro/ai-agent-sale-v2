@@ -1,0 +1,14 @@
+[
+  {
+    "query": "What is the price of product X?",
+    "expected_response": "Product X costs $100.",
+    "context": "Sample context for evaluation",
+    "grade_criteria": "Accuracy, relevance"
+  },
+  {
+    "query": "Tell me about product Y features.",
+    "expected_response": "Product Y has features A, B, C.",
+    "context": "Detailed description",
+    "grade_criteria": "Completeness, clarity"
+  }
+]
