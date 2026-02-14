@@ -69,3 +69,5 @@ GEMINI.md
 .gemini/
 .github/
 docs/
+
+.agent/
