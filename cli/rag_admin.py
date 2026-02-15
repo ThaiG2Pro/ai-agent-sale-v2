@@ -1,53 +1,73 @@
-#!/usr/bin/env python3
-"""Simple RAG admin CLI stub: ingest / build-index / search
-
-This is a minimal, dependency-free starting point. Expand to call
-your ingestion routines, vector index builder, and pgvector search.
+"""Why this exists: CLI for managing the RAG pipeline (Ingestion & Search).
+What it does: Provides a command-line interface to ingest and search products.
 """
 
 import argparse
+import asyncio
+import json
+import sys
+
+from services.database import AsyncSessionLocal
+from services.rag import ingest_product_text, search_products
 
 
-def cmd_ingest(path: str) -> int:
-    print(f"[rag_admin] ingest: would ingest files from {path}")
-    # TODO: call ingestion pipeline (PDF parsing, chunking, metadata)
-    return 0
+async def handle_ingest(args):
+    """Handles product ingestion from CLI."""
+    async with AsyncSessionLocal() as db:
+        try:
+            product_id = await ingest_product_text(
+                db=db,
+                name=args.name,
+                sku=args.sku,
+                description=args.description,
+                price=args.price,
+                metadata=json.loads(args.metadata) if args.metadata else None,
+            )
+            print(f"✓ Ingested successfully. Product ID: {product_id}")
+        except Exception as e:
+            print(f"✗ Ingestion failed: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
-def cmd_build_index() -> int:
-    print("[rag_admin] build-index: would (re)build vector index and FTS tables")
-    # TODO: connect to DB, upsert vectors, create indexes
-    return 0
+async def handle_search(args):
+    """Handles vector search from CLI."""
+    async with AsyncSessionLocal() as db:
+        try:
+            results = await search_products(db=db, query=args.query, top_k=args.top_k)
+            print(json.dumps(results, indent=2))
+        except Exception as e:
+            print(f"✗ Search failed: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
-def cmd_search(query: str, topk: int) -> int:
-    print(f'[rag_admin] search: query="{query}" topk={topk}')
-    # TODO: perform vector+FTS hybrid search and print results with citations
-    return 0
+def main():
+    parser = argparse.ArgumentParser(description="RAG Administration CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # Ingest command
+    ingest_parser = subparsers.add_parser("ingest", help="Ingest a product")
+    ingest_parser.add_argument("--name", required=True, help="Product name")
+    ingest_parser.add_argument("--sku", required=True, help="Product SKU")
+    ingest_parser.add_argument(
+        "--description", required=True, help="Product description for embedding"
+    )
+    ingest_parser.add_argument("--price", type=float, default=0.0, help="Product price")
+    ingest_parser.add_argument("--metadata", help="JSON string of metadata")
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(prog="rag_admin", description="RAG admin CLI")
-    sub = parser.add_subparsers(dest="cmd")
+    # Search command
+    search_parser = subparsers.add_parser("search", help="Perform a vector search")
+    search_parser.add_argument("query", help="Search query string")
+    search_parser.add_argument(
+        "--top-k", type=int, default=5, help="Number of results to return"
+    )
 
-    p_ingest = sub.add_parser("ingest", help="Ingest documents into RAG pipeline")
-    p_ingest.add_argument("path", help="Path to files or folder")
+    args = parser.parse_args()
 
-    p_search = sub.add_parser("search", help="Run a quick hybrid search")
-    p_search.add_argument("query", help="Query text")
-    p_search.add_argument("--topk", type=int, default=8, help="Top K results")
-
-    args = parser.parse_args(argv)
-    if args.cmd == "ingest":
-        return cmd_ingest(args.path)
-    if args.cmd == "build-index":
-        return cmd_build_index()
-    if args.cmd == "search":
-        return cmd_search(args.query, args.topk)
-
-    parser.print_help()
-    return 1
+    if args.command == "ingest":
+        asyncio.run(handle_ingest(args))
+    elif args.command == "search":
+        asyncio.run(handle_search(args))
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

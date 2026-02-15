@@ -25,13 +25,28 @@ if [ -d ".venv/bin" ]; then
 	export PATH="$(pwd)/.venv/bin:$PATH"
 fi
 
-# Helpful check: ensure `uv` is available, otherwise print guidance and exit.
+# Try to locate `uv`. Add common locations (mise installs) to PATH when found.
+if ! command -v uv >/dev/null 2>&1; then
+	# Look for mise-installed uv binary under ~/.local/share/mise/installs/uv/*/uv
+	mise_uv_glob="$HOME/.local/share/mise/installs/uv"/*/uv
+	for candidate in $mise_uv_glob; do
+		if [ -x "$candidate" ]; then
+			export PATH="$(dirname "$candidate"):$PATH"
+			break
+		fi
+	done
+fi
+
+# Final check: ensure `uv` is available, otherwise print guidance and exit.
 if ! command -v uv >/dev/null 2>&1; then
 	echo "Error: 'uv' command not found in PATH."
-	echo "If you installed 'uv' via pipx, add \"$HOME/.local/bin\" to your PATH," \
-		 "or activate your virtualenv. Example:"
-	echo "  export PATH=\"$HOME/.local/bin:\$PATH\""
-	echo "Or re-run './scripts/lint.sh install-hook' after fixing PATH so the hook uses this script."
+	echo "Possible fixes:"
+	echo "  - Add the installer bin to PATH (mise):"
+	echo "      export PATH=\"$HOME/.local/share/mise/installs/uv/<version>/:\$PATH\""
+	echo "  - Add pipx user bin to PATH:"
+	echo "      export PATH=\"$HOME/.local/bin:\$PATH\""
+	echo "  - Activate your project's virtualenv (if uv is installed there)."
+	echo "After fixing PATH, reinstall the pre-commit hook: ./scripts/lint.sh install-hook"
 	exit 1
 fi
 

@@ -42,10 +42,10 @@ Story goal: Implement storage, vector search, and semantic caching.
 - [X] T014 [US2] Implement SHA256 canonicalization for queries in `services/semantic_cache.py`
 - [X] T015 [US2] Implement L1 (Exact Match) cache lookup in `services/semantic_cache.py`
 - [X] T016 [US2] Implement L2 (Vector Similarity) cache lookup using `pgvector` in `services/semantic_cache.py`
-- [ ] T017 [US2] Create RAG administration CLI in `cli/rag_admin.py` with ingestion and search commands
-- [ ] T018 [US2] Secure admin endpoints with `X-Admin-Key` header check in `api/dependencies.py`
-- [ ] T019 [P] [US2] Implement `/admin/rag/ingest` endpoint in `api/routes/admin.py`
-- [ ] T020 [P] [US2] Implement `/admin/rag/search` endpoint in `api/routes/admin.py`
+- [X] T017 [US2] Create RAG administration CLI in `cli/rag_admin.py` with ingestion and search commands
+- [X] T018 [US2] Secure admin endpoints with `X-Admin-Key` header check in `api/dependencies.py`
+- [X] T019 [P] [US2] Implement `/admin/rag/ingest` endpoint in `api/routes/admin.py`
+- [X] T020 [P] [US2] Implement `/admin/rag/search` endpoint in `api/routes/admin.py`
 - [ ] T021 [US2] Write integration tests for RAG search and cache in `tests/integration/test_rag.py`
 
 ## Phase 5: [US3] Responsive Service Monitoring
