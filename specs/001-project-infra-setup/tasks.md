@@ -64,11 +64,11 @@ Story goal: AI functions running locally via LiteLLM + Ollama.
 
 **Independent Test**: System generates responses and embeddings without internet connection.
 
-- [ ] T025 [US4] Configure LiteLLM for local Ollama in `core/ai_config.py`
-- [ ] T026 [US4] Implement `AIGateway` with async wrappers for LiteLLM calls in `services/ai.py`
-- [ ] T027 [US4] Implement fallback logic to cloud provider in `services/ai.py`
-- [ ] T028 [US4] Implement model switching latency check in `services/ai.py`
-- [ ] T029 [US4] Write integration test for offline generation in `tests/integration/test_ai_offline.py`
+- [X] T025 [US4] Configure LiteLLM for local Ollama in `core/ai_config.py`
+- [X] T026 [US4] Implement `AIGateway` with async wrappers for LiteLLM calls in `services/ai.py`
+- [X] T027 [US4] Implement fallback logic to cloud provider in `services/ai.py`
+- [X] T028 [US4] Implement model switching latency check in `services/ai.py`
+- [X] T029 [US4] Write integration test for offline generation in `tests/integration/test_ai_offline.py`
 
 ## Final Phase: Polish & Cross-Cutting Concerns
 
