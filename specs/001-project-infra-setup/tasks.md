@@ -30,8 +30,8 @@ Story goal: Standardized environment setup and quality enforcement.
 
 **Independent Test**: `uv sync` completes successfully and `ruff check` passes.
 
-- [ ] T012 [US1] Implement `uv sync --dry-run` verification check in `pyproject.toml`
-- [ ] T013 [P] [US1] Add pre-commit hook or script for ruff check/format in `scripts/lint.sh`
+- [X] T012 [US1] Implement `uv sync --dry-run` verification check in `pyproject.toml`
+- [X] T013 [P] [US1] Add pre-commit hook or script for ruff check/format in `scripts/lint.sh`
 
 ## Phase 4: [US2] High-Performance Data Foundation
 
@@ -39,9 +39,9 @@ Story goal: Implement storage, vector search, and semantic caching.
 
 **Independent Test**: RAG CLI can ingest and search data; semantic cache returns hits for identical queries.
 
-- [ ] T014 [US2] Implement SHA256 canonicalization for queries in `services/semantic_cache.py`
-- [ ] T015 [US2] Implement L1 (Exact Match) cache lookup in `services/semantic_cache.py`
-- [ ] T016 [US2] Implement L2 (Vector Similarity) cache lookup using `pgvector` in `services/semantic_cache.py`
+- [X] T014 [US2] Implement SHA256 canonicalization for queries in `services/semantic_cache.py`
+- [X] T015 [US2] Implement L1 (Exact Match) cache lookup in `services/semantic_cache.py`
+- [X] T016 [US2] Implement L2 (Vector Similarity) cache lookup using `pgvector` in `services/semantic_cache.py`
 - [ ] T017 [US2] Create RAG administration CLI in `cli/rag_admin.py` with ingestion and search commands
 - [ ] T018 [US2] Secure admin endpoints with `X-Admin-Key` header check in `api/dependencies.py`
 - [ ] T019 [P] [US2] Implement `/admin/rag/ingest` endpoint in `api/routes/admin.py`
@@ -54,9 +54,9 @@ Story goal: Implement health monitoring with strict performance targets.
 
 **Independent Test**: `/health` returns 200 OK with DB status in < 10ms.
 
-- [ ] T022 [US3] Implement `/health` endpoint with DB connectivity check in `api/routes/health.py`
-- [ ] T023 [P] [US3] Add health router to `api/main.py`
-- [ ] T024 [US3] Write TDD unit test for health endpoint in `tests/unit/test_health.py`
+- [X] T022 [US3] Implement `/health` endpoint with DB connectivity check in `api/routes/health.py`
+- [X] T023 [P] [US3] Add health router to `api/main.py`
+- [X] T024 [US3] Write TDD unit test for health endpoint in `tests/unit/test_health.py`
 
 ## Phase 6: [US4] Zero-Cost Local Intelligence
 
@@ -88,13 +88,15 @@ Story goal: Final documentation and architectural records.
 
 - Phase 2 depends on completion of Phase 1
 - Phase 3, 4, 5, 6 depend on completion of Phase 2
-- Phase 4 (L2 Cache) depends on `AIGateway` from Phase 6 if embeddings are generated on-the-fly
+- Phase 4 uses direct LiteLLM embedding for query-time only.
+- Phase 6 AIGateway is introduced later for orchestration and model routing.
+- precompute embeddings during ingest and store them; L2 will read stored vectors and does not require `AIGateway` at runtime.
 
 ## Parallel Execution Examples
 
 - T002, T003, T004 (Setup)
 - T005, T006, T009, T010 (Foundational Infrastructure)
-- US1 (Linting) can run parallel to US3 (Monitoring) once api/main.py (T011) exists
+- US1 (Linting) can run parallel to US3 (Monitoring1) once api/main.py (T011) exists
 
 ## Implementation Strategy
 

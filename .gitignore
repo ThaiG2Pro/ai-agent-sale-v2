@@ -68,6 +68,9 @@ GEMINI.md
 
 .gemini/
 .github/
-docs/
+#docs/
 
 .agent/
+
+
+db_password.txt   

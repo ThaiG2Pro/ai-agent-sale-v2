@@ -115,7 +115,9 @@ As a business owner, I want the system to be capable of running its AI functions
 - **FR-025**: System MUST implement a Tier 1 evaluation runner for RAG search quality using `tests/eval/gold_dataset.json` with HITL grading.
 - **FR-026**: System MUST include `source_chunk_ids` (ProductID/ChunkID) in all RAG-generated responses for data provenance.
 
-### Key Entities *(include if feature involves data)*
+### Key Entities *(incluVì sao không có hướng dẫn: T013 ở tài liệu chỉ là checklist/ý định — thay đổi chưa được thêm vào repo nên hiện tại không có phần hướng dẫn sử dụng thực tế trong mã nguồn hoặc README.md.
+
+de if feature involves data)*
 
 - **Product Knowledge**: Structured and unstructured data representing the items the agent can sell.
 - **Semantic Vector**: A mathematical representation of the meaning of a piece of text.

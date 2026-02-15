@@ -1,7 +1,8 @@
-"""Why this exists: Ensures consistent error responses and observability for all
-requests.
-What it does: Implements FastAPI middleware for timing and global exception
-handling.
+"""Middleware implementations for the API package.
+
+This module holds concrete middleware classes and exception handlers.
+Keep heavy-lifting out of package import-time code; importing this module
+is lightweight and explicit when used by the application.
 """
 
 import time

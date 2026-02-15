@@ -1,4 +1,3 @@
-
 import asyncio
 from logging.config import fileConfig
 
@@ -17,7 +16,6 @@ config = context.config
 # This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
 
 
 target_metadata = Base.metadata
@@ -47,7 +45,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
-        literal_推=True,
+        literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         version_table_schema=SCHEMA,
         include_schemas=True,
@@ -68,7 +66,7 @@ def do_run_migrations(connection):
     with context.begin_transaction():
         # Create schema and extension if not exists
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
-        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        # connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         context.run_migrations()
 
 
