@@ -2,8 +2,10 @@
 What it does: Provides async wrappers for LiteLLM with fallback and latency tracking.
 """
 
+from __future__ import annotations
+
 import time
-from typing import Any, AsyncGenerator, Dict, List, Union
+from typing import Any
 
 import logfire
 from litellm import Router
@@ -23,11 +25,11 @@ class AIGateway:
 
     @staticmethod
     async def complete(
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         model: str = "economy-chat",
         stream: bool = False,
         **kwargs,
-    ) -> Union[Any, AsyncGenerator[Any, None]]:
+    ) -> Any:
         """
         Why this exists: Generates text responses with automatic fallback.
         What it does: Wraps litellm.acompletion with latency monitoring.
@@ -69,8 +71,8 @@ class AIGateway:
 
     @staticmethod
     async def embed(
-        input_text: Union[str, List[str]], model: str = "economy-embedding", **kwargs
-    ) -> List[List[float]]:
+        input_text: str | list[str], model: str = "economy-embedding", **kwargs
+    ) -> list[list[float]]:
         """
         Why this exists: Generates text embeddings for RAG and caching.
         What it does: Wraps litellm.aembedding with latency monitoring.

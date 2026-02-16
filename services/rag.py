@@ -2,16 +2,21 @@
 What it does: Implements text ingestion into PostgreSQL and vector search capabilities.
 """
 
-import uuid
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import litellm
 import logfire
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from models.schema import Product, TextEmbedding
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def ingest_product_text(
@@ -20,7 +25,7 @@ async def ingest_product_text(
     sku: str,
     description: str,
     price: float = 0.0,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> uuid.UUID:
     """
     Why this exists: Populates the system with searchable product knowledge.
@@ -63,7 +68,7 @@ async def ingest_product_text(
 
 async def search_products(
     db: AsyncSession, query: str, top_k: int = 5
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Why this exists: Performs semantic retrieval for the AI agent.
     What it does: Embeds the query and searches pgvector for similar products.

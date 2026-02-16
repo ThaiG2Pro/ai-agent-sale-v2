@@ -2,13 +2,17 @@
 What it does: Implements SHA256 hashing (L1) and pgvector similarity search (L2).
 """
 
+from __future__ import annotations
+
 import hashlib
-from typing import List, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.schema import SemanticCache
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def canonicalize_query(query: str) -> str:
@@ -28,7 +32,7 @@ def generate_query_hash(query: str) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-async def get_l1_cache(db: AsyncSession, query: str) -> Optional[str]:
+async def get_l1_cache(db: AsyncSession, query: str) -> str | None:
     """
     Why this exists: Zero-cost exact match lookup.
     What it does: Queries SemanticCache by query_hash.
@@ -41,8 +45,8 @@ async def get_l1_cache(db: AsyncSession, query: str) -> Optional[str]:
 
 
 async def get_l2_cache(
-    db: AsyncSession, query_embedding: List[float], threshold: float = 0.95
-) -> Optional[str]:
+    db: AsyncSession, query_embedding: list[float], threshold: float = 0.95
+) -> str | None:
     """
     Why this exists: Semantic fallback when L1 misses.
     What it does: Performs cosine similarity search using pgvector.
@@ -70,7 +74,7 @@ async def set_cache(
     db: AsyncSession,
     query: str,
     response: str,
-    embedding: List[float],
+    embedding: list[float],
     model_name: str,
 ) -> None:
     """

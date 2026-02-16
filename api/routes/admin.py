@@ -2,11 +2,15 @@
 What it does: Implements ingestion and search routes secured by X-Admin-Key.
 """
 
-from typing import Annotated, Any, Dict, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import verify_admin_key
 from services.database import get_db
@@ -22,7 +26,7 @@ class IngestRequest(BaseModel):
     sku: str
     description: str
     price: float = 0.0
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 class SearchRequest(BaseModel):

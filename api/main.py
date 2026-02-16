@@ -3,6 +3,8 @@ What it does: Initializes FastAPI app, registers middleware, and configures
 lifecycle events.
 """
 
+from __future__ import annotations
+
 from contextlib import asynccontextmanager
 
 import logfire

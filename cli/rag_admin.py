@@ -2,6 +2,8 @@
 What it does: Provides a command-line interface to ingest and search products.
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json

@@ -2,6 +2,8 @@
 What it does: Sets up model routing and parameters for local and cloud models.
 """
 
+from __future__ import annotations
+
 from core.config import settings
 
 # Article X: Model Selection Strategy

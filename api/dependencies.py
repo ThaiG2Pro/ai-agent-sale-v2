@@ -2,6 +2,8 @@
 What it does: Implements X-Admin-Key security check for administrative endpoints.
 """
 
+from __future__ import annotations
+
 import logfire
 from fastapi import Header, HTTPException, status
 

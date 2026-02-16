@@ -5,12 +5,17 @@ Keep heavy-lifting out of package import-time code; importing this module
 is lightweight and explicit when used by the application.
 """
 
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 import logfire
-from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+if TYPE_CHECKING:
+    from fastapi import HTTPException, Request
 
 
 class TimingMiddleware(BaseHTTPMiddleware):

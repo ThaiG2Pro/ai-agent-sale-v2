@@ -2,7 +2,12 @@
 What it does: Initializes SQLAlchemy AsyncEngine and async_sessionmaker.
 """
 
-from typing import AsyncGenerator
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -25,7 +30,7 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_db() -> AsyncGenerator[AsyncSession]:
     """Dependency for obtaining an async database session."""
     async with AsyncSessionLocal() as session:
         try:

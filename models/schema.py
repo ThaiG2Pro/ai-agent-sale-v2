@@ -2,10 +2,14 @@
 What it does: Maps Python classes to PostgreSQL tables using SQLAlchemy Declarative.
 """
 
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
-from decimal import Decimal
-from typing import List
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from decimal import Decimal
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text
@@ -23,7 +27,7 @@ SCHEMA = "agent_v1"
 
 class Product(Base):
     __tablename__ = "products"
-    __table_args__ = {"schema": SCHEMA}
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -44,14 +48,14 @@ class Product(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
-    embeddings: Mapped[List["TextEmbedding"]] = relationship(
+    embeddings: Mapped[list[TextEmbedding]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
 
 
 class TextEmbedding(Base):
     __tablename__ = "text_embeddings"
-    __table_args__ = {"schema": SCHEMA}
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -69,12 +73,12 @@ class TextEmbedding(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    product: Mapped["Product"] = relationship(back_populates="embeddings")
+    product: Mapped[Product] = relationship(back_populates="embeddings")
 
 
 class ConversationSession(Base):
     __tablename__ = "conversation_sessions"
-    __table_args__ = {"schema": SCHEMA}
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -87,14 +91,14 @@ class ConversationSession(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    messages: Mapped[List["ConversationMessage"]] = relationship(
+    messages: Mapped[list[ConversationMessage]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
 
 
 class ConversationMessage(Base):
     __tablename__ = "conversation_messages"
-    __table_args__ = {"schema": SCHEMA}
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -118,12 +122,12 @@ class ConversationMessage(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-    session: Mapped["ConversationSession"] = relationship(back_populates="messages")
+    session: Mapped[ConversationSession] = relationship(back_populates="messages")
 
 
 class SemanticCache(Base):
     __tablename__ = "semantic_cache"
-    __table_args__ = (
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
         Index(
             "idx_semantic_cache_embedding",
             "embedding",
