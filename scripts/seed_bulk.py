@@ -85,13 +85,24 @@ PRODUCT_CATEGORIES: list[dict[str, Any]] = [
     },
     {
         "category": "Sức khỏe & Làm đẹp",
-        "subcategories": ["Mỹ phẩm", "Thực phẩm chức năng", "Dụng cụ tập gym", "Chăm sóc da"],
+        "subcategories": [
+            "Mỹ phẩm",
+            "Thực phẩm chức năng",
+            "Dụng cụ tập gym",
+            "Chăm sóc da",
+        ],
         "brands": ["L'Oréal", "The Face Shop", "Hana", "Murad", "Innisfree"],
         "price_range": (50_000, 3_000_000),
     },
     {
         "category": "Thực phẩm & Đồ uống",
-        "subcategories": ["Đặc sản vùng miền", "Cà phê", "Trà", "Bánh kẹo", "Nước ngọt"],
+        "subcategories": [
+            "Đặc sản vùng miền",
+            "Cà phê",
+            "Trà",
+            "Bánh kẹo",
+            "Nước ngọt",
+        ],
         "brands": ["Vinamilk", "TH True Milk", "Trung Nguyên", "Phúc Long", "Kinh Đô"],
         "price_range": (15_000, 500_000),
     },
@@ -109,7 +120,12 @@ PRODUCT_CATEGORIES: list[dict[str, Any]] = [
     },
     {
         "category": "Sách & Văn phòng phẩm",
-        "subcategories": ["Sách kỹ năng", "Sách kinh tế", "Văn phòng phẩm", "Đồ dùng học tập"],
+        "subcategories": [
+            "Sách kỹ năng",
+            "Sách kinh tế",
+            "Văn phòng phẩm",
+            "Đồ dùng học tập",
+        ],
         "brands": ["NXB Trẻ", "NXB Kim Đồng", "Thiên Long", "Stabilo"],
         "price_range": (30_000, 500_000),
     },
@@ -130,7 +146,9 @@ class ProductSeedItem(BaseModel):
         max_length=50,
         description="Unique product identifier, e.g. ELEC-PHONE-001",
     )
-    name: str = Field(..., min_length=5, max_length=255, description="Product name in Vietnamese")
+    name: str = Field(
+        ..., min_length=5, max_length=255, description="Product name in Vietnamese"
+    )
     description: str = Field(
         ...,
         min_length=30,
@@ -170,7 +188,9 @@ class ProductBatch(BaseModel):
 
 
 # TypeAdapter for O(1) bulk validate + serialize — avoids looping Pydantic models
-PRODUCT_LIST_ADAPTER: TypeAdapter[list[ProductSeedItem]] = TypeAdapter(list[ProductSeedItem])
+PRODUCT_LIST_ADAPTER: TypeAdapter[list[ProductSeedItem]] = TypeAdapter(
+    list[ProductSeedItem]
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -213,8 +233,8 @@ async def generate_product_batch(
 
         RULES (BẮT BUỘC):
         - Danh mục: {cat_name}
-        - Danh mục con (dùng lẫn lộn): {', '.join(subcats)}
-        - Thương hiệu gợi ý (có thể sáng tạo thêm): {', '.join(brands)}
+        - Danh mục con (dùng lẫn lộn): {", ".join(subcats)}
+        - Thương hiệu gợi ý (có thể sáng tạo thêm): {", ".join(brands)}
         - Khoảng giá (VND): {price_lo:,} - {price_hi:,}
         - SKU format: {cat_prefix}-<TYPE>-<3-digit-number>, ví dụ: {cat_prefix}-PHONE-001
         - Index bắt đầu từ: {start_index + 1} (dùng để tạo số cuối SKU không trùng)
@@ -382,8 +402,11 @@ async def bulk_insert_products(
         async with AsyncSessionLocal() as session:
             try:
                 # Single bulk INSERT — O(1) round-trips, not O(N)
+                # Use __table__ (Core Table) not the ORM class; pg_insert on an
+                # ORM-mapped class with list-of-dicts triggers the bulk ORM path
+                # which requires _bulk_update_tuples — unsupported for INSERT.
                 stmt = (
-                    pg_insert(Product)
+                    pg_insert(Product.__table__)
                     .values(rows)
                     .on_conflict_do_nothing(index_elements=["sku"])
                 )
@@ -395,16 +418,16 @@ async def bulk_insert_products(
                 )
             except Exception as exc:
                 await session.rollback()
-                logfire.error("Bulk insert products failed, rolled back: {err}", err=str(exc))
+                logfire.error(
+                    "Bulk insert products failed, rolled back: {err}", err=str(exc)
+                )
                 raise
 
         # After insert: SELECT all the SKUs we care about to obtain their DB IDs
         # (RETURNING with ON CONFLICT DO NOTHING only returns new rows)
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                text(
-                    f"SELECT id, sku FROM {SCHEMA}.products WHERE sku = ANY(:skus)"
-                ),
+                text(f"SELECT id, sku FROM {SCHEMA}.products WHERE sku = ANY(:skus)"),
                 {"skus": skus},
             )
             rows_back = result.mappings().all()
@@ -438,10 +461,16 @@ async def embed_texts_batched(
         List of embedding vectors (same order as input texts).
     """
     sem = asyncio.Semaphore(max_concurrent)
-    batches = [texts[i : i + embed_batch_size] for i in range(0, len(texts), embed_batch_size)]
-    all_vectors: list[list[float]] = [[] for _ in range(len(texts))]  # pre-allocate order-safe
+    batches = [
+        texts[i : i + embed_batch_size] for i in range(0, len(texts), embed_batch_size)
+    ]
+    all_vectors: list[list[float]] = [
+        [] for _ in range(len(texts))
+    ]  # pre-allocate order-safe
 
-    async def _embed_batch(batch_idx: int, batch: list[str]) -> tuple[int, list[list[float]]]:
+    async def _embed_batch(
+        batch_idx: int, batch: list[str]
+    ) -> tuple[int, list[list[float]]]:
         async with sem:
             with logfire.span(
                 "embed.batch",
@@ -499,7 +528,7 @@ async def bulk_insert_embeddings(
         async with AsyncSessionLocal() as session:
             try:
                 stmt = (
-                    pg_insert(TextEmbedding)
+                    pg_insert(TextEmbedding.__table__)
                     .values(embedding_rows)
                     # If (source_id, source_type) is unique → skip duplicates
                     # Otherwise this falls through to PK uniqueness
@@ -526,7 +555,9 @@ async def bulk_insert_embeddings(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-async def get_already_embedded_source_ids(source_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+async def get_already_embedded_source_ids(
+    source_ids: list[uuid.UUID],
+) -> set[uuid.UUID]:
     """Return set of source_ids that already have embeddings (skip in batch)."""
     if not source_ids:
         return set()
@@ -673,7 +704,9 @@ async def run_seed(
         )
 
         if not product_records:
-            console.print("[red]✗ No product IDs returned. Aborting embedding step.[/red]")
+            console.print(
+                "[red]✗ No product IDs returned. Aborting embedding step.[/red]"
+            )
             return
 
         # ── Step 5: Skip already-embedded products ─────────────────────────
@@ -682,7 +715,8 @@ async def run_seed(
 
         sku_to_id: dict[str, uuid.UUID] = {r["sku"]: r["id"] for r in product_records}
         products_needing_embed = [
-            p for p in validated_products
+            p
+            for p in validated_products
             if sku_to_id.get(p.sku) and sku_to_id[p.sku] not in already_embedded
         ]
 
@@ -692,7 +726,9 @@ async def run_seed(
         )
 
         if not products_needing_embed:
-            console.print("[green]✓ All products already have embeddings. Skipping.[/green]")
+            console.print(
+                "[green]✓ All products already have embeddings. Skipping.[/green]"
+            )
         else:
             # ── Step 6: Async batched embedding ───────────────────────────
             descriptions = [p.description for p in products_needing_embed]
@@ -786,7 +822,9 @@ def _generate_stub_batch(
 
 
 def _print_sample(products: list[ProductSeedItem]) -> None:
-    table = Table(title="Sample Generated Products", show_header=True, header_style="bold cyan")
+    table = Table(
+        title="Sample Generated Products", show_header=True, header_style="bold cyan"
+    )
     table.add_column("SKU", style="yellow", max_width=20)
     table.add_column("Name", max_width=35)
     table.add_column("Price (VND)", justify="right")

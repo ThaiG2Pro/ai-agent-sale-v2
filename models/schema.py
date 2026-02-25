@@ -100,6 +100,9 @@ class ConversationSession(Base):
     messages: Mapped[list[ConversationMessage]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
+    signals: Mapped[list[SalesSignal]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
 
 
 class ConversationMessage(Base):
@@ -129,6 +132,9 @@ class ConversationMessage(Base):
     )
 
     session: Mapped[ConversationSession] = relationship(back_populates="messages")
+    traces: Mapped[list[ModelTrace]] = relationship(
+        back_populates="message", cascade="all, delete-orphan"
+    )
 
 
 class SemanticCache(Base):
@@ -152,3 +158,55 @@ class SemanticCache(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
+
+
+class SalesSignal(Base):
+    """Why this exists: Tracks business-critical events and customer intent (Week 5)."""
+
+    __tablename__ = "sales_signals"
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.conversation_sessions.id"),
+        nullable=False,
+    )
+    signal_type: Mapped[str] = mapped_column(String(50), index=True)  # e.g., 'budget'
+    signal_value: Mapped[dict] = mapped_column(JSONB)
+    confidence: Mapped[float] = mapped_column(default=1.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    session: Mapped[ConversationSession] = relationship(back_populates="signals")
+
+
+class ModelTrace(Base):
+    """Why this exists: Tracks detailed LLM performance, tokens, and cost (Week 7)."""
+
+    __tablename__ = "model_traces"
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.conversation_messages.id"),
+        nullable=True,
+    )
+    model_name: Mapped[str] = mapped_column(String(100))
+    prompt_tokens: Mapped[int] = mapped_column(default=0)
+    completion_tokens: Mapped[int] = mapped_column(default=0)
+    total_tokens: Mapped[int] = mapped_column(default=0)
+    latency_ms: Mapped[float] = mapped_column(nullable=True)
+    cost: Mapped[Decimal] = mapped_column(Numeric(10, 6), default=0.00)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    message: Mapped[ConversationMessage] = relationship(back_populates="traces")
