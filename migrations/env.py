@@ -68,7 +68,7 @@ def do_run_migrations(connection):
     with context.begin_transaction():
         # Create schema and extension if not exists
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
-        # connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         context.run_migrations()
 
 

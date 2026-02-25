@@ -7,6 +7,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import litellm
 import logfire
 from litellm import Router
 
@@ -14,6 +15,10 @@ from core.ai_config import LITELLM_CONFIG
 
 # Initialize LiteLLM Router for advanced routing and fallbacks
 ai_router = Router(**LITELLM_CONFIG)
+
+# Enable OpenTelemetry/Logfire callbacks for LiteLLM (T011)
+litellm.success_callback = ["logfire"]
+litellm.failure_callback = ["logfire"]
 
 
 class AIGateway:

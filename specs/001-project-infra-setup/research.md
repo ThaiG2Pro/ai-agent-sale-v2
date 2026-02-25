@@ -26,8 +26,9 @@
 - **Alternatives considered**: Redis (violates "No Redis" rule), in-memory (not persistent across restarts).
 
 ## DEC-006: Observability & Logging
-- **Decision**: `Logfire` (local configuration) directing structured JSON to `Stdout/Stderr`.
-- **Rationale**: Twelve-Factor App principle. Standard output streams are collected by Docker/systemd, ensuring stateless logs.
+
+- **Decision**: `OpenTelemetry` (OTLP gateway) with protocol-first tracing and metrics. Configure OTLP locally to send traces/metrics to a self-hosted Arize Phoenix for offline-first debugging and evaluation. In Production/Staging OTLP may be forwarded to services such as Logfire (cloud) or LangSmith/Langfuse  for deeper Python and LangGraph traces. Stdout/JSON logging remains a required fallback.
+- **Rationale**: Standardized telemetry via OTLP enables flexible backend routing and vendor-agnostic observability while preserving Twelve-Factor App principles.
 - **Alternatives considered**: Local files (requires rotation/persistence management), database logging (high overhead).
 
 ## DEC-007: Administrative Authentication

@@ -1,37 +1,49 @@
-"""Why this exists: Centralized structured logging for observability.
-What it does: Configures Logfire to direct JSON logs to Stdout.
+"""Why this exists: Centralized structured logging and observability.
+What it does: Configures OpenTelemetry (OTLP) with fallback to JSON Stdout.
 """
 
 from __future__ import annotations
 
 import logging
-import sys
-
-import logfire
 
 from core.config import settings
 
+_initialized = False
+
 
 def setup_logging():
-    """Configures structured logging for the application."""
+    """Configures OpenTelemetry and structured logging.
 
-    # Configure Logfire
-    # In Dev (Local), we want console output.
-    # logfire.configure() will handle this based on LOGFIRE_TOKEN and environment.
+    Why: Logfire manages its own OTel initialization.
+    We let logfire handle TracerProvider setup to avoid conflicts.
+    """
+    global _initialized
+    if _initialized:
+        return
+
+    # Import logfire early to avoid duplicate provider initialization
+    import logfire
+
+    # Configure Logfire (which manages OpenTelemetry internally)
     logfire.configure(
         token=settings.LOGFIRE_TOKEN,
-        send_to_logfire=True if settings.LOGFIRE_TOKEN else False,
+        send_to_logfire=bool(settings.LOGFIRE_TOKEN),
+        distributed_tracing=True,
+        console=logfire.ConsoleOptions(verbose=True)
+        if not settings.LOGFIRE_TOKEN
+        else False,
     )
 
-    # Article XII: Zero-Cost Baseline - Ensure logs go to stdout/stderr
-    # Logfire already instrumented standard library logging by default if configured
-    # but we'll ensure the root logger is set up.
-
+    # Bridge Python logging to logfire (single handler path, no duplicates)
     logging.basicConfig(
-        handlers=[logfire.LogfireLoggingHandler(), logging.StreamHandler(sys.stdout)],
+        handlers=[logfire.LogfireLoggingHandler()],
         level=settings.LOG_LEVEL,
         format="%(message)s",
     )
 
-    # Article I: Modular Core - Log initial setup
-    logging.info("Logging initialized with level: %s", settings.LOG_LEVEL)
+    logging.info(
+        "Observability initialized (OTLP: %s, Cloud: %s)",
+        settings.OTLP_ENDPOINT,
+        "Enabled" if settings.LOGFIRE_TOKEN else "Disabled",
+    )
+    _initialized = True

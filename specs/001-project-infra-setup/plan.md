@@ -10,7 +10,7 @@ This feature establishes the core foundation of the AI Sales Agent system. It fo
 ## Technical Context
 
 **Language/Version**: Python 3.13+  
-**Primary Dependencies**: FastAPI, LiteLLM, Ollama, SQLAlchemy 2.0 (async), Alembic, Pydantic, Logfire, ruff  
+**Primary Dependencies**: FastAPI, LiteLLM, Ollama, SQLAlchemy 2.0 (async), Alembic, Pydantic, OpenTelemetry (OTLP), ruff  
 **Storage**: PostgreSQL 17 + pgvector 0.8+ (organized in a dedicated schema `agent_v1`)  
 **Testing**: pytest (Deterministic TDD)  
 **Target Platform**: Linux (Docker)  

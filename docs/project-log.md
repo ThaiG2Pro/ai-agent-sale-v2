@@ -16,7 +16,7 @@
 | 1.7     | LiteLLM + Ollama test             | Offline chat 100%              | [ ]            |
 | 1.8     | Async seed script                 | Does not block event loop     | [ ]            |
 | 1.9     | Semantic Cache table + index      | Similarity search < 5ms (HNSW) | [ ]            |
-| 1.10    | Structured Logging (JSON)         | Parseable logs (Logfire local) | [ ]            |
+| 1.10    | Structured Logging (JSON)         | Parseable logs (OpenTelemetry + local Arize Phoenix / Stdout JSON fallback) | [ ]            |
 | 1.11    | Init /docs/adr/ and write ADR 001 | Tech selection + rationale     | [ ]            |
 | 1.12    | RAG CLI (cli/rag_admin.py)        | Ingestion/index/search debug   | [ ]            |
 

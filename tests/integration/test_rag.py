@@ -85,7 +85,7 @@ async def test_semantic_cache_l1_l2(db_session: AsyncSession):
     response = "The testing widget costs $99.99."
     # Mock embedding (1024 dims)
     embedding = [0.1] * 1024
-    model_name = "test-model"
+    model_name = settings.EMBED_MODEL
 
     # 1. Initial Cache Miss
     l1_hit = await get_l1_cache(db_session, query)

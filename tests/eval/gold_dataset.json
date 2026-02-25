@@ -1,14 +1,82 @@
 [
   {
-    "query": "What is the price of product X?",
-    "expected_response": "Product X costs $100.",
-    "context": "Sample context for evaluation",
-    "grade_criteria": "Accuracy, relevance"
+    "id": "sme_001",
+    "query": "What high-performance widgets do you have?",
+    "category": "product_info",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["widget", "performance"],
+    "complexity": "easy"
   },
   {
-    "query": "Tell me about product Y features.",
-    "expected_response": "Product Y has features A, B, C.",
-    "context": "Detailed description",
-    "grade_criteria": "Completeness, clarity"
+    "id": "sme_002",
+    "query": "How much does the testing widget cost?",
+    "category": "pricing",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["cost", "price", "widget"],
+    "complexity": "easy"
+  },
+  {
+    "id": "sme_003",
+    "query": "Can I get a discount if I buy 100 units?",
+    "category": "negotiation",
+    "intent": "NEGOTIATION",
+    "expected_keywords": ["discount", "100 units"],
+    "complexity": "hard"
+  },
+  {
+    "id": "sme_004",
+    "query": "I received a broken widget, I want a refund.",
+    "category": "support",
+    "intent": "COMPLAINT",
+    "expected_keywords": ["broken", "refund"],
+    "complexity": "hard"
+  },
+  {
+    "id": "sme_005",
+    "query": "Where is my order #12345?",
+    "category": "support",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["order", "#12345"],
+    "complexity": "medium"
+  },
+  {
+    "id": "sme_006",
+    "query": "Do you ship to Vietnam?",
+    "category": "logistics",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["ship", "vietnam"],
+    "complexity": "easy"
+  },
+  {
+    "id": "sme_007",
+    "query": "What are the technical specs of the Pro Widget?",
+    "category": "product_info",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["technical", "specs", "pro widget"],
+    "complexity": "medium"
+  },
+  {
+    "id": "sme_008",
+    "query": "How do I install the software for the widget?",
+    "category": "support",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["install", "software"],
+    "complexity": "medium"
+  },
+  {
+    "id": "sme_009",
+    "query": "Your price is too high compared to competitor X.",
+    "category": "negotiation",
+    "intent": "NEGOTIATION",
+    "expected_keywords": ["price", "high", "competitor"],
+    "complexity": "hard"
+  },
+  {
+    "id": "sme_010",
+    "query": "Tell me about your warranty policy.",
+    "category": "policy",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["warranty", "policy"],
+    "complexity": "easy"
   }
 ]

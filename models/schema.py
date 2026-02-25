@@ -1,15 +1,13 @@
-"""Why this exists: Defines the persistent data structures for the system foundation.
-What it does: Maps Python classes to PostgreSQL tables using SQLAlchemy Declarative.
+"""Why this exists: Performs persistent data structures for the AI agent.
+What it does: Defines SQLAlchemy models for products, embeddings, and chat history.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, ClassVar
-
-if TYPE_CHECKING:
-    from decimal import Decimal
+from decimal import Decimal  # noqa: TC003
+from typing import Any, ClassVar
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text
@@ -55,7 +53,15 @@ class Product(Base):
 
 class TextEmbedding(Base):
     __tablename__ = "text_embeddings"
-    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        Index(
+            "idx_text_embeddings_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+        {"schema": SCHEMA},
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

@@ -103,7 +103,7 @@ As a business owner, I want the system to be capable of running its AI functions
 - **FR-013**: System MUST specify minimum hardware requirements for local models: CPU ≥4 cores, RAM ≥8GB, VRAM ≥4GB.
 - **FR-014**: System MUST document default local models: embedding=bge-small (v1.5), generation=qwen2.5-3b-instruct-q4.
 - **FR-015**: System MUST implement fallback to cloud provider via LiteLLM if Ollama is unreachable, with error logging.
-- **FR-016**: System MUST ensure model switching latency <2s between local and cloud providers, measured using Logfire timing metrics.
+-- **FR-016**: System MUST ensure model switching latency <2s between local and cloud providers, measured using OpenTelemetry timing metrics (OTLP). Production-level timing funnels may forward OTLP to Logfire or LangSmith/Langfuse as needed.
 - **FR-017**: System MUST quantify "100% offline" as: health check, RAG search, semantic cache, text generation.
 - **FR-018**: System MUST support configuration via .env files and YAML for LiteLLM.
 - **FR-019**: System MUST log significant operations: API requests, DB queries, AI calls, errors.

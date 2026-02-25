@@ -1,11 +1,17 @@
 [project]
 name = "ai-agent-sale-v2"
 version = "0.1.0"
-description = "SME-Ready AI Sales Agent (2026)"
+description = "SME-Ready AI Sales Agent (2026) - High-performance, asynchronous, and offline-capable RAG agent."
 readme = "README.md"
 requires-python = ">=3.13"
+license = { text = "MIT" }
+keywords = ["ai", "agent", "rag", "sales", "sme", "fastapi", "async"]
+authors = [
+    { name = "Thai", email = "thai@example.com" }
+]
 dependencies = [
     "fastapi",
+
     "uvicorn[standard]",
     "langgraph",
     "litellm",
@@ -15,12 +21,24 @@ dependencies = [
     "pymupdf",
     "crawl4ai",
     "httpx",
-    "logfire",
+    "logfire[fastapi]",
     "numpy",
     "python-dotenv",
     "pydantic-settings",
     "alembic",
+    "opentelemetry-sdk>=1.39.1",
+    "opentelemetry-exporter-otlp>=1.39.1",
+    "opentelemetry-instrumentation-fastapi>=0.60b1",
+    "opentelemetry-instrumentation-sqlalchemy>=0.60b1",
+    "opentelemetry-instrumentation-logging>=0.60b1",
+    "typer[all]>=0.12.0",
+    "rich>=13.7.0",
+    "opentelemetry-instrumentation-httpx>=0.60b1",
 ]
+
+[project.scripts]
+rag-admin   = "cli.rag_admin:app"
+seed-bulk   = "scripts.seed_bulk:app"
 
 [dependency-groups]
 dev = [
@@ -62,7 +80,7 @@ unfixable = []
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["app", "core", "models"]
+known-first-party = ["api", "core", "models", "services"]
 
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = []
@@ -79,6 +97,11 @@ docstring-code-format = true
 pythonpath = ["."]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+# DB_NAME is force-overridden to "ai_agent_test" by tests/conftest.py at
+# module-load time, before any application code is imported.  This means
+# every Settings() instantiation during a test run uses the isolated test
+# database and your development data is never touched.
 
 [tool.logfire]
 ignore_no_config = true
@@ -86,4 +109,4 @@ ignore_no_config = true
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*.py" = ["E501", "F401"]
 "__init__.py" = ["F401"]
-
+"scripts/seed_bulk.py" = ["E501"]  # Long strings in CLI help text and docstrings are intentional

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select, text
 
+from core.config import settings
 from models.schema import SemanticCache
 
 if TYPE_CHECKING:
@@ -35,12 +36,15 @@ def generate_query_hash(query: str) -> str:
 async def get_l1_cache(db: AsyncSession, query: str) -> str | None:
     """
     Why this exists: Zero-cost exact match lookup.
-    What it does: Queries SemanticCache by query_hash.
+    What it does: Queries SemanticCache by query_hash and current model.
     """
     query_hash = generate_query_hash(query)
-    result = await db.execute(
-        select(SemanticCache.response).where(SemanticCache.query_hash == query_hash)
+    stmt = (
+        select(SemanticCache.response)
+        .where(SemanticCache.query_hash == query_hash)
+        .where(SemanticCache.model_name == settings.EMBED_MODEL)
     )
+    result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
@@ -59,6 +63,7 @@ async def get_l2_cache(
     stmt = (
         select(SemanticCache.response, similarity_col)
         .where(similarity_col > threshold)
+        .where(SemanticCache.model_name == settings.EMBED_MODEL)
         .order_by(text("similarity DESC"))
         .limit(1)
     )

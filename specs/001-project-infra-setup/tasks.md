@@ -9,8 +9,8 @@ Story goal: Initialize the project environment and base infrastructure.
 
 - [X] T001 Initialize project with `uv init` and Python 3.13+ in `pyproject.toml`
 - [X] T002 [P] Configure `ruff` linting and formatting rules in `pyproject.toml`
-- [X] T003 [P] Create `docker-compose.yml` with PostgreSQL 17 and `pgvector`
-- [X] T004 [P] Create `.env.example` with mandatory infra variables (DB, Admin Key, Ollama)
+- [X] T003 [P] Create `docker-compose.yml` with PostgreSQL 17, `pgvector`, and Arize Phoenix (OTLP backend)
+- [X] T004 [P] Create `.env.example` with mandatory infra variables (DB, Admin Key, Ollama, OTLP endpoint)
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
@@ -20,9 +20,9 @@ Story goal: Establish core architectural components (DB, Config, Logging).
 - [X] T006 [P] Setup SQLAlchemy async engine and session factory in `services/database.py`
 - [X] T007 Define SQLAlchemy models in `models/schema.py` (Product, TextEmbedding, Conversation, SemanticCache) with `agent_v1` schema
 - [X] T008 Initialize Alembic and create initial migration to create `agent_v1` schema and tables in `migrations/`
-- [X] T009 [P] Configure Logfire for structured JSON logging to Stdout in `core/logging.py`
+- [X] T009 [P] Implement Minimalist Observability: OpenTelemetry OTLP exporter with standard Python logging (JSON/Stdout) fallback in `core/logging.py`
 - [X] T010 [P] Implement async exception handling and middleware in `api/middleware.py`
-- [X] T011 Initialize FastAPI app with Logfire and database session management in `api/main.py`
+- [X] T011 Initialize FastAPI app with OpenTelemetry instrumentation (FastAPI, SQLAlchemy, LiteLLM) in `api/main.py`
 
 ## Phase 3: [US1] Project Environment Readiness
 
@@ -74,15 +74,15 @@ Story goal: AI functions running locally via LiteLLM + Ollama.
 
 Story goal: Final documentation and architectural records.
 
-- [ ] T030 [P] Write ADR 001 for technical selections in `docs/adr/001_tech_selection.md`
-- [ ] T031 Document minimum hardware requirements in `README.md`
-- [ ] T032 [P] Finalize `pyproject.toml` metadata and descriptions
-- [ ] T033 Implement version-based cache invalidation logic in `services/semantic_cache.py`
-- [ ] T034 Create `tests/eval/gold_dataset.json` with sample queries and expected responses
-- [ ] T035 Implement Tier 1 evaluation runner script in `scripts/tier1_eval.py`
-- [ ] T036 Add performance verification for health endpoint under 1 req/s load in `tests/integration/test_health_load.py`
-- [ ] T037 Add benchmarking for search latency at 10k entries in `tests/integration/test_search_latency.py`
-- [ ] T038 Update data-model.md with citation fields (source_chunk_ids)
+- [X] T030 [P] Write ADR 001 for technical selections in `docs/adr/001_tech_selection.md`
+- [X] T031 Document minimum hardware requirements in `README.md`
+- [X] T032 [P] Finalize `pyproject.toml` metadata and descriptions
+- [X] T033 Implement version-based cache invalidation logic in `services/semantic_cache.py`
+- [X] T034 Create `tests/eval/gold_dataset.json` with sample queries and expected responses
+- [X] T035 Implement Tier 1 evaluation runner script in `scripts/tier1_eval.py`
+- [X] T036 Add performance verification for health endpoint under 1 req/s load in `tests/integration/test_health_load.py`
+- [X] T037 Add benchmarking for search latency at 10k entries in `tests/integration/test_search_latency.py`
+- [X] T038 Update data-model.md with citation fields (source_chunk_ids)
 
 ## Dependencies
 

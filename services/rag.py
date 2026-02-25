@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import litellm
 import logfire
 from sqlalchemy import select
 
 from core.config import settings
 from models.schema import Product, TextEmbedding
+from services.ai import AIGateway
 
 if TYPE_CHECKING:
     import uuid
@@ -42,15 +42,12 @@ async def ingest_product_text(
     db.add(product)
     await db.flush()  # Get product.id
 
-    # 2. Generate Embedding via LiteLLM (Article XII: Zero-Cost Baseline with Ollama)
-    # Using embed_model from settings
+    # 2. Generate Embedding via AIGateway (T011)
     logfire.info("Generating embedding for product: {sku}", sku=sku)
-    response = await litellm.aembedding(
-        model=settings.EMBED_MODEL,
-        input=[description],
-        api_base=settings.OLLAMA_BASE_URL if "ollama" in settings.EMBED_MODEL else None,
+    embeddings = await AIGateway.embed(
+        input_text=description, model="economy-embedding"
     )
-    vector = response.data[0]["embedding"]
+    vector = embeddings[0]
 
     # 3. Store Embedding
     embedding_record = TextEmbedding(
@@ -74,14 +71,10 @@ async def search_products(
     What it does: Embeds the query and searches pgvector for similar products.
     SC-003 Target: < 5ms search target (database search time).
     """
-    # 1. Embed Query
+    # 1. Embed Query via AIGateway
     logfire.info("Searching products for query: {query}", query=query)
-    response = await litellm.aembedding(
-        model=settings.EMBED_MODEL,
-        input=[query],
-        api_base=settings.OLLAMA_BASE_URL if "ollama" in settings.EMBED_MODEL else None,
-    )
-    query_vector = response.data[0]["embedding"]
+    embeddings = await AIGateway.embed(input_text=query, model="economy-embedding")
+    query_vector = embeddings[0]
 
     # 2. Vector Search using pgvector
     # Join TextEmbedding with Product to return full data

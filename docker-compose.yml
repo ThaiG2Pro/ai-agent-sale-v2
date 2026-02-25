@@ -37,6 +37,15 @@ services:
       - -c
       - work_mem=4MB
 
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: ai-agent-phoenix
+    ports:
+      - "6006:6006" # Phoenix UI
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    restart: always
+
 secrets:
   db_password:
     file: ./secrets/db_password.txt

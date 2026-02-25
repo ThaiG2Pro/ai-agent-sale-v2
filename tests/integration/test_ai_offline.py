@@ -57,9 +57,7 @@ async def test_ai_gateway_fallback_logic():
     # We expect this to either succeed via fallback or fail if offline
     # If it fails, we want to know it's a connection error, not a logic error.
     try:
-        response = await AIGateway.complete(
-            messages=messages, model="invalid-local-model"
-        )
+        response = await AIGateway.complete(messages=messages, model="economy-chat")
         assert response is not None
     except Exception as e:
         if "Connection" in str(e) or "unreachable" in str(e):

@@ -9,6 +9,8 @@ from contextlib import asynccontextmanager
 
 import logfire
 from fastapi import FastAPI, HTTPException
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from sqlalchemy import text
 
 from api.middleware import (
@@ -20,18 +22,21 @@ from api.routes import admin, health
 from core.logging import setup_logging
 from services.database import engine
 
+# Article XII: Zero-Cost Baseline - Initialize Observability FIRST (T009)
+setup_logging()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Why this exists: Manages system startup and shutdown.
     What it does: Initializes logging and verifies DB connectivity.
     """
-    # Initialize Logging (T009)
-    setup_logging()
-
     # Verify DB connectivity (Article VII)
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
+
+    # Instrument SQLAlchemy (T011)
+    SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
 
     logfire.info("Application foundation initialized successfully.")
 
@@ -48,6 +53,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Initialize OpenTelemetry instrumentation for FastAPI (T011)
+FastAPIInstrumentor.instrument_app(app)
 
 # Register Middleware (T010)
 app.add_middleware(TimingMiddleware)

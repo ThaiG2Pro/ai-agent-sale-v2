@@ -26,13 +26,15 @@ class Settings(BaseSettings):
 
     # AI Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    CHAT_MODEL: str = "ollama/qwen2.5-3b-instruct-q4"
-    EMBED_MODEL: str = "ollama/bge-small"
+    CHAT_MODEL: str = "ollama/qwen3-4b-q6"
+    EMBED_MODEL: str = "ollama/bge-m3"
     EMBED_DIMENSION: int = 1024  # Standard for bge-m3 / small
 
     # Logging & Observability
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     LOGFIRE_TOKEN: str | None = None
+    OTLP_ENDPOINT: str = "http://localhost:4317"
+    OTEL_SERVICE_NAME: str = "ai-sales-agent"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
