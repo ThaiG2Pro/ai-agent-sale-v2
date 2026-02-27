@@ -5,7 +5,9 @@
     "category": "product_info",
     "intent": "INFO_QUERY",
     "expected_keywords": ["widget", "performance"],
-    "complexity": "easy"
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "en"
   },
   {
     "id": "sme_002",
@@ -13,7 +15,9 @@
     "category": "pricing",
     "intent": "INFO_QUERY",
     "expected_keywords": ["cost", "price", "widget"],
-    "complexity": "easy"
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "en"
   },
   {
     "id": "sme_003",
@@ -21,7 +25,9 @@
     "category": "negotiation",
     "intent": "NEGOTIATION",
     "expected_keywords": ["discount", "100 units"],
-    "complexity": "hard"
+    "complexity": "hard",
+    "difficulty": "hard",
+    "language": "en"
   },
   {
     "id": "sme_004",
@@ -29,7 +35,9 @@
     "category": "support",
     "intent": "COMPLAINT",
     "expected_keywords": ["broken", "refund"],
-    "complexity": "hard"
+    "complexity": "hard",
+    "difficulty": "hard",
+    "language": "en"
   },
   {
     "id": "sme_005",
@@ -37,7 +45,9 @@
     "category": "support",
     "intent": "INFO_QUERY",
     "expected_keywords": ["order", "#12345"],
-    "complexity": "medium"
+    "complexity": "medium",
+    "difficulty": "medium",
+    "language": "en"
   },
   {
     "id": "sme_006",
@@ -45,7 +55,9 @@
     "category": "logistics",
     "intent": "INFO_QUERY",
     "expected_keywords": ["ship", "vietnam"],
-    "complexity": "easy"
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "en"
   },
   {
     "id": "sme_007",
@@ -53,7 +65,9 @@
     "category": "product_info",
     "intent": "INFO_QUERY",
     "expected_keywords": ["technical", "specs", "pro widget"],
-    "complexity": "medium"
+    "complexity": "medium",
+    "difficulty": "medium",
+    "language": "en"
   },
   {
     "id": "sme_008",
@@ -61,7 +75,9 @@
     "category": "support",
     "intent": "INFO_QUERY",
     "expected_keywords": ["install", "software"],
-    "complexity": "medium"
+    "complexity": "medium",
+    "difficulty": "medium",
+    "language": "en"
   },
   {
     "id": "sme_009",
@@ -69,7 +85,9 @@
     "category": "negotiation",
     "intent": "NEGOTIATION",
     "expected_keywords": ["price", "high", "competitor"],
-    "complexity": "hard"
+    "complexity": "hard",
+    "difficulty": "hard",
+    "language": "en"
   },
   {
     "id": "sme_010",
@@ -77,6 +95,110 @@
     "category": "policy",
     "intent": "INFO_QUERY",
     "expected_keywords": ["warranty", "policy"],
-    "complexity": "easy"
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "en"
+  },
+  {
+    "id": "vn_001",
+    "query": "Giá sản phẩm widget cao cấp là bao nhiêu?",
+    "category": "pricing",
+    "intent": "PRICING",
+    "expected_keywords": ["giá", "widget"],
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "vi"
+  },
+  {
+    "id": "vn_002",
+    "query": "Sản phẩm Pro Widget có những tính năng gì?",
+    "category": "product_info",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["tính năng", "widget"],
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "vi"
+  },
+  {
+    "id": "vn_003",
+    "query": "Tôi muốn đặt mua 50 cái widget, có được giảm giá không?",
+    "category": "negotiation",
+    "intent": "NEGOTIATION",
+    "expected_keywords": ["đặt mua", "giảm giá", "widget"],
+    "complexity": "medium",
+    "difficulty": "medium",
+    "language": "vi"
+  },
+  {
+    "id": "vn_004",
+    "query": "Thời gian bảo hành sản phẩm là bao lâu?",
+    "category": "policy",
+    "intent": "AVAILABILITY",
+    "expected_keywords": ["bảo hành"],
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "vi"
+  },
+  {
+    "id": "vn_005",
+    "query": "Sản phẩm có sẵn hàng để giao ngay không?",
+    "category": "availability",
+    "intent": "AVAILABILITY",
+    "expected_keywords": ["có sẵn", "giao"],
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "vi"
+  },
+  {
+    "id": "vn_006",
+    "query": "So sánh widget cơ bản và widget Pro, loại nào phù hợp cho văn phòng nhỏ?",
+    "category": "comparison",
+    "intent": "COMPARISON",
+    "expected_keywords": ["so sánh", "widget", "văn phòng"],
+    "complexity": "hard",
+    "difficulty": "hard",
+    "language": "vi"
+  },
+  {
+    "id": "vn_007",
+    "query": "Tôi đặt hàng nhưng chưa nhận được, liên hệ bộ phận nào?",
+    "category": "support",
+    "intent": "COMPLAINT",
+    "expected_keywords": ["đặt hàng", "nhận"],
+    "complexity": "medium",
+    "difficulty": "medium",
+    "language": "vi"
+  },
+  {
+    "id": "vn_008",
+    "query": "Widget có hỗ trợ kết nối Bluetooth không?",
+    "category": "product_info",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["bluetooth", "kết nối", "widget"],
+    "complexity": "easy",
+    "difficulty": "easy",
+    "language": "vi"
+  },
+  {
+    "id": "vn_009",
+    "query": "Tôi muốn mua widget nhưng ngân sách chỉ có 500k, có sản phẩm phù hợp không?",
+    "category": "pricing",
+    "intent": "PRICING",
+    "expected_keywords": ["mua", "widget", "500k"],
+    "complexity": "medium",
+    "difficulty": "medium",
+    "language": "vi"
+  },
+  {
+    "id": "vn_010",
+    "query": "Hãy cho tôi biết tất cả những sản phẩm mà công ty bạn đang kinh doanh và giá của từng loại cũng như các chính sách ưu đãi hiện tại.",
+    "category": "product_catalog",
+    "intent": "INFO_QUERY",
+    "expected_keywords": ["sản phẩm", "giá", "ưu đãi"],
+    "complexity": "hard",
+    "difficulty": "hard",
+    "language": "vi",
+    "note": "Ambiguous long query - expects TopK=20"
   }
 ]
+

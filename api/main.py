@@ -18,7 +18,7 @@ from api.middleware import (
     global_exception_handler,
     http_exception_handler,
 )
-from api.routes import admin, health
+from api.routes import admin, health, query
 from core.logging import setup_logging
 from services.database import engine
 
@@ -67,6 +67,7 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 # Register Routes (T023)
 app.include_router(health.router)
 app.include_router(admin.router)
+app.include_router(query.router)
 
 # Article I: Modular Core - Base path info
 

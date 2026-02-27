@@ -39,6 +39,8 @@ os.environ["DB_NAME"] = "ai_agent_test"
 # ────────────────────────────────────────────────────────────────────────────
 
 import pytest
+import pytest_asyncio
+from sqlalchemy import delete
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -111,3 +113,24 @@ def _setup_test_database() -> None:  # type: ignore[return]
         )
 
     print(f"[conftest] Migrations applied to '{settings.DB_NAME}' ✓")
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session():
+    """Provides a clean database session for each test using the migrated test DB.
+
+    Uses the project's AsyncSessionLocal factory so sessions are configured
+    identically to the application runtime.
+    """
+    # Import here to ensure Settings() has been evaluated with DB_NAME override
+    # Local imports keep test-session initialization order predictable.
+    from models.schema import Product, SemanticCache, TextEmbedding
+    from services.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        yield session
+        # Cleanup created rows between tests
+        await session.execute(delete(TextEmbedding))
+        await session.execute(delete(Product))
+        await session.execute(delete(SemanticCache))
+        await session.commit()

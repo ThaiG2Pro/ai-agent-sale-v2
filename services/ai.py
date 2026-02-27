@@ -1,5 +1,7 @@
 """Why this exists: Centralized gateway for all AI model interactions.
 What it does: Provides async wrappers for LiteLLM with fallback and latency tracking.
+             Week 2 addition: NormalizedQuery schema + normalize_query() for
+             query rewriting.
 """
 
 from __future__ import annotations
@@ -10,8 +12,39 @@ from typing import Any
 import litellm
 import logfire
 from litellm import Router
+from pydantic import BaseModel, Field
 
 from core.ai_config import LITELLM_CONFIG
+
+# ── Query normalisation schema (FR-004) ───────────────────────────────────────
+
+
+class NormalizedQuery(BaseModel):
+    """
+    Why this exists: Structured representation of a cleaned user query (FR-004).
+    No regex; produced via LiteLLM response_format (Pydantic model).
+    """
+
+    canonical: str = Field(
+        description=(
+            "The cleaned, canonical form of the user query in its original language."
+        )
+    )
+    detected_language: str = Field(
+        description="Detected language code, e.g. 'vi' or 'en'."
+    )
+    intent: str = Field(
+        description=(
+            "Primary intent: INFO_QUERY | PRICING | COMPARISON | "
+            "COMPLAINT | NEGOTIATION | AVAILABILITY | OTHER"
+        )
+    )
+    extracted_keywords: list[str] = Field(
+        description=(
+            "Up to 10 meaningful keywords extracted from the query for FTS enrichment."
+        )
+    )
+
 
 # Initialize LiteLLM Router for advanced routing and fallbacks
 ai_router = Router(**LITELLM_CONFIG)
@@ -113,3 +146,55 @@ class AIGateway:
                 err=str(e),
             )
             raise e
+
+    @staticmethod
+    async def normalize_query(query: str) -> NormalizedQuery:
+        """
+        Why this exists: Cleans and structures Vietnamese/English queries before
+        retrieval (FR-004).
+        What it does: Uses LiteLLM response_format=NormalizedQuery to produce
+        structured output. No regex parsing — Pydantic model enforced by LiteLLM.
+        """
+        start_time = time.perf_counter()
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a query preprocessing assistant for a Vietnamese "
+                    "SME product database.\n"
+                    "Clean and normalize the user query:\n"
+                    "- Remove filler words but preserve meaning\n"
+                    "- Detect language (vi/en/mixed)\n"
+                    "- Classify intent: INFO_QUERY | PRICING | COMPARISON | "
+                    "COMPLAINT | NEGOTIATION | AVAILABILITY | OTHER\n"
+                    "- Extract up to 10 keywords for full-text search\n"
+                    "Respond only in the required JSON schema."
+                ),
+            },
+            {"role": "user", "content": query},
+        ]
+        try:
+            response = await ai_router.acompletion(
+                model="economy-chat",
+                messages=messages,
+                response_format=NormalizedQuery,
+            )
+            latency = time.perf_counter() - start_time
+            logfire.info("normalize_query: {latency:.4f}s", latency=latency)
+            content = response.choices[0].message.content
+            return NormalizedQuery.model_validate_json(content)
+        except Exception as exc:
+            latency = time.perf_counter() - start_time
+            logfire.error(
+                "normalize_query failed: {err} ({latency:.4f}s)",
+                err=str(exc),
+                latency=latency,
+            )
+            # Graceful fallback — return minimal normalised form without
+            # blocking retrieval
+            return NormalizedQuery(
+                canonical=query.strip(),
+                detected_language="unknown",
+                intent="OTHER",
+                extracted_keywords=query.strip().split()[:10],
+            )

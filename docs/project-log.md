@@ -46,7 +46,7 @@ Goal this week: **correct and stable RAG**. Evaluation via plain Python scripts 
 | 2.9     | Adaptive TopK                   | TopK dynamic based on query length              | [ ]            |
 | 2.10    | Similarity gap scoring          | Store score in state                            | [ ]            |
 | 2.11    | Citation metadata mapping    | Return ProductID/ChunkID with answers    | [ ]            |
-| 2.12    | Context compression          | Dedup/summarize chunks before LLM        | [ ]            |
+| 2.12    | Context compression          | Dedup & Threshold filtering chunks before LLM        | [ ]            |
 | 2.13    | Confidence Threshold Guard      | If similarity < 0.7 → return "I couldn't find relevant information..." (avoid hallucination) | [ ]            |
 
 **Logic Adaptive TopK:**

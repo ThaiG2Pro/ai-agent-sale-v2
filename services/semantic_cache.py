@@ -33,27 +33,32 @@ def generate_query_hash(query: str) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-async def get_l1_cache(db: AsyncSession, query: str) -> str | None:
+async def get_l1_cache(db: AsyncSession, query: str) -> dict | None:
     """
     Why this exists: Zero-cost exact match lookup.
     What it does: Queries SemanticCache by query_hash and current model.
+    Returns: dict with response and citations if found.
     """
     query_hash = generate_query_hash(query)
     stmt = (
-        select(SemanticCache.response)
+        select(SemanticCache.response, SemanticCache.citations)
         .where(SemanticCache.query_hash == query_hash)
         .where(SemanticCache.model_name == settings.EMBED_MODEL)
     )
     result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+    row = result.first()
+    if row:
+        return {"response": row.response, "citations": row.citations or []}
+    return None
 
 
 async def get_l2_cache(
     db: AsyncSession, query_embedding: list[float], threshold: float = 0.95
-) -> str | None:
+) -> dict | None:
     """
     Why this exists: Semantic fallback when L1 misses.
     What it does: Performs cosine similarity search using pgvector.
+    Returns: dict with response and citations if found.
     SC-003: < 5ms search target.
     """
     # Using cosine similarity (1 - distance)
@@ -61,7 +66,7 @@ async def get_l2_cache(
     cos_dist = SemanticCache.embedding.cosine_distance(query_embedding)
     similarity_col = (1 - cos_dist).label("similarity")
     stmt = (
-        select(SemanticCache.response, similarity_col)
+        select(SemanticCache.response, SemanticCache.citations, similarity_col)
         .where(similarity_col > threshold)
         .where(SemanticCache.model_name == settings.EMBED_MODEL)
         .order_by(text("similarity DESC"))
@@ -71,7 +76,11 @@ async def get_l2_cache(
     result = await db.execute(stmt)
     row = result.first()
     if row:
-        return row.response
+        return {
+            "response": row.response,
+            "citations": row.citations or [],
+            "similarity": row.similarity,
+        }
     return None
 
 
@@ -81,10 +90,12 @@ async def set_cache(
     response: str,
     embedding: list[float],
     model_name: str,
+    citations: list[dict] | None = None,
 ) -> None:
     """
     Why this exists: Persists new cache entries for future hits.
-    What it does: Inserts or updates a record in the semantic_cache table.
+    What it does: Inserts or updates a record in the semantic_cache table,
+    including citations.
     """
     query_hash = generate_query_hash(query)
     cache_entry = SemanticCache(
@@ -93,6 +104,7 @@ async def set_cache(
         response=response,
         embedding=embedding,
         model_name=model_name,
+        citations=citations or [],
     )
     # Use merge to handle potential collisions (Upsert pattern)
     await db.merge(cache_entry)

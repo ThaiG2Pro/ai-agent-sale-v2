@@ -75,6 +75,7 @@ class TextEmbedding(Base):
     embedding: Mapped[Vector] = mapped_column(Vector(1024))  # Optimized for bge-m3
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     model_version: Mapped[str] = mapped_column(String(50), nullable=True)
+    keywords: Mapped[list[str]] = mapped_column(JSONB, default=list)  # FR-003
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -154,6 +155,7 @@ class SemanticCache(Base):
     response: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[Vector] = mapped_column(Vector(1024))
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    citations: Mapped[dict] = mapped_column(JSONB, nullable=True)  # Article IX
     similarity_score: Mapped[float] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
