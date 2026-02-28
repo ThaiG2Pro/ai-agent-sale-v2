@@ -37,6 +37,12 @@ class RAGResult(BaseModel):
     """Highest cosine similarity score across all retrieved chunks (pre-compression).
     Used for confidence guard comparison and observability."""
 
+    similarity_gap: float
+    """Difference between top-1 and top-2 vector similarity scores.
+    Large gap (>0.15) = clear winner, high confidence.
+    Small gap (<0.01) = ambiguous/duplicate, may need reranking.
+    0.0 when only one chunk retrieved or on cache hit."""
+
     rrf_scores: list[float]
     """RRF scores for all retrieved chunks (pre-compression), in retrieval order."""
 

@@ -12,11 +12,22 @@ from core.config import settings
 
 LITELLM_CONFIG = {
     "model_list": [
+        # ── Light tier: fast, cheap — normalization, keyword extraction ──────
+        {
+            "model_name": "light-chat",
+            "model_info": {"id": "light-chat-local"},
+            "litellm_params": {
+                "model": settings.LIGHT_CHAT_MODEL,  # ollama/qwen3:0.6b
+                "api_base": settings.OLLAMA_BASE_URL,
+                "stream": False,
+            },
+        },
+        # ── Economy tier: general tasks — metadata enrichment, RAG generation
         {
             "model_name": "economy-chat",
             "model_info": {"id": "economy-chat-local"},
             "litellm_params": {
-                "model": settings.CHAT_MODEL,
+                "model": settings.CHAT_MODEL,  # ollama/qwen3-4b-q6
                 "api_base": settings.OLLAMA_BASE_URL,
                 "stream": True,
             },
@@ -25,11 +36,21 @@ LITELLM_CONFIG = {
             "model_name": "economy-embedding",
             "model_info": {"id": "economy-embedding-local"},
             "litellm_params": {
-                "model": settings.EMBED_MODEL,
+                "model": settings.EMBED_MODEL,  # ollama/bge-m3
                 "api_base": settings.OLLAMA_BASE_URL,
             },
         },
-        # Premium fallback (Example: Groq llama3)
+        # ── Powerful tier: deep reasoning — escalation, complex queries ──────
+        {
+            "model_name": "premium-local-chat",
+            "model_info": {"id": "premium-local-deepseek"},
+            "litellm_params": {
+                "model": settings.POWERFUL_CHAT_MODEL,  # ollama/deepseek-r1
+                "api_base": settings.OLLAMA_BASE_URL,
+                "stream": True,
+            },
+        },
+        # ── Cloud fallback — when local unavailable ───────────────────────────
         {
             "model_name": "premium-chat",
             "model_info": {"id": "premium-chat-groq"},

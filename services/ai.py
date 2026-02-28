@@ -7,7 +7,7 @@ What it does: Provides async wrappers for LiteLLM with fallback and latency trac
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Literal
 
 import litellm
 import logfire
@@ -44,6 +44,79 @@ class NormalizedQuery(BaseModel):
             "Up to 10 meaningful keywords extracted from the query for FTS enrichment."
         )
     )
+    is_valid: bool = Field(
+        default=True,
+        description=(
+            "False if the query is spam, gibberish, or has no product-related intent. "
+            "Pipeline skips retrieval when False."
+        ),
+    )
+
+
+# ── Metadata enrichment schemas (Phase 1 - Ingestion) ──────────────────────────
+
+
+class KeywordExtraction(BaseModel):
+    """
+    Why this exists: Structured keyword extraction for products (Phase 1).
+    What it does: Extracts relevant keywords via LiteLLM response_format.
+    """
+
+    keywords: list[str] = Field(
+        ...,
+        min_length=3,
+        max_length=10,
+        description="3-10 keywords for hybrid search (FTS + vector)",
+    )
+    rationale: str = Field(
+        description="Brief explanation of why these keywords were chosen"
+    )
+
+
+class ProductMetadata(BaseModel):
+    """
+    Why this exists: Structured metadata for products (Phase 1 ingestion).
+    What it does: Enriches products with specs, category, intent, keywords, summary.
+    Enforces structure via Pydantic validation.
+    """
+
+    product_id: str = Field(..., description="SKU or unique product identifier")
+    technical_specs: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Technical specifications: voltage, frequency, thermal_limit, etc.",
+    )
+    keywords: list[str] = Field(
+        ...,
+        min_length=3,
+        max_length=10,
+        description="High-quality keywords for hybrid search",
+    )
+    seo_summary: str = Field(
+        ...,
+        max_length=100,
+        description="SEO-friendly summary under 100 characters for display",
+    )
+    category: str = Field(
+        ...,
+        max_length=50,
+        description="Product category for filtering/metadata signals",
+    )
+    intent: Literal["commercial", "consumer"] = Field(
+        ...,
+        description="Sales intent: commercial (B2B) or consumer (B2C)",
+    )
+
+    @classmethod
+    def minimal(cls, product_id: str, name: str) -> ProductMetadata:
+        """Fallback: minimal metadata when enrichment fails."""
+        return cls(
+            product_id=product_id,
+            technical_specs={},
+            keywords=[product_id.lower(), name.lower(), "product"],
+            seo_summary=name[:50],
+            category="unknown",
+            intent="consumer",
+        )
 
 
 # Initialize LiteLLM Router for advanced routing and fallbacks
@@ -173,23 +246,49 @@ class AIGateway:
         retrieval (FR-004).
         What it does: Uses LiteLLM response_format=NormalizedQuery to produce
         structured output. No regex parsing — Pydantic model enforced by LiteLLM.
+        Uses light-chat (qwen3:0.6b) — normalization is a cheap, repetitive task.
         """
         start_time = time.perf_counter()
+
+        # ── Heuristic pre-check (zero-cost, sub-ms) ───────────────────────────
+        stripped = query.strip()
+        if len(stripped) < 3 or stripped.replace(" ", "").isdigit():
+            logfire.info(
+                "normalize_query: rejected by heuristic (too short / digit-only)"
+            )
+            return NormalizedQuery(
+                canonical=stripped,
+                detected_language="unknown",
+                intent="OTHER",
+                extracted_keywords=[],
+                is_valid=False,
+            )
+
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are a query preprocessing assistant for a Vietnamese "
-                    "SME product database.\n"
-                    "Clean and normalize the user query:\n"
-                    "- IMPORTANT: canonical must be a full, clean question preserving "
-                    "the user's intent (e.g. 'What are the features of iPhone 13 Pro Max?' "
-                    "NOT just 'iPhone 13 Pro Max'). Keep the question type/intent.\n"
-                    "- Fix typos and normalize casing but keep the meaning\n"
-                    "- Detect language (vi/en/mixed)\n"
-                    "- Classify intent: INFO_QUERY | PRICING | COMPARISON | "
-                    "COMPLAINT | NEGOTIATION | AVAILABILITY | OTHER\n"
-                    "- Extract up to 10 keywords for full-text search\n"
+                    "You are a query preprocessing assistant for a bilingual "
+                    "(Vietnamese/English) SME product database.\n"
+                    "IMPORTANT: Vietnamese (vi) and English (en) are BOTH valid "
+                    "languages. Queries about prices, specs, features, availability, "
+                    "or comparing products are ALWAYS valid (is_valid=true).\n"
+                    "Only set is_valid=false for clear spam, random characters, or "
+                    "content completely unrelated to products (e.g. 'asdfg', "
+                    "'tell me a joke').\n\n"
+                    "Normalize the user query:\n"
+                    "- canonical: full clean question preserving the user's intent\n"
+                    "- detected_language: vi | en | mixed\n"
+                    "- intent: INFO_QUERY | PRICING | COMPARISON | COMPLAINT | "
+                    "NEGOTIATION | AVAILABILITY | OTHER\n"
+                    "- extracted_keywords: up to 10 search keywords\n"
+                    "- is_valid: true unless spam/gibberish/off-topic\n\n"
+                    "Examples:\n"
+                    "Q: 'Giá Samsung S24 Ultra?' → is_valid=true, lang=vi, "
+                    "intent=PRICING\n"
+                    "Q: 'iPhone 15 Pro Max specs?' → is_valid=true, lang=en, "
+                    "intent=INFO_QUERY\n"
+                    "Q: 'xzxzxz' → is_valid=false\n\n"
                     "Respond only in the required JSON schema."
                 ),
             },
@@ -197,7 +296,7 @@ class AIGateway:
         ]
         try:
             response = await ai_router.acompletion(
-                model="economy-chat",
+                model="economy-chat",  # qwen3-4b-q6 — better bilingual understanding
                 messages=messages,
                 response_format=NormalizedQuery,
                 temperature=0,
@@ -220,4 +319,5 @@ class AIGateway:
                 detected_language="unknown",
                 intent="OTHER",
                 extracted_keywords=query.strip().split()[:10],
+                is_valid=True,  # assume valid on error to avoid false rejects
             )

@@ -14,9 +14,11 @@ from pydantic import BaseModel, Field
 class NormalizedQuery(BaseModel):
     """Structured normalization of a raw user query.
 
-    Produced via LiteLLM with response_format=NormalizedQuery.
-    No regex parsing; the model must emit valid JSON matching this schema.
-    On LLM error, a minimal fallback is returned (canonical=raw query, intent=OTHER).
+    Produced via LiteLLM with response_format=NormalizedQuery using light-chat
+    (qwen3:0.6b). No regex parsing; the model must emit valid JSON matching
+    this schema.
+    On LLM error, a minimal fallback is returned (canonical=raw query,
+    intent=OTHER, is_valid=True to avoid false rejects).
     """
 
     canonical: str = Field(
@@ -46,4 +48,13 @@ class NormalizedQuery(BaseModel):
             "Up to 10 meaningful keywords extracted from the query for FTS enrichment. "
             "Prefer product names, feature terms, and action words."
         )
+    )
+
+    is_valid: bool = Field(
+        default=True,
+        description=(
+            "False if the query is spam, gibberish, or has no product-related intent. "
+            "Pipeline skips retrieval and returns early when False. "
+            "Heuristic pre-check (len<3 or digit-only) fires before LLM call."
+        ),
     )

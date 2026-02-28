@@ -75,7 +75,7 @@ select = [
     "RUF",           # ruff rules
     "TCH",           # type checking
 ]
-ignore = []
+ignore = ["B008"]  # False positive for typer.Option defaults (standard pattern)
 fixable = ["ALL"]
 unfixable = []
 

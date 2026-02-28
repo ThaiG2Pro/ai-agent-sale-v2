@@ -1,0 +1,376 @@
+{
+  "catalog": [
+    {
+      "sku": "PHONE-SM-001",
+      "name": "Samsung Galaxy S24 Ultra 256GB",
+      "category": "Điện thoại",
+      "subcategory": "Smartphone",
+      "price": 24990000,
+      "currency": "VND",
+      "description": "Flagship smartphone with 6.8-inch display, Snapdragon 8 Gen 3, 50MP camera, 5000mAh battery, and IP68 water resistance. Premium titanium build with One UI 6.0.",
+      "intent": "B2C",
+      "specifications": {
+        "screen_size": "6.8 inch",
+        "processor": "Snapdragon 8 Gen 3",
+        "ram": "12GB",
+        "storage": "256GB",
+        "camera": "50MP main + 12MP ultra-wide",
+        "battery": "5000mAh",
+        "os": "Android 14",
+        "water_resistance": "IP68"
+      }
+    },
+    {
+      "sku": "PHONE-IP-001",
+      "name": "iPhone 15 Pro Max 512GB",
+      "category": "Điện thoại",
+      "subcategory": "Smartphone",
+      "price": 28900000,
+      "currency": "VND",
+      "description": "Premium iPhone with 6.7-inch Super Retina XDR display, A17 Pro chip, titanium design, ProMotion 120Hz, and advanced ProRAW camera system. 48MP main camera with optical zoom.",
+      "intent": "B2C",
+      "specifications": {
+        "screen_size": "6.7 inch",
+        "processor": "Apple A17 Pro",
+        "ram": "8GB",
+        "storage": "512GB",
+        "camera": "48MP main + 12MP ultra-wide",
+        "battery": "4403mAh",
+        "os": "iOS 17",
+        "water_resistance": "IP68"
+      }
+    },
+    {
+      "sku": "PHONE-XM-001",
+      "name": "Xiaomi 14 Ultra 512GB",
+      "category": "Điện thoại",
+      "subcategory": "Smartphone",
+      "price": 18990000,
+      "currency": "VND",
+      "description": "Compact premium smartphone with 6.4-inch OLED display, Snapdragon 8 Gen 3, Leica optical camera system, 5300mAh battery with 80W fast charging, and Gorilla Glass Armor.",
+      "intent": "B2C",
+      "specifications": {
+        "screen_size": "6.4 inch",
+        "processor": "Snapdragon 8 Gen 3",
+        "ram": "16GB",
+        "storage": "512GB",
+        "camera": "50MP main + Leica optics",
+        "battery": "5300mAh",
+        "os": "HyperOS",
+        "fast_charging": "80W"
+      }
+    },
+    {
+      "sku": "LAPTOP-DELL-001",
+      "name": "Dell XPS 15 Plus (2024) RTX 4060",
+      "category": "Laptop",
+      "subcategory": "Premium Ultrabook",
+      "price": 39990000,
+      "currency": "VND",
+      "description": "Premium 15.6-inch InfinityEdge FHD+ laptop with Intel Core Ultra 7, RTX 4060 GPU, 32GB LPDDR5, 1TB SSD, and all-aluminum design. Seamless glass trackpad. Up to 18-hour battery life.",
+      "intent": "B2C",
+      "specifications": {
+        "screen_size": "15.6 inch",
+        "processor": "Intel Core Ultra 7",
+        "ram": "32GB",
+        "storage": "1TB SSD",
+        "gpu": "NVIDIA RTX 4060",
+        "weight": "1.73 kg",
+        "battery_life": "18 hours",
+        "os": "Windows 11 Pro"
+      }
+    },
+    {
+      "sku": "LAPTOP-ASUS-001",
+      "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050",
+      "category": "Laptop",
+      "subcategory": "Content Creator",
+      "price": 32990000,
+      "currency": "VND",
+      "description": "Content creator laptop with 15.6-inch OLED display (DCI-P3 100%), Intel Core Ultra 7, RTX 4050, 32GB LPDDR5, 1TB SSD. Perfect for designers, editors, and developers.",
+      "intent": "B2C",
+      "specifications": {
+        "screen_size": "15.6 inch OLED",
+        "processor": "Intel Core Ultra 7",
+        "ram": "32GB",
+        "storage": "1TB SSD",
+        "gpu": "NVIDIA RTX 4050",
+        "display_type": "OLED",
+        "color_accuracy": "100% DCI-P3",
+        "os": "Windows 11 Pro"
+      }
+    },
+    {
+      "sku": "LAPTOP-MACBOOK-001",
+      "name": "MacBook Pro 16 inch M3 Pro 18GB",
+      "category": "Laptop",
+      "subcategory": "Professional",
+      "price": 54990000,
+      "currency": "VND",
+      "description": "Professional MacBook with 16-inch Liquid Retina XDR display, Apple M3 Pro chip, 18GB unified memory, 512GB SSD, up to 17-hour battery, and ProMotion 120Hz.",
+      "intent": "B2C",
+      "specifications": {
+        "screen_size": "16 inch Liquid Retina XDR",
+        "processor": "Apple M3 Pro",
+        "ram": "18GB",
+        "storage": "512GB SSD",
+        "gpu": "Integrated GPU",
+        "weight": "2.15 kg",
+        "battery_life": "17 hours",
+        "os": "macOS Sonoma"
+      }
+    },
+    {
+      "sku": "LAPTOP-LENOVO-001",
+      "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7",
+      "category": "Laptop",
+      "subcategory": "Business",
+      "price": 28990000,
+      "currency": "VND",
+      "description": "Business ultrabook with 14-inch OLED display, Intel Core Ultra 7, 32GB LPDDR5, 1TB SSD, military-grade durability (MIL-STD-810H), and up to 17-hour battery.",
+      "intent": "B2B",
+      "specifications": {
+        "screen_size": "14 inch OLED",
+        "processor": "Intel Core Ultra 7",
+        "ram": "32GB",
+        "storage": "1TB SSD",
+        "weight": "1.18 kg",
+        "battery_life": "17 hours",
+        "durability": "MIL-STD-810H",
+        "os": "Windows 11 Pro"
+      }
+    },
+    {
+      "sku": "TABLET-IPAD-001",
+      "name": "iPad Pro 12.9 inch M2 256GB WiFi",
+      "category": "Máy tính bảng",
+      "subcategory": "Premium Tablet",
+      "price": 19990000,
+      "currency": "VND",
+      "description": "Professional tablet with 12.9-inch Liquid Retina XDR display, Apple M2 chip, 8GB RAM, 256GB storage, ProMotion 120Hz, and support for Apple Pencil Pro.",
+      "intent": "B2C",
+      "specifications": {
+        "screen_size": "12.9 inch Liquid Retina XDR",
+        "processor": "Apple M2",
+        "ram": "8GB",
+        "storage": "256GB",
+        "display_type": "Liquid Retina XDR",
+        "refresh_rate": "120Hz",
+        "os": "iPadOS 17"
+      }
+    },
+    {
+      "sku": "TABLET-SM-001",
+      "name": "Samsung Galaxy Tab S9 Ultra 256GB",
+      "category": "Máy tính bảng",
+      "subcategory": "Android Tablet",
+      "price": 17990000,
+      "currency": "VND",
+      "description": "Large 14.6-inch Super AMOLED display tablet with Snapdragon 8 Gen 2 Flagship, 12GB RAM, 256GB storage, 13MP cameras, and S Pen included.",
+      "intent": "B2C",
+      "specifications": {
+        "screen_size": "14.6 inch Super AMOLED",
+        "processor": "Snapdragon 8 Gen 2",
+        "ram": "12GB",
+        "storage": "256GB",
+        "camera": "13MP main + 8MP front",
+        "battery": "11200mAh",
+        "stylus": "S Pen included",
+        "os": "Android 13"
+      }
+    },
+    {
+      "sku": "WATCH-APPLE-001",
+      "name": "Apple Watch Ultra 2 49mm Titanium",
+      "category": "Phụ kiện",
+      "subcategory": "Smartwatch",
+      "price": 12990000,
+      "currency": "VND",
+      "description": "Premium smartwatch with Always-On Retina display, S9 SiP, Action button, water resistance up to 100m, battery life up to 36 hours, and multi-band GPS.",
+      "intent": "B2C",
+      "specifications": {
+        "size": "49mm",
+        "case_material": "Titanium",
+        "display": "Always-On Retina",
+        "processor": "Apple S9",
+        "water_resistance": "100m WR",
+        "battery_life": "36 hours",
+        "gps": "Multi-band",
+        "health_tracking": "ECG, Blood Oxygen"
+      }
+    },
+    {
+      "sku": "HEADPHONE-SONY-001",
+      "name": "Sony WH-1000XM5 Wireless Headphones",
+      "category": "Phụ kiện",
+      "subcategory": "Audio",
+      "price": 8490000,
+      "currency": "VND",
+      "description": "Industry-leading noise cancellation headphones with dual noise sensor technology, 30-hour battery life, multipoint connection, and premium sound quality.",
+      "intent": "B2C",
+      "specifications": {
+        "noise_cancellation": "Dual Sensor ANC",
+        "battery_life": "30 hours",
+        "connectivity": "Bluetooth 5.3",
+        "codec": "LDAC",
+        "microphone": "Quad mic",
+        "weight": "250g",
+        "frequency_response": "4Hz-40kHz"
+      }
+    },
+    {
+      "sku": "CHARGER-ANKER-001",
+      "name": "Anker 737 Power Bank 140W 55000mAh",
+      "category": "Phụ kiện",
+      "subcategory": "Power",
+      "price": 3490000,
+      "currency": "VND",
+      "description": "High-capacity fast-charging power bank with 140W output, dual USB-C and USB-A ports, can charge three devices simultaneously. Capacity 55000mAh.",
+      "intent": "B2C",
+      "specifications": {
+        "capacity": "55000mAh",
+        "output_power": "140W",
+        "ports": "Dual USB-C + USB-A",
+        "charging_devices": "3 simultaneous",
+        "size": "Compact",
+        "weight": "1.27 kg"
+      }
+    },
+    {
+      "sku": "MOUSE-LOGI-001",
+      "name": "Logitech MX Master 3S Wireless Mouse",
+      "category": "Phụ kiện",
+      "subcategory": "Input Device",
+      "price": 2990000,
+      "currency": "VND",
+      "description": "Professional wireless mouse with MagSpeed electromagnetic scrolling, 8K DPI sensor, multi-device connectivity, USB-C quick charge, and premium build.",
+      "intent": "B2C",
+      "specifications": {
+        "dpi": "8000",
+        "connectivity": "Bluetooth 5.0",
+        "battery_life": "70 days",
+        "charging": "USB-C (3 min = 3 days)",
+        "buttons": "8 customizable",
+        "weight": "141g"
+      }
+    },
+    {
+      "sku": "KEYBOARD-MECH-001",
+      "name": "Keychron K3 Pro Mechanical Keyboard RGB",
+      "category": "Phụ kiện",
+      "subcategory": "Input Device",
+      "price": 3290000,
+      "currency": "VND",
+      "description": "Compact mechanical keyboard with hot-swap switches, RGB backlighting, wireless/wired mode, aluminum frame, and Mac/Windows support.",
+      "intent": "B2C",
+      "specifications": {
+        "type": "Mechanical",
+        "switch_type": "Hot-swap",
+        "backlight": "Per-key RGB",
+        "connectivity": "Wireless + USB-C",
+        "battery_life": "240 hours",
+        "layout": "75%",
+        "key_count": "84 keys"
+      }
+    },
+    {
+      "sku": "MONITOR-LG-001",
+      "name": "LG 32UP550 32-inch 4K Professional Monitor",
+      "category": "Máy tính",
+      "subcategory": "Monitor",
+      "price": 16990000,
+      "currency": "VND",
+      "description": "Professional 4K IPS monitor with 32-inch display, HDR support, DCI-P3 99.5% color accuracy, height/tilt/swivel adjustable stand, USB-C with 65W power delivery.",
+      "intent": "B2B",
+      "specifications": {
+        "screen_size": "32 inch 4K",
+        "resolution": "3840x2160",
+        "panel": "IPS",
+        "color_accuracy": "DCI-P3 99.5%",
+        "refresh_rate": "60Hz",
+        "usb_c_power": "65W",
+        "brightness": "300 nits"
+      }
+    },
+    {
+      "sku": "GPU-RTX-001",
+      "name": "NVIDIA RTX 4070 Super Graphics Card",
+      "category": "Máy tính",
+      "subcategory": "GPU",
+      "price": 19990000,
+      "currency": "VND",
+      "description": "High-performance desktop GPU with 12GB GDDR6X memory, 5888 CUDA cores, PCIe 4.0, power consumption 220W, suitable for gaming, AI, and content creation.",
+      "intent": "B2C",
+      "specifications": {
+        "memory": "12GB GDDR6X",
+        "cuda_cores": "5888",
+        "memory_bandwidth": "576 GB/s",
+        "power_consumption": "220W",
+        "bus": "PCIe 4.0",
+        "ray_tracing": "Yes"
+      }
+    },
+    {
+      "sku": "SSD-SAMSUNG-001",
+      "name": "Samsung 990 PRO 4TB NVMe SSD",
+      "category": "Máy tính",
+      "subcategory": "Storage",
+      "price": 8990000,
+      "currency": "VND",
+      "description": "Ultra-fast NVMe SSD with read speeds up to 7100 MB/s, write speeds up to 6000 MB/s, PCIe 4.0, 4TB capacity, and 5-year warranty.",
+      "intent": "B2C",
+      "specifications": {
+        "capacity": "4TB",
+        "interface": "NVMe PCIe 4.0",
+        "read_speed": "7100 MB/s",
+        "write_speed": "6000 MB/s",
+        "form_factor": "M.2 2280",
+        "endurance": "2400 TBW"
+      }
+    },
+    {
+      "sku": "RAM-CORSAIR-001",
+      "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz",
+      "category": "Máy tính",
+      "subcategory": "Memory",
+      "price": 5990000,
+      "currency": "VND",
+      "description": "High-performance DDR5 memory kit with 5600MHz speed, 32GB total capacity (2x16GB), CAS latency 28, optimized for gaming and content creation.",
+      "intent": "B2C",
+      "specifications": {
+        "capacity": "32GB (2x16GB)",
+        "speed": "5600MHz",
+        "cas_latency": "28",
+        "voltage": "1.25V",
+        "form_factor": "DIMM",
+        "heatspreader": "Aluminum"
+      }
+    },
+    {
+      "sku": "PSU-CORSAIR-001",
+      "name": "Corsair RM1000x 1000W Gold Modular PSU",
+      "category": "Máy tính",
+      "subcategory": "Power Supply",
+      "price": 4490000,
+      "currency": "VND",
+      "description": "1000W 80+ Gold certified modular power supply with 10-year warranty, 135mm fan, ultra-quiet operation, and fully modular cables for easy cable management.",
+      "intent": "B2C",
+      "specifications": {
+        "power": "1000W",
+        "certification": "80+ Gold",
+        "modular": "Fully Modular",
+        "fan_size": "135mm",
+        "efficiency": ">90%",
+        "warranty": "10 years"
+      }
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2024-12-01",
+    "category_focus": "Tech Products (Smartphones, Laptops, Accessories)",
+    "total_products": 20,
+    "currency": "VND",
+    "notes": "Sample product catalog for development and testing. All prices are illustrative."
+  }
+}

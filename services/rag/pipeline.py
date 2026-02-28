@@ -1,10 +1,13 @@
 """Main RAG orchestration pipeline."""
 
+import time
 from typing import Any
 
 import logfire
 from pydantic import BaseModel
+from uuid_utils import uuid7
 
+from models.schema import ModelTrace
 from services.ai import AIGateway
 from services.rag.compression import compress_context
 from services.rag.constants import (
@@ -24,6 +27,7 @@ class RAGResult(BaseModel):
     declined: bool
     citations: list[dict[str, Any]]  # [{product_id, chunk_id, sku, name}]
     best_similarity: float
+    similarity_gap: float  # Score_top1 - Score_top2; 0.0 on cache hit / single result
     rrf_scores: list[float]
     query_category: str
     top_k_used: int
@@ -59,10 +63,28 @@ async def answer_with_rag(
         if normalized.extracted_keywords:
             fts_query_text = " ".join(normalized.extracted_keywords)
         logfire.info(
-            "Query normalized: lang={lang}, intent={intent}",
+            "Query normalized: lang={lang}, intent={intent}, is_valid={v}",
             lang=normalized.detected_language,
             intent=normalized.intent,
+            v=normalized.is_valid,
         )
+        # 2a. is_valid guard — reject spam/gibberish before any DB/LLM calls
+        if not normalized.is_valid:
+            logfire.info("Query rejected by is_valid guard (spam/gibberish)")
+            return RAGResult(
+                answer="Vui lòng đặt câu hỏi liên quan đến sản phẩm hoặc dịch vụ.",
+                declined=True,
+                citations=[],
+                best_similarity=0.0,
+                similarity_gap=0.0,
+                rrf_scores=[],
+                query_category=query_category,
+                top_k_used=top_k,
+                model_used="guard",
+                escalation_flag=False,
+                chunks_before_compression=0,
+                chunks_after_compression=0,
+            )
     except Exception as exc:
         logfire.warn(
             "normalize_query failed, using raw query: {err}",
@@ -79,6 +101,7 @@ async def answer_with_rag(
                 declined=False,
                 citations=l1_hit["citations"],
                 best_similarity=1.0,
+                similarity_gap=0.0,
                 rrf_scores=[],
                 query_category=query_category,
                 top_k_used=top_k,
@@ -114,6 +137,7 @@ async def answer_with_rag(
             declined=True,
             citations=[],
             best_similarity=0.0,
+            similarity_gap=0.0,
             rrf_scores=[],
             query_category=query_category,
             top_k_used=top_k,
@@ -136,6 +160,7 @@ async def answer_with_rag(
                 declined=False,
                 citations=l2_hit["citations"],
                 best_similarity=1.0,
+                similarity_gap=0.0,
                 rrf_scores=[],
                 query_category=query_category,
                 top_k_used=top_k,
@@ -161,13 +186,21 @@ async def answer_with_rag(
     # 7. Hybrid retrieval with RRF (FR-005)
     retrieved = await hybrid_search_rrf(db, query_vector, fts_query_text, top_k)
 
-    # 8. Similarity gap score (FR-010) — best cosine similarity before compression
-    best_similarity = max((c["vector_score"] for c in retrieved), default=0.0)
+    # 8. Similarity gap score (FR-010)
+    #    best_similarity: top-1 cosine score used for confidence guard
+    #    similarity_gap: top1 - top2 measures retrieval confidence
+    #      large gap → clear winner, small gap → ambiguous (may need reranking)
+    vec_scores = sorted((c["vector_score"] for c in retrieved), reverse=True)
+    best_similarity = vec_scores[0] if vec_scores else 0.0
+    similarity_gap = (
+        vec_scores[0] - vec_scores[1] if len(vec_scores) >= 2 else best_similarity
+    )
     chunks_before = len(retrieved)
     logfire.info(
-        "Retrieved {n} chunks, best_similarity={s:.4f}",
+        "Retrieved {n} chunks, best_similarity={s:.4f}, similarity_gap={g:.4f}",
         n=chunks_before,
         s=best_similarity,
+        g=similarity_gap,
     )
 
     # 9. Context compression (FR-012)
@@ -183,17 +216,30 @@ async def answer_with_rag(
 
     # 10. Confidence guard (FR-013) + zero-result / compression-to-empty
     #     edge cases (FR-016 #3 and #5)
+    guard_decision = "ACCEPTED"
     if best_similarity < CONFIDENCE_THRESHOLD or chunks_after == 0:
+        guard_decision = "REJECTED"
         logfire.info(
             "Confidence guard fired: best_sim={s:.4f}, chunks_after={n}",
             s=best_similarity,
             n=chunks_after,
+        )
+        # Write model_trace for rejected queries (FR-010 observability)
+        await _write_model_trace(
+            db=db,
+            model_name=model,
+            guard_decision=guard_decision,
+            best_similarity=best_similarity,
+            similarity_gap=similarity_gap,
+            top_k_used=top_k,
+            query_category=query_category,
         )
         return RAGResult(
             answer=DECLINE_MESSAGE,
             declined=True,
             citations=[],
             best_similarity=best_similarity,
+            similarity_gap=similarity_gap,
             rrf_scores=[c["rrf_score"] for c in retrieved],
             query_category=query_category,
             top_k_used=top_k,
@@ -207,8 +253,10 @@ async def answer_with_rag(
     context_parts: list[str] = []
     citations: list[dict[str, Any]] = []
     for chunk in compressed:
+        price = chunk.get("price")
+        price_line = f"Giá: {price:,.0f} VND" if price is not None else "Giá: Liên hệ"
         context_parts.append(
-            f"[{chunk['sku']}] {chunk['name']}:\n{chunk['description']}"
+            f"[{chunk['sku']}] {chunk['name']}\n{price_line}\n{chunk['description']}"
         )
         citations.append(
             {
@@ -228,15 +276,31 @@ async def answer_with_rag(
         },
     ]
 
-    # 12. LLM generation
+    # 12. LLM generation — timed for model_trace latency
+    gen_start = time.perf_counter()
+    llm_response = None
     try:
-        response = await AIGateway.complete(messages=messages, model=model)
-        answer_text = response.choices[0].message.content or DECLINE_MESSAGE
+        llm_response = await AIGateway.complete(messages=messages, model=model)
+        answer_text = llm_response.choices[0].message.content or DECLINE_MESSAGE
     except Exception as exc:
         logfire.error("LLM generation failed: {err}", err=str(exc))
         answer_text = DECLINE_MESSAGE
+    gen_latency_ms = (time.perf_counter() - gen_start) * 1000
 
-    # 13. Cache write — best-effort, never blocks the response (Article X.3)
+    # 13. model_trace write — best-effort, captures gap + guard + cost (FR-010)
+    await _write_model_trace(
+        db=db,
+        model_name=model,
+        guard_decision=guard_decision,
+        best_similarity=best_similarity,
+        similarity_gap=similarity_gap,
+        top_k_used=top_k,
+        query_category=query_category,
+        llm_response=llm_response,
+        latency_ms=gen_latency_ms,
+    )
+
+    # 14. Cache write — best-effort, never blocks the response (Article X.3)
     # CRITICAL: Use EMBED_MODEL (not chat model) so cache lookups match
     try:
         from core.config import settings
@@ -258,6 +322,7 @@ async def answer_with_rag(
         declined=False,
         citations=citations,
         best_similarity=best_similarity,
+        similarity_gap=similarity_gap,
         rrf_scores=[c["rrf_score"] for c in retrieved],
         query_category=query_category,
         top_k_used=top_k,
@@ -266,3 +331,70 @@ async def answer_with_rag(
         chunks_before_compression=chunks_before,
         chunks_after_compression=chunks_after,
     )
+
+
+async def _write_model_trace(
+    db,
+    model_name: str,
+    guard_decision: str,
+    best_similarity: float,
+    similarity_gap: float,
+    top_k_used: int,
+    query_category: str,
+    llm_response: Any = None,
+    latency_ms: float = 0.0,
+) -> None:
+    """
+    Why this exists: Persists retrieval quality signals to model_traces (FR-010).
+    What it does: Writes similarity_gap, guard_decision, token counts, and cost
+                  so that offline analysis can tune thresholds and models.
+    Best-effort — never raises, never blocks the response.
+    """
+    try:
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        cost = 0.0
+
+        if llm_response is not None:
+            usage = getattr(llm_response, "usage", None)
+            if usage:
+                prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+                completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+                total_tokens = getattr(usage, "total_tokens", 0) or 0
+            try:
+                import litellm
+
+                cost = litellm.completion_cost(completion_response=llm_response) or 0.0
+            except Exception:
+                pass
+
+        from decimal import Decimal
+
+        trace = ModelTrace(
+            id=uuid7(),
+            message_id=None,  # Week 5: link to ConversationMessage
+            model_name=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            latency_ms=latency_ms,
+            cost=Decimal(str(round(cost, 6))),
+            metadata_={
+                "guard_decision": guard_decision,
+                "best_similarity": round(best_similarity, 4),
+                "similarity_gap": round(similarity_gap, 4),
+                "top_k_used": top_k_used,
+                "query_category": query_category,
+            },
+        )
+        db.add(trace)
+        await db.flush()
+        logfire.info(
+            "model_trace written: guard={g}, gap={gap:.4f}, tokens={t}",
+            g=guard_decision,
+            gap=similarity_gap,
+            t=total_tokens,
+        )
+    except Exception as exc:
+        logfire.warn("model_trace write failed (non-blocking): {err}", err=str(exc))

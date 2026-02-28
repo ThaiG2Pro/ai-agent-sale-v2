@@ -26,7 +26,13 @@ class Settings(BaseSettings):
 
     # AI Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    # Model tiers:
+    #   LIGHT  — fast, cheap (qwen3:0.6b): normalization, keyword extraction
+    #   CHAT   — general (qwen3-4b-q6):    metadata enrichment, RAG generation
+    #   POWERFUL — deep reasoning (deepseek-r1): escalation, complex queries
+    LIGHT_CHAT_MODEL: str = "ollama/qwen3:0.6b"
     CHAT_MODEL: str = "ollama/qwen3-4b-q6"
+    POWERFUL_CHAT_MODEL: str = "ollama/deepseek-r1"
     EMBED_MODEL: str = "ollama/bge-m3"
     EMBED_DIMENSION: int = 1024  # Standard for bge-m3 / small
 

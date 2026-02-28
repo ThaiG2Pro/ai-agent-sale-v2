@@ -39,6 +39,7 @@ async def hybrid_search_rrf(
             Product.sku,
             Product.name,
             Product.description,
+            Product.price,
             Product.metadata_.label("metadata"),
             TextEmbedding.id.label("chunk_id"),
             vector_sim,
@@ -55,29 +56,29 @@ async def hybrid_search_rrf(
         logfire.error("Vector search timed out (junk/complex query)")
         return []
 
-    # ── FTS search — 'simple' dictionary works for Vietnamese and English ──────
+    # ── FTS search — stored content_tsvector column with unaccent + setweight ──
+    # content_tsvector is a GENERATED ALWAYS AS stored column:
+    #   setweight(to_tsvector('simple', immutable_unaccent(name)), 'A') ||
+    #   setweight(to_tsvector('simple', immutable_unaccent(description)), 'B')
+    # immutable_unaccent strips diacritics so Vietnamese users can search
+    # without accents ("dien thoai" matches "điện thoại").
     fts_sql = text(f"""
         SELECT
             p.id::text                                                    AS product_id,
             p.sku,
             p.name,
             p.description,
+            p.price,
             p.metadata,
             te.id::text                                                   AS chunk_id,
             ts_rank(
-                to_tsvector(
-                    'simple',
-                    COALESCE(p.name, '') || ' ' || COALESCE(p.description, '')
-                ),
-                plainto_tsquery('simple', :qtext)
+                p.content_tsvector,
+                plainto_tsquery('simple', {SCHEMA}.immutable_unaccent(:qtext))
             )                                                             AS fts_score
         FROM {SCHEMA}.products p
         JOIN {SCHEMA}.text_embeddings te ON te.source_id = p.id
-        WHERE to_tsvector(
-                  'simple',
-                  COALESCE(p.name, '') || ' ' || COALESCE(p.description, '')
-              )
-              @@ plainto_tsquery('simple', :qtext)
+        WHERE p.content_tsvector
+              @@ plainto_tsquery('simple', {SCHEMA}.immutable_unaccent(:qtext))
         ORDER BY fts_score DESC
         LIMIT :lim
     """)
@@ -108,6 +109,7 @@ async def hybrid_search_rrf(
             "sku": row.sku,
             "name": row.name,
             "description": row.description,
+            "price": float(row.price) if row.price is not None else None,
             "metadata": dict(row.metadata) if row.metadata else {},
             "vector_score": float(row.vector_score),
             "fts_score": 0.0,
@@ -126,6 +128,7 @@ async def hybrid_search_rrf(
                 "sku": row.sku,
                 "name": row.name,
                 "description": row.description,
+                "price": None,
                 "metadata": dict(row.metadata) if row.metadata else {},
                 "vector_score": 0.0,
                 "fts_score": float(row.fts_score),
