@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 import logfire
+from sqlalchemy import select
 from uuid_utils import uuid7
 
 from core.config import settings
@@ -66,6 +67,7 @@ async def extract_keywords_structured(
             messages=messages,
             response_format=KeywordExtraction,
             temperature=0,  # Consistency
+            timeout=45,  # Hard cap — prevents 900s+ hangs on Ollama
         )
         latency = time.perf_counter() - start_time
         content = response.choices[0].message.content
@@ -165,8 +167,9 @@ async def validate_metadata_vs_source(
     Why important: Prevents storing false specs or invented categories.
 
     Validation rules (language-agnostic):
-    - PASS if >=50% of keywords appear anywhere in text (value, not key check)
-    - PASS if category is not empty
+    - PASS based on spec values alone (40% of spec values found in text)
+    - Keywords are NOT checked — LLM may return English keywords for Vietnamese text,
+      causing false negatives. Keywords serve search, not validation.
     - Spec key names are NOT checked — LLM may translate keys to English
       even when description is in Vietnamese (e.g. "chip" vs "bộ xử lý").
 
@@ -176,15 +179,17 @@ async def validate_metadata_vs_source(
 
     text_lower = original_text.lower()
 
-    # Check keywords: at least 50% of keyword values should appear in text
+    # Keywords: logged for diagnostics but NOT used for validity decision.
+    # Reason: qwen3-1.7b returns English keywords for Vietnamese text, causing
+    # false negatives. Spec values are a better hallucination signal.
     keywords = extracted_metadata.keywords or []
     if keywords:
-        found = sum(1 for kw in keywords if kw.lower() in text_lower)
-        keywords_valid = found >= len(keywords) * 0.5
+        found_kw = sum(1 for kw in keywords if kw.lower() in text_lower)
+        keywords_valid = found_kw >= len(keywords) * 0.5
     else:
-        keywords_valid = False  # No keywords extracted — something went wrong
+        keywords_valid = False
 
-    # Check spec VALUES appear in text (not keys — they may be in different language)
+    # Check spec VALUES appear in text (not keys — may be in different language)
     specs = extracted_metadata.technical_specs or {}
     if specs:
         found_vals = sum(1 for v in specs.values() if str(v).lower() in text_lower)
@@ -193,10 +198,11 @@ async def validate_metadata_vs_source(
         specs_valid = True  # No specs is OK for simple products
 
     latency = time.perf_counter() - start_time
-    is_valid = keywords_valid and specs_valid
+    # Validity = specs only; keywords diagnostic only
+    is_valid = specs_valid
 
     logfire.info(
-        "Metadata validation: valid={v}, keywords_valid={kv}, "
+        "Metadata validation: valid={v}, keywords_valid={kv}(diagnostic), "
         "specs_valid={sv}, latency={l:.3f}s",
         v=is_valid,
         kv=keywords_valid,
@@ -220,7 +226,18 @@ async def ingest_product_text(
     What it does: Creates a Product record and stores its embedding.
     Phase 1: Enriches metadata with specs, category, intent, keywords.
     Uses UUIDv7 for optimal ordering and client-side generation.
+    Skips (returns existing ID) if SKU already exists — idempotent.
     """
+    # Skip if already ingested — safe for bulk re-runs
+    existing = await db.execute(select(Product).where(Product.sku == sku))
+    existing_product = existing.scalar_one_or_none()
+    if existing_product:
+        logfire.info(
+            "Product already exists, skipping: {sku}",
+            sku=sku,
+        )
+        return str(existing_product.id)
+
     product_id = uuid7()
 
     # 1. Create Product record

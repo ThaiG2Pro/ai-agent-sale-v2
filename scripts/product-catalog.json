@@ -141,25 +141,6 @@
       }
     },
     {
-      "sku": "TABLET-IPAD-001",
-      "name": "iPad Pro 12.9 inch M2 256GB WiFi",
-      "category": "Máy tính bảng",
-      "subcategory": "Tablet cao cấp",
-      "price": 19990000,
-      "currency": "VND",
-      "description": "Tablet chuyên nghiệp với màn hình Liquid Retina XDR 12.9 inch, chip Apple M2, 8GB RAM, 256GB lưu trữ, tần số quét 120Hz ProMotion, hỗ trợ Apple Pencil Pro.",
-      "intent": "B2C",
-      "specifications": {
-        "kích_thước_màn_hình": "12.9 inch Liquid Retina XDR",
-        "bộ_xử_lý": "Apple M2",
-        "ram": "8GB",
-        "lưu_trữ": "256GB",
-        "loại_hiển_thị": "Liquid Retina XDR",
-        "tần_số_quét": "120Hz",
-        "hệ_điều_hành": "iPadOS 17"
-      }
-    },
-    {
       "sku": "TABLET-SM-001",
       "name": "Samsung Galaxy Tab S9 Ultra 256GB",
       "category": "Máy tính bảng",

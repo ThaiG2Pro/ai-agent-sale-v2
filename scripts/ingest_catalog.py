@@ -230,9 +230,9 @@ def ingest(
         help="Limit ingestion to N products (for testing)",
     ),
     embed_concurrency: int = typer.Option(
-        4,
+        1,
         "--embed-concurrency",
-        help="Number of concurrent embedding requests",
+        help="Concurrent ingest workers (1=sequential, safe for local Ollama)",
         min=1,
         max=16,
     ),
