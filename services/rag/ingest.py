@@ -164,32 +164,33 @@ async def validate_metadata_vs_source(
     What it does: Validates extracted metadata against original text.
     Why important: Prevents storing false specs or invented categories.
 
-    Returns: True if metadata is valid, False if hallucinations detected.
+    Validation rules (language-agnostic):
+    - PASS if >=50% of keywords appear anywhere in text (value, not key check)
+    - PASS if category is not empty
+    - Spec key names are NOT checked — LLM may translate keys to English
+      even when description is in Vietnamese (e.g. "chip" vs "bộ xử lý").
+
+    Returns: True if metadata is valid, False if likely hallucinated.
     """
     start_time = time.perf_counter()
 
-    # Quick validation: keywords should appear in text
     text_lower = original_text.lower()
-    keywords_found = 0
-    for kw in extracted_metadata.keywords:
-        if kw.lower() in text_lower:
-            keywords_found += 1
 
-    keywords_valid = (
-        keywords_found >= len(extracted_metadata.keywords) * 0.7
-    )  # 70% threshold
+    # Check keywords: at least 50% of keyword values should appear in text
+    keywords = extracted_metadata.keywords or []
+    if keywords:
+        found = sum(1 for kw in keywords if kw.lower() in text_lower)
+        keywords_valid = found >= len(keywords) * 0.5
+    else:
+        keywords_valid = False  # No keywords extracted — something went wrong
 
-    # Check if specs are mentioned
-    specs_valid = True
-    if extracted_metadata.technical_specs:
-        for spec_key, spec_val in extracted_metadata.technical_specs.items():
-            # Very basic: check if spec name/value appears in text
-            if (
-                spec_key.lower() not in text_lower
-                and str(spec_val).lower() not in text_lower
-            ):
-                specs_valid = False
-                break
+    # Check spec VALUES appear in text (not keys — they may be in different language)
+    specs = extracted_metadata.technical_specs or {}
+    if specs:
+        found_vals = sum(1 for v in specs.values() if str(v).lower() in text_lower)
+        specs_valid = found_vals >= len(specs) * 0.4  # 40% spec values found
+    else:
+        specs_valid = True  # No specs is OK for simple products
 
     latency = time.perf_counter() - start_time
     is_valid = keywords_valid and specs_valid
@@ -234,17 +235,20 @@ async def ingest_product_text(
     db.add(product)
     await db.flush()
 
-    # 2. Generate embedding — include price so pricing queries get higher similarity
-    logfire.info("Generating embedding for product: {sku}", sku=sku)
+    # 2. Embed — sequential before enrich to avoid OOM from concurrent model loads
+    logfire.info("Generating embedding: {sku}", sku=sku)
     price_line = f"Giá: {price:,.0f} VND" if price else ""
     embed_text = f"{name}\n{price_line}\n{description}".strip()
-    embeddings = await AIGateway.embed(input_text=embed_text, model="economy-embedding")
-    vector = embeddings[0]
+    embeddings_result = await AIGateway.embed(
+        input_text=embed_text, model="economy-embedding"
+    )
+    vector = embeddings_result[0]
 
-    # 3. PHASE 1: Enrich metadata (specs, category, intent, keywords, summary)
+    # 3. Enrich metadata — after embed so Ollama only loads one model at a time
+    logfire.info("Enriching metadata: {sku}", sku=sku)
     enriched_metadata = await enrich_metadata_async(description, name, sku)
 
-    # 4. PHASE 1: Validate metadata against original text (Critic pattern)
+    # 4. Validate metadata against original text (Critic pattern)
     is_metadata_valid = await validate_metadata_vs_source(
         description, enriched_metadata
     )
@@ -256,10 +260,9 @@ async def ingest_product_text(
         product.metadata_ = ProductMetadata.minimal(sku, name).model_dump()
         logfire.warn("Metadata validation failed, falling back to minimal metadata")
 
-    # 5. Extract keywords for TextEmbedding record
+    # 5. Extract keywords — fallback from enriched if LLM fails
     keywords = await extract_keywords_structured(description, name)
     if not keywords:
-        # Fallback: use metadata keywords
         keywords = enriched_metadata.keywords if is_metadata_valid else []
 
     # 6. Create TextEmbedding record with governance fields

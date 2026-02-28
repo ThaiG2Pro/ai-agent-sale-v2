@@ -30,6 +30,7 @@ setup_logging()
 async def lifespan(app: FastAPI):
     """Why this exists: Manages system startup and shutdown.
     What it does: Initializes logging and verifies DB connectivity.
+    Warms up economy-chat model to avoid cold start on first query.
     """
     # Verify DB connectivity (Article VII)
     async with engine.connect() as conn:
@@ -40,11 +41,30 @@ async def lifespan(app: FastAPI):
 
     logfire.info("Application foundation initialized successfully.")
 
+    # Warm up economy-chat model in background (avoid cold start on first query)
+    import asyncio
+
+    _warmup_task = asyncio.create_task(_warmup_model())  # noqa: RUF006
+
     yield
 
     # Shutdown logic
     await engine.dispose()
     logfire.info("Application shutdown complete.")
+
+
+async def _warmup_model() -> None:
+    """Pre-load economy-chat model so first query doesn't cold-start."""
+    try:
+        from services.ai import AIGateway
+
+        await AIGateway.complete(
+            messages=[{"role": "user", "content": "hi"}],
+            model="economy-chat",
+        )
+        logfire.info("Model warmup complete: economy-chat ready")
+    except Exception as exc:
+        logfire.warn("Model warmup failed (non-critical): {err}", err=str(exc))
 
 
 app = FastAPI(

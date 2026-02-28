@@ -296,7 +296,7 @@ class AIGateway:
         ]
         try:
             response = await ai_router.acompletion(
-                model="economy-chat",  # qwen3-4b-q6 — better bilingual understanding
+                model="economy-chat",  # Same as generate_answer — no Ollama swap
                 messages=messages,
                 response_format=NormalizedQuery,
                 temperature=0,

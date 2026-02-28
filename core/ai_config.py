@@ -22,12 +22,13 @@ LITELLM_CONFIG = {
                 "stream": False,
             },
         },
-        # ── Economy tier: general tasks — metadata enrichment, RAG generation
+        # ── Economy tier: general tasks — normalize_query + RAG generation ──
+        # Same model as normalize_query to avoid Ollama model swap mid-request
         {
             "model_name": "economy-chat",
             "model_info": {"id": "economy-chat-local"},
             "litellm_params": {
-                "model": settings.CHAT_MODEL,  # ollama/qwen3-4b-q6
+                "model": settings.CHAT_MODEL,  # ollama/qwen3-1.7b (1.1GB)
                 "api_base": settings.OLLAMA_BASE_URL,
                 "stream": True,
             },
@@ -45,7 +46,7 @@ LITELLM_CONFIG = {
             "model_name": "premium-local-chat",
             "model_info": {"id": "premium-local-deepseek"},
             "litellm_params": {
-                "model": settings.POWERFUL_CHAT_MODEL,  # ollama/deepseek-r1
+                "model": settings.POWERFUL_CHAT_MODEL,  # ollama/deepseel-r1:1.5b
                 "api_base": settings.OLLAMA_BASE_URL,
                 "stream": True,
             },

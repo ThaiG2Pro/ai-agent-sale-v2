@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     #   CHAT   — general (qwen3-4b-q6):    metadata enrichment, RAG generation
     #   POWERFUL — deep reasoning (deepseek-r1): escalation, complex queries
     LIGHT_CHAT_MODEL: str = "ollama/qwen3:0.6b"
-    CHAT_MODEL: str = "ollama/qwen3-4b-q6"
-    POWERFUL_CHAT_MODEL: str = "ollama/deepseek-r1"
+    CHAT_MODEL: str = "ollama/qwen3-1.7b"
+    POWERFUL_CHAT_MODEL: str = "ollama/deepseel-r1:1.5b"
     EMBED_MODEL: str = "ollama/bge-m3"
     EMBED_DIMENSION: int = 1024  # Standard for bge-m3 / small
 

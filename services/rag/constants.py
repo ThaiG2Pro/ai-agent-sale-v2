@@ -6,7 +6,8 @@ SCHEMA = "agent_v1"
 # ── Algorithm constants (FR-005, FR-012, FR-013) ──────────────────────────────
 RRF_K: int = 60
 # bge-m3 cosine similarity: related cross-lingual content typically scores 0.35-0.70
-CONFIDENCE_THRESHOLD: float = 0.35
+# 0.45 ensures off-topic queries (weather, etc.) with ~0.40 scores are declined
+CONFIDENCE_THRESHOLD: float = 0.45
 # Use lower threshold so RRF-boosted FTS hits are not discarded by vector score alone
 COMPRESSION_SCORE_THRESHOLD: float = 0.25
 NEAR_DUP_THRESHOLD: float = 0.80

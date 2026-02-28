@@ -48,12 +48,19 @@ def async_command(func):
     return wrapper
 
 
-async def call_api(endpoint: str, data: dict, api_url: str):
+async def call_api(
+    endpoint: str,
+    data: dict,
+    api_url: str,
+    request_timeout: float = 30.0,
+):
     """Why this exists: Centralized API caller for RAG admin.
     What it does: Sends POST request with X-Admin-Key to the API.
+    request_timeout: caller sets per-endpoint — ingest needs 300s
+    (Ollama serializes model loads).
     """
     headers = {"X-Admin-Key": settings.X_ADMIN_KEY}
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=request_timeout) as client:
         response = await client.post(
             f"{api_url.rstrip('/')}/admin/rag/{endpoint}", json=data, headers=headers
         )
@@ -119,7 +126,11 @@ async def _ingest_api(
             "metadata": metadata or {},
         }
         console.print(f"[cyan]📡 Calling:[/cyan] {api_url}/admin/rag/ingest...")
-        result = await call_api("ingest", payload, api_url)
+        console.print(
+            "[dim]  (ingest includes LLM enrichment — "
+            "may take 2-3 min with Ollama)[/dim]"
+        )
+        result = await call_api("ingest", payload, api_url, request_timeout=300.0)
 
         metadata_info = Panel(
             f"[cyan]Product ID:[/cyan] {result.get('product_id')}\n"
@@ -130,11 +141,11 @@ async def _ingest_api(
         console.print(metadata_info)
         return True
     except Exception as e:
-        msg = (
-            f"✗ API Ingestion failed: {e}\n"
-            "💡 Hint: If server is not running, use --local"
-        )
-        console.print(msg, style="bold red")
+        import traceback
+
+        console.print(f"[red]✗ API Ingestion failed: {type(e).__name__}: {e}[/red]")
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        console.print("[yellow]💡 Hint: If server is not running, use --local[/yellow]")
         return False
 
 
@@ -312,7 +323,10 @@ async def query(
             console.print(
                 f"[cyan]📡 Calling:[/cyan] {api_url}/query (model: {model})..."
             )
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            console.print(
+                "[dim]  (first query may take 60-120s while Ollama loads model)[/dim]"
+            )
+            async with httpx.AsyncClient(timeout=180.0) as client:
                 response = await client.post(
                     f"{api_url.rstrip('/')}/query", json=payload
                 )
@@ -322,11 +336,13 @@ async def query(
             _display_rag_result(result, metadata={"mode": "api"})
             return
         except Exception as e:
-            msg = (
-                f"✗ API Query failed: {e}\n"
-                "💡 Hint: If server is not running, use --local"
+            import traceback
+
+            console.print(f"[red]✗ API Query failed: {type(e).__name__}: {e}[/red]")
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            console.print(
+                "[yellow]💡 Hint: If server is not running, use --local[/yellow]"
             )
-            console.print(msg, style="bold red")
             sys.exit(1)
 
     # Local Query
