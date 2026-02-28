@@ -4,7 +4,7 @@ What it does: Defines SQLAlchemy models for products, embeddings, and chat histo
 
 from __future__ import annotations
 
-import uuid
+import uuid  # noqa: TC003
 from datetime import UTC, datetime
 from decimal import Decimal  # noqa: TC003
 from typing import Any, ClassVar
@@ -13,6 +13,9 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from uuid_utils import uuid7
+
+from core.config import settings
 
 
 # Article II: Simplicity - Declarative Models
@@ -28,7 +31,7 @@ class Product(Base):
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     sku: Mapped[str] = mapped_column(
         String(50), unique=True, index=True, nullable=False
@@ -64,7 +67,7 @@ class TextEmbedding(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     source_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.products.id"), nullable=False
@@ -72,7 +75,7 @@ class TextEmbedding(Base):
     source_type: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # e.g., 'product_description'
-    embedding: Mapped[Vector] = mapped_column(Vector(1024))  # Optimized for bge-m3
+    embedding: Mapped[Vector] = mapped_column(Vector(settings.EMBED_DIMENSION))
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     model_version: Mapped[str] = mapped_column(String(50), nullable=True)
     keywords: Mapped[list[str]] = mapped_column(JSONB, default=list)  # FR-003
@@ -88,7 +91,7 @@ class ConversationSession(Base):
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     external_id: Mapped[str] = mapped_column(
         String(100), unique=True, index=True, nullable=False
@@ -111,7 +114,7 @@ class ConversationMessage(Base):
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -153,7 +156,7 @@ class SemanticCache(Base):
     query_hash: Mapped[str] = mapped_column(String(64), primary_key=True)  # SHA256
     query_text: Mapped[str] = mapped_column(Text, nullable=False)
     response: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[Vector] = mapped_column(Vector(1024))
+    embedding: Mapped[Vector] = mapped_column(Vector(settings.EMBED_DIMENSION))
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     citations: Mapped[dict] = mapped_column(JSONB, nullable=True)  # Article IX
     similarity_score: Mapped[float] = mapped_column(nullable=True)
@@ -169,7 +172,7 @@ class SalesSignal(Base):
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -193,7 +196,7 @@ class ModelTrace(Base):
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     message_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

@@ -39,6 +39,8 @@ async def get_l1_cache(db: AsyncSession, query: str) -> dict | None:
     What it does: Queries SemanticCache by query_hash and current model.
     Returns: dict with response and citations if found.
     """
+    import logfire
+
     query_hash = generate_query_hash(query)
     stmt = (
         select(SemanticCache.response, SemanticCache.citations)
@@ -47,6 +49,12 @@ async def get_l1_cache(db: AsyncSession, query: str) -> dict | None:
     )
     result = await db.execute(stmt)
     row = result.first()
+    logfire.info(
+        "L1 lookup: hash={h}, model={m}, found={f}",
+        h=query_hash[:8],
+        m=settings.EMBED_MODEL,
+        f=row is not None,
+    )
     if row:
         return {"response": row.response, "citations": row.citations or []}
     return None
@@ -61,6 +69,8 @@ async def get_l2_cache(
     Returns: dict with response and citations if found.
     SC-003: < 5ms search target.
     """
+    import logfire
+
     # Using cosine similarity (1 - distance)
     # pgvector <=> operator is cosine distance
     cos_dist = SemanticCache.embedding.cosine_distance(query_embedding)
@@ -75,6 +85,12 @@ async def get_l2_cache(
 
     result = await db.execute(stmt)
     row = result.first()
+    logfire.info(
+        "L2 lookup: model={m}, threshold={t}, found={f}",
+        m=settings.EMBED_MODEL,
+        t=threshold,
+        f=row is not None,
+    )
     if row:
         return {
             "response": row.response,
@@ -97,6 +113,8 @@ async def set_cache(
     What it does: Inserts or updates a record in the semantic_cache table,
     including citations.
     """
+    import logfire
+
     query_hash = generate_query_hash(query)
     cache_entry = SemanticCache(
         query_hash=query_hash,
@@ -105,6 +123,12 @@ async def set_cache(
         embedding=embedding,
         model_name=model_name,
         citations=citations or [],
+    )
+    logfire.info(
+        "Cache write: hash={h}, model={m}, citations_count={c}",
+        h=query_hash[:8],
+        m=model_name,
+        c=len(citations or []),
     )
     # Use merge to handle potential collisions (Upsert pattern)
     await db.merge(cache_entry)

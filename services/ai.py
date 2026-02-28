@@ -135,7 +135,26 @@ class AIGateway:
             )
 
             # Extract embeddings from response
-            return [data["embedding"] for data in response.data]
+            from core.config import settings
+
+            expected_dim = settings.EMBED_DIMENSION
+            embeddings = [data["embedding"] for data in response.data]
+            for emb in embeddings:
+                if len(emb) != expected_dim:
+                    logfire.error(
+                        (
+                            "Configuration Error: Model Mismatch — "
+                            "embedding dimension {got} (expected {exp})"
+                        ),
+                        got=len(emb),
+                        exp=expected_dim,
+                        model=model,
+                    )
+                    raise ValueError(
+                        f"Configuration Error: Model Mismatch — "
+                        f"embedding dimension {len(emb)} (expected {expected_dim})"
+                    )
+            return embeddings
 
         except Exception as e:
             latency = time.perf_counter() - start_time
@@ -163,7 +182,10 @@ class AIGateway:
                     "You are a query preprocessing assistant for a Vietnamese "
                     "SME product database.\n"
                     "Clean and normalize the user query:\n"
-                    "- Remove filler words but preserve meaning\n"
+                    "- IMPORTANT: canonical must be a full, clean question preserving "
+                    "the user's intent (e.g. 'What are the features of iPhone 13 Pro Max?' "
+                    "NOT just 'iPhone 13 Pro Max'). Keep the question type/intent.\n"
+                    "- Fix typos and normalize casing but keep the meaning\n"
                     "- Detect language (vi/en/mixed)\n"
                     "- Classify intent: INFO_QUERY | PRICING | COMPARISON | "
                     "COMPLAINT | NEGOTIATION | AVAILABILITY | OTHER\n"
@@ -178,6 +200,7 @@ class AIGateway:
                 model="economy-chat",
                 messages=messages,
                 response_format=NormalizedQuery,
+                temperature=0,
             )
             latency = time.perf_counter() - start_time
             logfire.info("normalize_query: {latency:.4f}s", latency=latency)

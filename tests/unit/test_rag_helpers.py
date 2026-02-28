@@ -219,20 +219,20 @@ class TestCompressContext:
         chunks = [
             _make_chunk("Good chunk", vector_score=0.8),
             _make_chunk(
-                "Low confidence chunk", vector_score=0.3
-            ),  # below 0.5 threshold
+                "Low confidence chunk", vector_score=0.1
+            ),  # below 0.25 threshold
         ]
         result = compress_context(chunks)
         assert len(result) == 1
         assert result[0]["description"] == "Good chunk"
 
-    def test_boundary_exactly_0_5_kept(self):
-        chunks = [_make_chunk("Boundary chunk", vector_score=0.5)]
+    def test_boundary_exactly_0_25_kept(self):
+        chunks = [_make_chunk("Boundary chunk", vector_score=0.25)]
         result = compress_context(chunks)
-        assert len(result) == 1  # 0.5 is kept (threshold is strictly < 0.5)
+        assert len(result) == 1  # 0.25 is kept (threshold is strictly >= 0.25)
 
-    def test_boundary_just_below_0_5_removed(self):
-        chunks = [_make_chunk("Below boundary", vector_score=0.499)]
+    def test_boundary_just_below_0_25_removed(self):
+        chunks = [_make_chunk("Below boundary", vector_score=0.249)]
         result = compress_context(chunks)
         assert len(result) == 0
 

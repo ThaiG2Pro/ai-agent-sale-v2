@@ -4,9 +4,8 @@ These tests are best-effort and will skip if external services (Ollama) are
 unavailable in the test environment, matching the pattern used elsewhere.
 """
 
-import uuid
-
 import pytest
+from uuid_utils import uuid7
 
 from services.ai import AIGateway
 from services.rag import hybrid_search_rrf, ingest_product_text
@@ -19,21 +18,21 @@ async def test_hybrid_search_rrf_returns_ranked_results(db_session):
         await ingest_product_text(
             db=db_session,
             name="Hybrid A",
-            sku=f"hyb-a-{uuid.uuid4()}",
+            sku=f"hyb-a-{uuid7()}",
             description="Widget Bluetooth with sensors and connectivity",
             price=10.0,
         )
         await ingest_product_text(
             db=db_session,
             name="Hybrid B",
-            sku=f"hyb-b-{uuid.uuid4()}",
+            sku=f"hyb-b-{uuid7()}",
             description="Battery powered widget for testing",
             price=11.0,
         )
         await ingest_product_text(
             db=db_session,
             name="Hybrid C",
-            sku=f"hyb-c-{uuid.uuid4()}",
+            sku=f"hyb-c-{uuid7()}",
             description="Affordable widget for general use",
             price=5.0,
         )
@@ -65,7 +64,7 @@ async def test_hybrid_search_rrf_returns_ranked_results(db_session):
 @pytest.mark.asyncio
 async def test_hybrid_surfaces_fts_keyword_match(db_session):
     """Validate that an FTS-only hit can be surfaced by RRF when vector ranks low."""
-    sku = f"fts-{uuid.uuid4()}"
+    sku = f"fts-{uuid7()}"
     try:
         await ingest_product_text(
             db=db_session,

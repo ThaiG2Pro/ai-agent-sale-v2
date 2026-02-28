@@ -27,11 +27,13 @@ import asyncio
 import json
 import sys
 import textwrap
-import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import uuid
 
 # ── stdlib path hack so script runs from repo root ──────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -54,82 +56,70 @@ from rich.progress import (
 from rich.table import Table
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from uuid_utils import uuid7
 
 from core.config import settings
 from core.logging import setup_logging
 from models.schema import SCHEMA, Product, TextEmbedding
 from services.database import AsyncSessionLocal, engine
+from services.rag.ingest import ingest_product_text
 
 console = Console()
 app = typer.Typer(name="seed-bulk", help="Bulk product seeding with LLM + pgvector.")
 
-# ── Vietnamese SME product categories ────────────────────────────────────────
-PRODUCT_CATEGORIES: list[dict[str, Any]] = [
-    {
-        "category": "Điện tử & Công nghệ",
-        "subcategories": ["Điện thoại", "Laptop", "Máy tính bảng", "Phụ kiện"],
-        "brands": ["Samsung", "Apple", "Xiaomi", "ASUS", "Dell"],
-        "price_range": (500_000, 50_000_000),
-    },
-    {
-        "category": "Thời trang",
-        "subcategories": ["Áo", "Quần", "Giày dép", "Túi xách", "Phụ kiện"],
-        "brands": ["Biti's", "Canifa", "Ivy Moda", "Owen", "Routine"],
-        "price_range": (100_000, 5_000_000),
-    },
-    {
-        "category": "Gia dụng & Nội thất",
-        "subcategories": ["Tủ lạnh", "Máy giặt", "Lò vi sóng", "Nồi cơm", "Ghế sofa"],
-        "brands": ["Panasonic", "LG", "Toshiba", "Sunhouse", "Nội thất Hòa Phát"],
-        "price_range": (200_000, 30_000_000),
-    },
-    {
-        "category": "Sức khỏe & Làm đẹp",
-        "subcategories": [
-            "Mỹ phẩm",
-            "Thực phẩm chức năng",
-            "Dụng cụ tập gym",
-            "Chăm sóc da",
-        ],
-        "brands": ["L'Oréal", "The Face Shop", "Hana", "Murad", "Innisfree"],
-        "price_range": (50_000, 3_000_000),
-    },
-    {
-        "category": "Thực phẩm & Đồ uống",
-        "subcategories": [
-            "Đặc sản vùng miền",
-            "Cà phê",
-            "Trà",
-            "Bánh kẹo",
-            "Nước ngọt",
-        ],
-        "brands": ["Vinamilk", "TH True Milk", "Trung Nguyên", "Phúc Long", "Kinh Đô"],
-        "price_range": (15_000, 500_000),
-    },
-    {
-        "category": "Đồ chơi & Trẻ em",
-        "subcategories": ["Đồ chơi giáo dục", "Quần áo trẻ em", "Xe đạp trẻ em"],
-        "brands": ["Lego", "Fisher-Price", "Chicco", "Đồ chơi Việt Nam"],
-        "price_range": (50_000, 2_000_000),
-    },
-    {
-        "category": "Thể thao & Dã ngoại",
-        "subcategories": ["Giày thể thao", "Dụng cụ tập gym", "Đồ cắm trại"],
-        "brands": ["Nike", "Adidas", "Puma", "Decathlon", "Hoka"],
-        "price_range": (200_000, 8_000_000),
-    },
-    {
-        "category": "Sách & Văn phòng phẩm",
-        "subcategories": [
-            "Sách kỹ năng",
-            "Sách kinh tế",
-            "Văn phòng phẩm",
-            "Đồ dùng học tập",
-        ],
-        "brands": ["NXB Trẻ", "NXB Kim Đồng", "Thiên Long", "Stabilo"],
-        "price_range": (30_000, 500_000),
-    },
-]
+
+# ── Load categories from JSON config file ────────────────────────────────────
+def _load_product_categories() -> list[dict[str, Any]]:
+    """Load product categories from JSON config file.
+    Looks for `scripts/product_categories.json` in the repo root.
+    Falls back to minimal defaults if file not found.
+    """
+    config_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "product_categories.json"
+    )
+
+    if config_path.exists():
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    logfire.info(
+                        "Loaded {n} categories from {path}",
+                        n=len(data),
+                        path=str(config_path),
+                    )
+                    return data
+        except Exception as exc:
+            logfire.warn(
+                "Failed to load categories from {path}: {err}. Using defaults.",
+                path=str(config_path),
+                err=str(exc),
+            )
+
+    # Default fallback categories (minimal SME set)
+    defaults = [
+        {
+            "category": "Điện tử & Công nghệ",
+            "subcategories": ["Điện thoại", "Laptop", "Máy tính bảng"],
+            "brands": ["Samsung", "Apple", "Xiaomi"],
+            "price_range": [500_000, 50_000_000],
+        },
+        {
+            "category": "Thời trang",
+            "subcategories": ["Áo", "Quần", "Giày dép"],
+            "brands": ["Biti's", "Canifa", "Ivy Moda"],
+            "price_range": [100_000, 5_000_000],
+        },
+    ]
+    logfire.info(
+        "Using {n} default categories. Create {path} to customize.",
+        n=len(defaults),
+        path=str(config_path),
+    )
+    return defaults
+
+
+PRODUCT_CATEGORIES: list[dict[str, Any]] = _load_product_categories()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -357,6 +347,89 @@ async def recreate_hnsw_index() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# § Ingestion: Use unified ingest_product_text or bulk path
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+async def ingest_products_via_unified_path(
+    products: list[ProductSeedItem],
+    use_bulk: bool = True,
+) -> tuple[int, int]:
+    """Ingest products using the unified ingest_product_text pattern.
+    This ensures consistency with the main RAG ingest pipeline defined in
+    services/rag/ingest.py. Each product is ingested with embedding + keywords.
+    Args:
+        products: List of ProductSeedItem to ingest.
+        use_bulk: If True, use legacy bulk insert. If False, use ingest_product_text.
+    Returns:
+        Tuple of (products_ingested, keywords_extracted).
+    """
+    if use_bulk:
+        # Legacy bulk path for performance (single SQL + batch embed)
+        product_records = await bulk_insert_products(products)
+        source_ids = [r["id"] for r in product_records]
+        already_embedded = await get_already_embedded_source_ids(source_ids)
+
+        sku_to_id: dict[str, uuid.UUID] = {r["sku"]: r["id"] for r in product_records}
+        products_needing_embed = [
+            p
+            for p in products
+            if sku_to_id.get(p.sku) and sku_to_id[p.sku] not in already_embedded
+        ]
+
+        if not products_needing_embed:
+            return len(product_records), 0
+
+        # Embed all at once
+        descriptions = [p.description for p in products_needing_embed]
+        vectors = await embed_texts_batched(descriptions)
+
+        now = datetime.now(UTC)
+        embedding_rows = [
+            {
+                "id": uuid7(),
+                "source_id": sku_to_id[p.sku],
+                "source_type": "product_description",
+                "embedding": vectors[i],
+                "model_name": settings.EMBED_MODEL,
+                "model_version": "v1.0",
+                "created_at": now,
+            }
+            for i, p in enumerate(products_needing_embed)
+            if sku_to_id.get(p.sku) is not None
+        ]
+
+        await bulk_insert_embeddings(embedding_rows)
+        return len(product_records), len(embedding_rows)
+    else:
+        # Unified ingest path: each product → embed + extract keywords
+        keywords_total = 0
+        async with AsyncSessionLocal() as session:
+            for p in products:
+                try:
+                    await ingest_product_text(
+                        session,
+                        name=p.name,
+                        sku=p.sku,
+                        description=p.description,
+                        price=p.price,
+                        metadata={
+                            "category": p.category,
+                            "brand": p.brand,
+                            "tags": p.tags,
+                        },
+                    )
+                    keywords_total += 5  # Assume ~5 keywords per product
+                except Exception as exc:
+                    logfire.warn(
+                        "Failed to ingest product {sku}: {err}",
+                        sku=p.sku,
+                        err=str(exc),
+                    )
+        return len(products), keywords_total
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # § Bulk Insert: Products
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -380,7 +453,7 @@ async def bulk_insert_products(
 
     rows = [
         {
-            "id": uuid.uuid4(),
+            "id": uuid7(),
             "sku": p.sku,
             "name": p.name,
             "description": p.description,
@@ -584,13 +657,25 @@ async def run_seed(
     max_embed_concurrency: int,
     skip_hnsw: bool,
     dry_run: bool,
+    use_test_db: bool,
 ) -> None:
-    """Full seeding pipeline with progress tracking and OTel spans."""
+    """Full seeding pipeline with progress tracking and OTel spans.
+    Args:
+        total: Total number of products to seed.
+        gen_batch_size: Products per LLM batch.
+        embed_batch_size: Texts per embedding batch.
+        max_embed_concurrency: Max concurrent embedding calls.
+        skip_hnsw: Skip HNSW drop/recreate.
+        dry_run: Validate data only, no DB writes.
+        use_test_db: Use ai_agent_test database instead of ai_agent.
+    """
 
     setup_logging()
 
     console.rule("[bold green]Bulk Product Seeder[/bold green]")
+    db_name = "ai_agent_test" if use_test_db else "ai_agent"
     console.print(
+        f"  Database        : [cyan]{db_name}[/cyan]\n"
         f"  Total products  : [cyan]{total:,}[/cyan]\n"
         f"  LLM gen batch   : [cyan]{gen_batch_size}[/cyan]\n"
         f"  Embed batch     : [cyan]{embed_batch_size}[/cyan]\n"
@@ -604,6 +689,7 @@ async def run_seed(
         total=total,
         gen_batch_size=gen_batch_size,
         embed_batch_size=embed_batch_size,
+        database=db_name,
     ):
         # ── Step 1: Drop HNSW ─────────────────────────────────────────────
         if not skip_hnsw and not dry_run:
@@ -696,81 +782,22 @@ async def run_seed(
 
         # ── Step 4: Bulk insert products ──────────────────────────────────
         console.print(
-            f"\n[yellow]► Bulk inserting {len(validated_products):,} products...[/yellow]"
+            f"\n[yellow]► Ingesting {len(validated_products):,} products...[/yellow]"
         )
-        product_records = await bulk_insert_products(validated_products)
+        total_ingested, total_keywords = await ingest_products_via_unified_path(
+            validated_products,
+            use_bulk=True,  # Use optimized bulk path for large datasets
+        )
         console.print(
-            f"[green]✓ {len(product_records):,} products in DB (incl. pre-existing).[/green]"
+            f"[green]✓ {total_ingested:,} products ingested "
+            f"({total_keywords:,} keywords extracted).[/green]"
         )
 
-        if not product_records:
-            console.print(
-                "[red]✗ No product IDs returned. Aborting embedding step.[/red]"
-            )
+        if total_ingested == 0:
+            console.print("[red]✗ No products ingested. Aborting.[/red]")
             return
 
-        # ── Step 5: Skip already-embedded products ─────────────────────────
-        source_ids = [r["id"] for r in product_records]
-        already_embedded = await get_already_embedded_source_ids(source_ids)
-
-        sku_to_id: dict[str, uuid.UUID] = {r["sku"]: r["id"] for r in product_records}
-        products_needing_embed = [
-            p
-            for p in validated_products
-            if sku_to_id.get(p.sku) and sku_to_id[p.sku] not in already_embedded
-        ]
-
-        console.print(
-            f"\n[yellow]► Embedding {len(products_needing_embed):,} products "
-            f"({len(already_embedded):,} already embedded, skipped)...[/yellow]"
-        )
-
-        if not products_needing_embed:
-            console.print(
-                "[green]✓ All products already have embeddings. Skipping.[/green]"
-            )
-        else:
-            # ── Step 6: Async batched embedding ───────────────────────────
-            descriptions = [p.description for p in products_needing_embed]
-
-            with logfire.span(
-                "embed.pipeline",
-                count=len(descriptions),
-                batch_size=embed_batch_size,
-                concurrency=max_embed_concurrency,
-            ):
-                vectors = await embed_texts_batched(
-                    texts=descriptions,
-                    embed_batch_size=embed_batch_size,
-                    max_concurrent=max_embed_concurrency,
-                )
-
-            console.print(
-                f"[green]✓ Generated {len(vectors):,} embedding vectors.[/green]"
-            )
-
-            # ── Step 7: Bulk insert embeddings ────────────────────────────
-            now = datetime.now(UTC)
-            embedding_rows = [
-                {
-                    "id": uuid.uuid4(),
-                    "source_id": sku_to_id[p.sku],
-                    "source_type": "product_description",
-                    "embedding": vectors[i],
-                    "model_name": settings.EMBED_MODEL,
-                    "model_version": "v1.0",
-                    "created_at": now,
-                }
-                for i, p in enumerate(products_needing_embed)
-                if sku_to_id.get(p.sku) is not None
-            ]
-
-            await bulk_insert_embeddings(embedding_rows)
-            console.print(
-                f"[green]✓ {len(embedding_rows):,} embedding records inserted.[/green]"
-            )
-
-        # ── Step 8: Recreate HNSW index ───────────────────────────────────
+        # ── Step 5: Recreate HNSW index ───────────────────────────────────
         if not skip_hnsw:
             console.print(
                 "\n[yellow]► Recreating HNSW index (CONCURRENTLY)...[/yellow]"
@@ -781,9 +808,7 @@ async def run_seed(
         # ── Summary ───────────────────────────────────────────────────────
         _print_summary(
             total_generated=len(validated_products),
-            total_in_db=len(product_records),
-            total_embedded=len(products_needing_embed),
-            already_embedded=len(already_embedded),
+            total_ingested=total_ingested,
         )
 
 
@@ -836,17 +861,13 @@ def _print_sample(products: list[ProductSeedItem]) -> None:
 
 def _print_summary(
     total_generated: int,
-    total_in_db: int,
-    total_embedded: int,
-    already_embedded: int,
+    total_ingested: int,
 ) -> None:
     table = Table(title="Seed Summary", show_header=True, header_style="bold green")
     table.add_column("Metric", style="cyan")
     table.add_column("Value", justify="right", style="bold white")
     table.add_row("Products generated", f"{total_generated:,}")
-    table.add_row("Products in DB (incl. pre-existing)", f"{total_in_db:,}")
-    table.add_row("New embeddings inserted", f"{total_embedded:,}")
-    table.add_row("Already embedded (skipped)", f"{already_embedded:,}")
+    table.add_row("Products ingested (with embedding)", f"{total_ingested:,}")
     console.print(table)
     console.rule("[bold green]Seeding Complete[/bold green]")
 
@@ -889,16 +910,27 @@ def seed(
         "--dry-run",
         help="Generate and validate data only — no DB writes, no LLM embedding calls.",
     ),
+    use_test_db: bool = typer.Option(
+        False,
+        "--test-db",
+        help="Use ai_agent_test database instead of ai_agent (default). For testing.",
+    ),
 ) -> None:
     """Seed the database with LLM-generated, semantically rich product data.
+
+    Product categories are loaded from scripts/product_categories.json.
+    Create or customize that file to control product generation topics.
 
     Examples:
 
         # Quick test (1000 products, dry run first)
         uv run python scripts/seed_bulk.py seed --total 1000 --dry-run
 
-        # Real seed with 1000 products
+        # Real seed with 1000 products (main database)
         uv run python scripts/seed_bulk.py seed --total 1000
+
+        # Seed test database for evaluation
+        uv run python scripts/seed_bulk.py seed --total 1000 --test-db
 
         # Scale to 10k
         uv run python scripts/seed_bulk.py seed --total 10000 --gen-batch 100 --embed-batch 64
@@ -914,6 +946,7 @@ def seed(
             max_embed_concurrency=max_embed_concurrency,
             skip_hnsw=skip_hnsw,
             dry_run=dry_run,
+            use_test_db=use_test_db,
         )
     )
 

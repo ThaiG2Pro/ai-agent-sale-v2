@@ -4,13 +4,13 @@ What it does: Seeds 10,000 mock products/embeddings and measures search time.
 
 import json
 import time
-import uuid
 
 import numpy as np
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from uuid_utils import uuid7
 
 from core.config import settings
 from models.schema import SCHEMA, Product, TextEmbedding
@@ -45,8 +45,8 @@ async def test_search_latency_10k(benchmark_db: AsyncSession):
     for i in range(10):
         products = []
         for j in range(batch_size):
-            p_id = uuid.uuid4()
-            sku = f"bench-{i}-{j}-{uuid.uuid4().hex[:8]}"
+            p_id = uuid7()
+            sku = f"bench-{i}-{j}-{uuid7().hex[:8]}"
             products.append(
                 {
                     "id": p_id,
@@ -71,7 +71,7 @@ async def test_search_latency_10k(benchmark_db: AsyncSession):
             vec = np.random.rand(1024).tolist()
             embeddings.append(
                 {
-                    "id": uuid.uuid4(),
+                    "id": uuid7(),
                     "source_id": p["id"],
                     "source_type": "product_description",
                     "embedding": str(vec),  # pgvector format

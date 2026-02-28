@@ -14,6 +14,7 @@ LITELLM_CONFIG = {
     "model_list": [
         {
             "model_name": "economy-chat",
+            "model_info": {"id": "economy-chat-local"},
             "litellm_params": {
                 "model": settings.CHAT_MODEL,
                 "api_base": settings.OLLAMA_BASE_URL,
@@ -22,6 +23,7 @@ LITELLM_CONFIG = {
         },
         {
             "model_name": "economy-embedding",
+            "model_info": {"id": "economy-embedding-local"},
             "litellm_params": {
                 "model": settings.EMBED_MODEL,
                 "api_base": settings.OLLAMA_BASE_URL,
@@ -30,10 +32,14 @@ LITELLM_CONFIG = {
         # Premium fallback (Example: Groq llama3)
         {
             "model_name": "premium-chat",
+            "model_info": {"id": "premium-chat-groq"},
             "litellm_params": {
                 "model": "groq/llama-3.1-70b-versatile",
             },
         },
     ],
-    "routing_strategy": "latency-based-routing",
+    # simple-shuffle avoids registering a global lowest-latency callback that
+    # crashes when litellm is called directly (outside the router) with no
+    # litellm_params context.
+    "routing_strategy": "simple-shuffle",
 }

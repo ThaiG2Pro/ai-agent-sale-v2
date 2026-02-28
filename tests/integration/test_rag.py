@@ -2,20 +2,15 @@
 What it does: Tests product ingestion, vector search, and L1/L2 cache hits.
 """
 
-import uuid
-
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from uuid_utils import uuid7
 
 from core.config import settings
 from models.schema import Product, SemanticCache, TextEmbedding
-from services.rag import (
-    answer_with_rag,
-    ingest_product_text,
-    search_products,
-)
+from services.rag import answer_with_rag, ingest_product_text, search_products
 from services.semantic_cache import get_l1_cache, get_l2_cache, set_cache
 
 
@@ -53,7 +48,7 @@ async def test_rag_ingestion_and_search(db_session: AsyncSession):
     via vector search.
     """
     name = "Test Product"
-    sku = f"test-sku-{uuid.uuid4()}"
+    sku = f"test-sku-{uuid7()}"
     description = "This is a high-performance testing widget for integration tests."
 
     # 1. Ingest
@@ -136,7 +131,7 @@ async def test_answer_with_rag_returns_citations(db_session: AsyncSession):
     with citations after ingesting a product.
     """
     # 1. Ingest a product so retrieval can find it
-    sku = f"cite-test-{uuid.uuid4()}"
+    sku = f"cite-test-{uuid7()}"
     try:
         await ingest_product_text(
             db=db_session,

@@ -25,7 +25,7 @@ from core.config import settings
 from core.logging import setup_logging
 from models.schema import Product, TextEmbedding
 from services.database import AsyncSessionLocal
-from services.rag import ingest_product_text, search_products
+from services.rag import answer_with_rag, ingest_product_text, search_products
 
 app = typer.Typer(
     name="rag-admin",
@@ -283,6 +283,134 @@ def _display_search_results(results: list, metadata: dict | None = None):
             "[dim]   Or export as JSON for programmatic use:[/dim] "
             "[cyan]rag-admin search <query> --json[/cyan]"
         )
+
+
+@app.command()
+@async_command
+async def query(
+    question: str = typer.Argument(..., help="Question to ask the RAG pipeline"),
+    model: str = typer.Option(
+        "economy-chat", "--model", help="LLM model to use (default: economy-chat)"
+    ),
+    local: bool = typer.Option(
+        False, "--local", help="Run directly against database (offline mode)"
+    ),
+    api_url: str = typer.Option(
+        "http://localhost:8000", help="Web API URL for non-local mode"
+    ),
+):
+    """Ask the RAG pipeline a question using semantic search + LLM.
+
+    Examples:
+        rag-admin query "What is the price of iPhone 13?"
+        rag-admin query --local "Compare laptop prices"
+        rag-admin query "Tell me about your products" --model economy-chat
+    """
+    if not local:
+        try:
+            payload = {"query": question, "model": model}
+            console.print(
+                f"[cyan]📡 Calling:[/cyan] {api_url}/query (model: {model})..."
+            )
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{api_url.rstrip('/')}/query", json=payload
+                )
+                response.raise_for_status()
+                result = response.json()
+
+            _display_rag_result(result, metadata={"mode": "api"})
+            return
+        except Exception as e:
+            msg = (
+                f"✗ API Query failed: {e}\n"
+                "💡 Hint: If server is not running, use --local"
+            )
+            console.print(msg, style="bold red")
+            sys.exit(1)
+
+    # Local Query
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await answer_with_rag(db=db, query=question, model=model)
+            _display_rag_result(result, metadata={"mode": "local"})
+        except Exception as e:
+            console.print(f"✗ Local Query failed: {e}", style="bold red")
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
+
+
+def _display_rag_result(result, metadata: dict | None = None):
+    """Display RAG result with answer, citations, and metrics."""
+    # Convert Pydantic model to dict if needed
+    if hasattr(result, "model_dump"):
+        result = result.model_dump()
+    elif hasattr(result, "dict"):
+        result = result.dict()
+
+    # Display main answer
+    answer_panel = Panel(
+        result.get("answer", "No answer generated"),
+        title="🤖 RAG Answer",
+        border_style="green" if not result.get("declined") else "yellow",
+    )
+    console.print(answer_panel)
+
+    # Display citations if available
+    citations = result.get("citations", [])
+    if citations:
+        citations_table = Table(
+            title="📚 Citations", show_header=True, header_style="bold cyan"
+        )
+        citations_table.add_column("SKU", style="dim")
+        citations_table.add_column("Product Name", style="cyan")
+        citations_table.add_column("Product ID", style="dim")
+
+        for citation in citations:
+            citations_table.add_row(
+                citation.get("sku", "N/A"),
+                citation.get("name", "N/A"),
+                str(citation.get("product_id", "N/A"))[:8] + "...",
+            )
+
+        console.print(citations_table)
+    else:
+        if not result.get("declined"):
+            console.print("[yellow]⚠ No citations found[/yellow]")
+
+    # Display metrics
+    status_str = "❌ Declined" if result.get("declined") else "✅ Answered"
+    chunks_before = result.get("chunks_before_compression", 0)
+    chunks_after = result.get("chunks_after_compression", 0)
+    metrics_panel = Panel(
+        (
+            f"[cyan]Status:[/cyan] {status_str}\n"
+            f"[cyan]Best Similarity:[/cyan] "
+            f"{result.get('best_similarity', 0):.4f}\n"
+            f"[cyan]Query Category:[/cyan] "
+            f"{result.get('query_category', 'unknown')}\n"
+            f"[cyan]TopK Used:[/cyan] {result.get('top_k_used', 'N/A')}\n"
+            f"[cyan]Model Used:[/cyan] {result.get('model_used', 'N/A')}\n"
+            f"[cyan]Chunks (before/after compression):[/cyan] "
+            f"{chunks_before}/{chunks_after}\n"
+            f"[cyan]Query Executed At:[/cyan] "
+            f"{datetime.now().isoformat()}\n"
+        ),
+        title="📊 RAG Metrics",
+        border_style="blue",
+    )
+    console.print(metrics_panel)
+
+    # Display metadata
+    if metadata:
+        meta_panel = Panel(
+            f"[cyan]Mode:[/cyan] {metadata.get('mode', 'unknown')}\n",
+            title="Execution Info",
+            border_style="dim",
+        )
+        console.print(meta_panel)
 
 
 @app.command()

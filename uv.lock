@@ -29,6 +29,7 @@ dependencies = [
     { name = "rich" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "typer" },
+    { name = "uuid-utils" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -63,6 +64,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.7.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.30" },
     { name = "typer", extras = ["all"], specifier = ">=0.12.0" },
+    { name = "uuid-utils" },
     { name = "uvicorn", extras = ["standard"] },
 ]
 
