@@ -9,16 +9,16 @@ def classify_query(query: str) -> Literal["short", "long", "ambiguous"]:
     """
     Why this exists: Drives adaptive TopK for cost efficiency (FR-015).
     Rules (deterministic, word-count + keyword heuristic):
-    - short:    word_count ≤ 8  (raised from 5 — Vietnamese price queries are 6-8 words)
-    - long:     9 ≤ word_count ≤ 15
-    - ambiguous: word_count > 15 AND (no action verb AND no capitalised proper noun)
+    - short:    word_count ≤ 10
+    - long:     11 ≤ word_count ≤ 20
+    - ambiguous: word_count > 20 AND (no action verb AND no capitalised proper noun)
     - >15 words with action verb or proper noun → "long" (safe fallback, TopK 15)
     """
     words = query.split()
     wc = len(words)
-    if wc <= 8:
+    if wc <= 10:
         return "short"
-    if wc <= 15:
+    if wc <= 25:
         return "long"
     has_action_verb = any(
         word.lower().strip("?,.:;!") in ACTION_VERBS for word in words
