@@ -1,5 +1,6 @@
 """Why this exists: Centralized structured logging and observability.
-What it does: Configures OpenTelemetry (OTLP) to export traces to local Phoenix.
+What it does: Configures logfire for console output (local dev; no cloud auth).
+          Phoenix traces will come from Python logging integration if needed.
 """
 
 from __future__ import annotations
@@ -7,60 +8,43 @@ from __future__ import annotations
 import logging
 import os
 
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import set_tracer_provider
-
 from core.config import settings
 
 _initialized = False
 
 
 def setup_logging():
-    """Configures OpenTelemetry to export traces to local Phoenix (no cloud auth).
+    """Configures logfire for local development (console output, no cloud).
 
-    Why: Direct OTLP/HTTP exporter sends to Phoenix @ localhost:6006/v1/traces.
-    Avoids logfire cloud authentication 401 errors; uses raw OpenTelemetry instead.
+    Why: Logfire cloud auth (401 errors) is not needed for local dev.
+    Use logfire for structured logging, skip OTLP export entirely.
+    Phoenix can be monitored separately via direct OTEL integration if needed.
     """
     global _initialized
     if _initialized:
         return
 
-    # Set OTEL environment variables for OTLP HTTP exporter
-    # Phoenix supports HTTP endpoint at :6006/v1/traces
-    otlp_http_endpoint = settings.OTLP_ENDPOINT.replace(":4317", ":6006")
-    os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = otlp_http_endpoint
-    os.environ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf"
-    os.environ["OTEL_SDK_DISABLED"] = "false"
+    # Disable logfire cloud and OTLP export
+    os.environ["LOGFIRE_SEND_TO_LOGFIRE"] = "false"
+    os.environ["LOGFIRE_TOKEN"] = ""
+    # Disable OpenTelemetry SDK to prevent OTLP export attempts
+    os.environ["OTEL_SDK_DISABLED"] = "true"
 
-    # Create OTLP exporter (Phoenix HTTP endpoint)
-    otlp_exporter = OTLPSpanExporter(
-        endpoint=f"{otlp_http_endpoint}/v1/traces",
+    # Now import and configure logfire
+    import logfire
+
+    # Configure logfire for console-only (no cloud, no OTLP)
+    logfire.configure(
+        token=None,
+        send_to_logfire=False,
+        console=logfire.ConsoleOptions(verbose=True),
     )
 
-    # Create resource (service name + version)
-    resource = Resource.create(
-        {
-            "service.name": settings.OTEL_SERVICE_NAME,
-            "service.version": "1.0.0",
-        }
-    )
-
-    # Create and set global tracer provider
-    trace_provider = TracerProvider(resource=resource)
-    trace_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
-    set_tracer_provider(trace_provider)
-
-    # Configure Python logging to use OpenTelemetry handler
+    # Configure Python logging
     logging.basicConfig(
         level=settings.LOG_LEVEL,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    logging.info(
-        "Observability initialized (OTLP HTTP: %s/v1/traces, Cloud: Disabled)",
-        otlp_http_endpoint,
-    )
+    logging.info("Observability initialized (logfire console, Cloud/OTLP: disabled)")
     _initialized = True
