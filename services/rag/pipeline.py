@@ -50,7 +50,8 @@ async def answer_with_rag(
     """
     logfire.info("RAG pipeline started: {q}", q=query[:80])
 
-    # 1. Adaptive TopK (FR-009)
+    # 1. Adaptive TopK (FR-009) — initial estimate by word count;
+    #    overridden after normalization using intent (more precise)
     query_category = classify_query(query)
     top_k = compute_adaptive_topk(query)
 
@@ -85,6 +86,15 @@ async def answer_with_rag(
                 chunks_before_compression=0,
                 chunks_after_compression=0,
             )
+        # 2b. Intent-driven TopK override (FR-009 + FR-015)
+        #     Normalization knows the intent precisely; use it to refine TopK
+        #     set in step 1. Focused intents need far fewer chunks.
+        top_k = compute_adaptive_topk(query, intent=normalized.intent)
+        logfire.info(
+            "TopK adjusted by intent: intent={i}, top_k={k}",
+            i=normalized.intent,
+            k=top_k,
+        )
     except Exception as exc:
         logfire.warn(
             "normalize_query failed, using raw query: {err}",
@@ -204,7 +214,7 @@ async def answer_with_rag(
     )
 
     # 9. Context compression (FR-012)
-    compressed = compress_context(retrieved)
+    compressed = compress_context(retrieved, best_similarity=best_similarity)
     chunks_after = len(compressed)
     token_reduction = (1 - chunks_after / chunks_before) * 100 if chunks_before else 0
     logfire.info(

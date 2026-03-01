@@ -9,14 +9,14 @@ def classify_query(query: str) -> Literal["short", "long", "ambiguous"]:
     """
     Why this exists: Drives adaptive TopK for cost efficiency (FR-015).
     Rules (deterministic, word-count + keyword heuristic):
-    - short:    word_count ≤ 5
-    - long:     6 ≤ word_count ≤ 15
+    - short:    word_count ≤ 8  (raised from 5 — Vietnamese price queries are 6-8 words)
+    - long:     9 ≤ word_count ≤ 15
     - ambiguous: word_count > 15 AND (no action verb AND no capitalised proper noun)
     - >15 words with action verb or proper noun → "long" (safe fallback, TopK 15)
     """
     words = query.split()
     wc = len(words)
-    if wc <= 5:
+    if wc <= 8:
         return "short"
     if wc <= 15:
         return "long"
@@ -29,9 +29,16 @@ def classify_query(query: str) -> Literal["short", "long", "ambiguous"]:
     return "ambiguous"
 
 
-def compute_adaptive_topk(query: str) -> int:
+def compute_adaptive_topk(query: str, intent: str | None = None) -> int:
     """
     Why this exists: Cost efficiency (FR-015).
-    "short" → 5, "long" → 15, "ambiguous" → 20.
+    Intent-first override (reduces tokens for focused queries):
+      PRICING / INFO_QUERY → 5  (single product, specific fact)
+      COMPARISON           → 10 (two products, cross-match needed)
+    Fallback by word-count: short → 5, long → 15, ambiguous → 20.
     """
+    if intent in ("PRICING", "INFO_QUERY"):
+        return 5
+    if intent == "COMPARISON":
+        return 10
     return {"short": 5, "long": 15, "ambiguous": 20}[classify_query(query)]
