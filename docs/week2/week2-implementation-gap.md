@@ -1,8 +1,27 @@
 # 🔍 WEEK 2 — IMPLEMENTATION GAP ANALYSIS
 
 > **Mục đích:** So sánh từng kỹ thuật trong `week2-techniques-overview.md` với trạng thái thực tế trong codebase.
-> **Ngày audit:** 2026-02-28 · **Cập nhật:** sau sprint Vietnamese FTS + Gap + model_trace + is_valid
-> **Codebase revision:** HEAD
+> **Ngày audit lần đầu:** 2026-02-28  
+> **Cập nhật lần 2:** 2026-03-01 — sau sprint RAG optimization (TopK, Compression, Observability)
+> **Codebase revision:** HEAD (`002-vietnamese-rag-eval` branch)
+
+---
+
+## 🔄 THAY ĐỔI KỂ TỪ AUDIT TRƯỚC (2026-02-28 → 2026-03-01)
+
+> Sprint này tập trung tối ưu pipeline sau khi phân tích 7 query logs thực tế.
+
+| Vấn đề | Trước | Sau | File |
+|---|---|---|---|
+| **Adaptive TopK** | Word-count only (short ≤5 words) | Intent-driven override: PRICING/INFO_QUERY→5, COMPARISON→10; short threshold 5→10 words | `services/rag/query.py` |
+| **Context Compression** | Absolute threshold 0.25 (không lọc gì) | Relative threshold: `max(0.25, best_similarity×0.65)` | `services/rag/compression.py` |
+| **Confidence Threshold** | 0.35 | **0.45** (calibrated cho bge-m3 on-topic scores 0.49–1.0) | `services/rag/constants.py` |
+| **Metadata validation** | `is_valid = keywords_valid AND specs_valid` (always False cho VI text) | `is_valid = specs_valid` only (keywords diagnostic-only) | `services/rag/ingest.py` |
+| **Keyword extraction** | Không có timeout → có thể hang 900s | `timeout=45` hard cap | `services/rag/ingest.py` |
+| **normalize_query model** | `light-chat` (qwen3:0.6b) | `economy-chat` (qwen3-1.7b) — tránh Ollama model swap với generate_answer | `services/ai.py` |
+| **Phoenix OTLP** | Broken — HTTP 4318 reset connections | Wired via gRPC 4317, `insecure=True`, `additional_span_processors` | `core/logging.py` |
+| **Model tiers** | `economy-chat` = qwen3-4b-q6 (3.3GB, OOM) | `economy-chat` = qwen3-1.7b (1.1GB) | `.env`, `core/config.py` |
+| **Re-ingest catalog** | 1/19 products enriched | 16/19 products enriched (193s total) | `scripts/ingest_catalog.py` |
 
 ---
 
@@ -10,9 +29,9 @@
 
 | Trạng thái | Số lượng kỹ thuật |
 |---|---|
-| ✅ Đã implement đúng spec | 16 |
-| ⚠️ Implement theo cách khác (alternative) | 7 |
-| ❌ Chưa implement | 5 |
+| ✅ Đã implement đúng spec | 18 (+2 so với audit trước) |
+| ⚠️ Implement theo cách khác (alternative) | 7 (unchanged) |
+| ❌ Chưa implement | 5 (unchanged) |
 
 ---
 
@@ -117,19 +136,24 @@ ALTER TABLE agent_v1.products ADD COLUMN content_tsvector tsvector
 
 **✅ ĐÃ IMPLEMENT — mở rộng thành 3 tiers**
 
-| Model | Config | Dùng cho |
-|---|---|---|
-| `ollama/qwen3:0.6b` | `light-chat` / `LIGHT_CHAT_MODEL` | Query normalization, keyword extraction (cheap/fast) |
-| `ollama/qwen3-4b-q6` | `economy-chat` / `CHAT_MODEL` | RAG generation, metadata enrichment |
-| `ollama/deepseek-r1` | `premium-local-chat` / `POWERFUL_CHAT_MODEL` | Complex reasoning, escalation (local, free) |
-| `groq/llama-3.1-70b-versatile` | `premium-chat` | Cloud fallback |
-| `ollama/bge-m3` | `economy-embedding` / `EMBED_MODEL` | Embedding (1024 dim) |
+> **⚡ Cập nhật 2026-03-01:** Model tiers thay đổi sau OOM incident với qwen3-4b-q6 (3.3GB).
+
+| Model | Config | Dùng cho | Size |
+|---|---|---|---|
+| `ollama/qwen3:0.6b` | `light-chat` | **Keyword extraction only** (isolated, timeout=45s) | 522 MB |
+| `ollama/qwen3-1.7b` | `economy-chat` | **normalize_query + generate_answer** (cùng model để tránh swap) | 1.1 GB |
+| `ollama/deepseel-r1:1.5b` | `premium-local-chat` | Complex reasoning, escalation local | 1.1 GB |
+| `groq/llama-3.1-70b-versatile` | `premium-chat` | Cloud fallback | Cloud |
+| `ollama/bge-m3` | `economy-embedding` | Embedding (1024 dim) | 1.2 GB |
 
 **Routing logic (Model Escalation):**
-- Light tasks (normalize, keyword extract) → `light-chat` (qwen3:0.6b)
-- General RAG generation → `economy-chat` (qwen3-4b-q6)
-- COMPLAINT/NEGOTIATION intent → `premium-local-chat` (deepseek-r1) [Week 5]
+- Keyword extraction → `light-chat` (qwen3:0.6b) — isolated, timeout=45s
+- normalize_query + generate_answer → **`economy-chat` (qwen3-1.7b)** — cùng 1 model tránh Ollama swap
+- COMPLAINT/NEGOTIATION intent → `premium-local-chat` (deepseel-r1:1.5b) [Week 5]
 - Cloud fallback → `premium-chat` (Groq)
+
+**Critical: Tại sao normalize_query không dùng light-chat?**  
+Ollama load/unload model giữa 2 call liên tiếp gây OOM khi cả hai active cùng thời điểm. Giữ `normalize_query` + `generate_answer` trên `economy-chat` (qwen3-1.7b) = chỉ 1 model resident. Keyword extraction dùng `light-chat` vì nó là task riêng biệt (ingest, không phải query time).
 
 ---
 
@@ -163,16 +187,31 @@ enriched = ProductMetadata.model_validate_json(content)
 
 ### 2.3.2 Generator-Critic Pattern (Hallucination Detection)
 
-**✅ ĐÃ IMPLEMENT (simplified version)**
+**✅ ĐÃ IMPLEMENT (simplified, updated 2026-03-01)**
 
 ```python
 # services/rag/ingest.py — validate_metadata_vs_source()
-# - 70% keywords phải xuất hiện trong original text
-# - spec values phải xuất hiện trong text
+# - spec values phải xuất hiện trong original text (specs_valid)
+# - keywords extracted KHÔNG gate validity — chỉ diagnostic/logged
+# is_valid = specs_valid  (keywords failure = warning only, not block)
 # Fallback to ProductMetadata.minimal() nếu fail
 ```
 
-**Trade-off vs Spec:** Spec đề xuất dùng LLM thứ hai (LLM-as-critic). Implementation hiện tại dùng **string matching thuần Python** (không tốn thêm LLM call). Nhanh hơn, rẻ hơn, nhưng ít chính xác hơn với các trường hợp paraphrase (ví dụ: "220 volt" → "220V" sẽ fail check).
+**Thay đổi quan trọng:** Trước đây logic là `is_valid = keywords_valid AND specs_valid`. Vì keyword model (qwen3:0.6b) trích từ khóa tiếng Anh cho text tiếng Việt, `keywords_valid` luôn False → 0/19 products enriched. **Fix:** `is_valid = specs_valid` only.
+
+- `specs_valid`: `≥ 60%` technical_specs values xuất hiện trong text gốc → sensible, ổn định
+- `keywords_valid`: keywords từ LLM match text gốc → diagnostic only (log warning nếu fail)
+
+**Keyword extraction timeout:**
+```python
+# Timeout=45s hard cap (qwen3:0.6b hang incident: KEYBOARD-MECH-001 = 900s)
+response = await ai_router.acompletion(..., timeout=45)
+# On timeout → keywords = [], không block ingest
+```
+
+**Trade-off vs Spec:** Spec đề xuất dùng LLM thứ hai (LLM-as-critic). Implementation hiện tại dùng **string matching Python** (không tốn thêm LLM call). Nhanh hơn, rẻ hơn, nhưng ít chính xác hơn với paraphrase.
+
+**Kết quả thực tế:** 16/19 products enriched sau fix (3 còn `category=unknown`: MOUSE, KEYBOARD, HEADPHONE — English spec không match VI text).
 
 ### 2.3.3 JSONB Storage
 
@@ -217,7 +256,8 @@ class NormalizedQuery(BaseModel):
 - LLM kết quả: field `is_valid` trong Pydantic response
 - Pipeline step 2a: nếu `is_valid=False` → return `declined=True` ngay lập tức
 
-**Model routing:** `normalize_query()` dùng `light-chat` (qwen3:0.6b) thay vì `economy-chat`.
+**⚡ Model routing (cập nhật 2026-03-01):** `normalize_query()` dùng **`economy-chat` (qwen3-1.7b)**, KHÔNG dùng `light-chat`.  
+Lý do: tránh Ollama model swap giữa normalize (step 2) và generate (step 12) — cả hai đều dùng `economy-chat` nên model stays resident. Xem Section 1.4 chi tiết.
 
 ### 3.2 Selective Normalization (Heuristic pre-check)
 
@@ -334,16 +374,17 @@ p.content_tsvector @@ plainto_tsquery('simple', agent_v1.immutable_unaccent(:qte
 ```
 services/rag/pipeline.py — answer_with_rag()
 
-Step 1: classify_query() → Adaptive TopK
-Step 2: AIGateway.normalize_query() → canonical + fts_query_text
-Step 3: get_l1_cache() → SHA256 exact match
-Step 4: AIGateway.embed() → query_vector
-Step 5: get_l2_cache() → semantic cache (0.95 threshold)
-Step 6: Truncate >500-word FTS queries
-Step 7: hybrid_search_rrf() → retrieved chunks
-Step 8: max(vector_score) → best_similarity (gap logging only)
-Step 9: compress_context() → deduplicated chunks
-Step 10: Confidence Guard (< 0.35 → DECLINE)
+Step 1:  classify_query() → Adaptive TopK (word-count + intent override)
+Step 2a: AIGateway.normalize_query() → canonical + intent + fts_query_text
+Step 2b: Intent override TopK (PRICING/INFO_QUERY→5, COMPARISON→10)
+Step 3:  get_l1_cache() → SHA256 exact match (0 token)
+Step 4:  AIGateway.embed() → query_vector
+Step 5:  get_l2_cache() → semantic cache (0.95 threshold)
+Step 6:  Truncate >500-word FTS queries
+Step 7:  hybrid_search_rrf() → retrieved chunks
+Step 8:  max(vector_score) → best_similarity + similarity_gap
+Step 9:  compress_context() → deduplicated chunks (relative threshold)
+Step 10: Confidence Guard (< 0.45 → DECLINE)
 Step 11: Build context + citations
 Step 12: AIGateway.complete() → answer_text
 Step 13: set_cache() → write L1/L2
@@ -384,27 +425,39 @@ Step 13: set_cache() → write L1/L2
 
 ## 8. Task 2.9 — Adaptive TopK
 
-**✅ ĐÃ IMPLEMENT — đúng spec**
+**✅ ĐÃ IMPLEMENT — đúng spec, cập nhật thêm intent override**
+
+> **⚡ Cập nhật 2026-03-01:** Thêm Step 2b intent override + nâng short threshold 5→10 words.
 
 ```python
 # services/rag/query.py
 def classify_query(query: str) -> Literal["short", "long", "ambiguous"]:
-    # word_count ≤ 5 → "short"
-    # 6 ≤ word_count ≤ 15 → "long"
+    # word_count ≤ 10 → "short"    ← raised từ ≤5 (queries VI 5-10 từ thường là "short")
+    # 11 ≤ word_count ≤ 15 → "long"
     # >15 + has_action_verb or has_proper_noun → "long"
     # >15 + no signal → "ambiguous"
 
-def compute_adaptive_topk(query: str) -> int:
-    return {"short": 5, "long": 15, "ambiguous": 20}[classify_query(query)]
+def compute_adaptive_topk(query: str, intent: str | None = None) -> int:
+    # Base TopK từ word-count:
+    base = {"short": 5, "long": 15, "ambiguous": 20}[classify_query(query)]
+    # Step 2b: Intent override (sau normalize_query)
+    if intent in ("PRICING", "INFO_QUERY"):
+        return 5   # focused query → fewer chunks
+    if intent == "COMPARISON":
+        return 10  # multi-product comparison → more chunks
+    return base
 ```
 
+**Tại sao step 2b (intent override) quan trọng:**  
+Pricing query "MacBook giá bao nhiêu?" có 4 từ → `short` → base TopK=5 ✅. Nhưng comparison query "So sánh MacBook và Dell XPS" có 6 từ → `long` → base TopK=15 → intent override COMPARISON → 10. Đúng hơn về mặt semantic.
+
 **Khác biệt vs spec:**
-- Spec: từ khóa so sánh ("khác gì", "so với") → TopK 15. Implementation: word_count > 15 → TopK 15. Không kiểm tra comparative keywords trực tiếp (nhưng `ACTION_VERBS` trong `constants.py` có "so sánh").
-- Spec: Hard limit = 30. Implementation: max có thể là 20 (ambiguous). **Không cần hard limit vì không có input để vượt 20.**
+- Spec: từ khóa so sánh ("khác gì", "so với") → TopK 15. Implementation: COMPARISON intent → TopK 10 (tốt hơn)
+- Spec: Hard limit = 30. Implementation: max có thể là 20 (ambiguous). Không cần hard limit.
 
 ### Comparative Keywords
 
-**⚠️ PARTIAL** — `ACTION_VERBS` trong `constants.py` có "so sánh" nhưng classification logic không có separate case cho "comparative" (chỉ có short/long/ambiguous).
+**✅ COVERED** — `ACTION_VERBS` trong `constants.py` có "so sánh". COMPARISON intent được classify → TopK 10.
 
 ### tiktoken Hard Limit
 
@@ -513,14 +566,28 @@ class SupportingFact(BaseModel):
 
 ## 11. Task 2.12 — Context Compression
 
-**✅ ĐÃ IMPLEMENT — đầy đủ, 3 bước**
+**✅ ĐÃ IMPLEMENT — đầy đủ, 3 bước + relative threshold**
+
+> **⚡ Cập nhật 2026-03-01:** Threshold từ absolute 0.25 → relative `max(0.25, best_similarity × 0.65)`.
 
 ```python
 # services/rag/compression.py — compress_context()
 # Step 1: Exact text dedup (set-based O(n))
-# Step 2: Low-confidence filter (vector_score < COMPRESSION_SCORE_THRESHOLD=0.25)
+# Step 2: Low-confidence filter — relative threshold:
+#         threshold = max(0.25, best_similarity × 0.65)
+#         chunk bị loại nếu vector_score < threshold
 # Step 3: Near-duplicate removal (SequenceMatcher > NEAR_DUP_THRESHOLD=0.80)
 ```
+
+**Tại sao relative threshold tốt hơn absolute 0.25:**
+
+| Scenario | best_similarity | relative threshold | kết quả |
+|---|---|---|---|
+| On-topic query | 0.70 | `max(0.25, 0.70×0.65)` = **0.455** | Lọc chặt hơn — chỉ giữ chunks tốt nhất |
+| Off-topic query | 0.35 | `max(0.25, 0.35×0.65)` = **0.25** | Fall back to floor — giữ tất cả (ít chunks, cần all) |
+| Borderline | 0.50 | `max(0.25, 0.50×0.65)` = **0.325** | Trung bình |
+
+Absolute 0.25 = hầu như không lọc gì với bge-m3 (scores thường 0.3–0.7). Relative threshold adaptive theo quality của retrieval.
 
 **So sánh với spec:**
 
@@ -530,10 +597,6 @@ class SupportingFact(BaseModel):
 | Hash-based Dedup | Không dùng MD5/SHA trực tiếp — dùng exact string | ⚠️ Functionally equivalent cho exact match |
 | Semantic Dedup (embedding + clustering) | ❌ Không có | ❌ |
 | Fuzzy Matching (Levenshtein) | Step 3: SequenceMatcher (LCS ratio) | ✅ Tương đương — SequenceMatcher tốt hơn Levenshtein |
-
-**Trade-off thực tế:**
-- SequenceMatcher (80% overlap) vs Semantic Dedup: SequenceMatcher nhanh hơn nhiều, không cần GPU, đủ cho text products
-- Thiếu ID-based dedup nghĩa là 2 chunks từ cùng product nhưng khác description sẽ không bị loại (edge case)
 
 ### Small Model Compression (SMC / ACC-RAG)
 
@@ -558,28 +621,36 @@ Spec đề xuất dùng Qwen2.5-1.5B tóm tắt trước khi gửi GPT-4o. Hiệ
 
 ## 12. Task 2.13 — Confidence Threshold Guard
 
-**⚠️ ALTERNATIVE IMPLEMENTATION — logic đúng nhưng ngưỡng khác spec**
+**⚠️ ALTERNATIVE IMPLEMENTATION — ngưỡng calibrated, đúng về kỹ thuật**
+
+> **⚡ Cập nhật 2026-03-01:** Threshold 0.35 → **0.45** sau calibration với 7 real queries.
 
 ### Guard Logic
 
 **✅ CÓ** — Pipeline step 10:
 ```python
-CONFIDENCE_THRESHOLD: float = 0.35  # constants.py
+CONFIDENCE_THRESHOLD: float = 0.45  # constants.py (was 0.35 → raised after calibration)
 
 if best_similarity < CONFIDENCE_THRESHOLD or chunks_after == 0:
     return RAGResult(answer=DECLINE_MESSAGE, declined=True, ...)
 ```
 
-**Khác biệt quan trọng — 0.35 vs 0.7:**
+**Khác biệt quan trọng — 0.45 vs 0.7:**
 
 | | Spec | Thực tế |
 |---|---|---|
-| Ngưỡng | 0.7 | **0.35** |
+| Ngưỡng | 0.7 | **0.45** |
 | Lý do | Generic threshold | Calibrated cho `bge-m3` cross-lingual embeddings |
 
-**Giải thích:** `bge-m3` trả về cosine similarity thấp hơn các model text-embedding-ada-002. Cross-lingual similarity (EN query ↔ VI product) thường 0.35–0.65. Ngưỡng 0.7 sẽ reject hầu hết results → system vô dụng. 0.35 là calibrated threshold đúng cho model này.
+**Giải thích:** `bge-m3` trả về cosine similarity thấp hơn text-embedding-ada-002. Cross-lingual similarity (VI query ↔ VI product) thường 0.49–0.80 cho on-topic, 0.30–0.44 cho off-topic. Ngưỡng 0.7 = reject on-topic results → hệ thống vô dụng. Ngưỡng 0.45 cân bằng: 7 query thực tế → 6 ACCEPTED, 1 borderline (0.47).
 
-**Kết luận:** ⚠️ NOT a bug — intentional calibration. Nhưng cần document rõ ràng hơn.
+**Calibration data (7 queries thực, 2026-03-01):**
+- "MacBook dang co gia bao nhieu?" → best_sim = 0.87 → ACCEPTED ✅
+- "laptop gaming" → best_sim = 0.72 → ACCEPTED ✅  
+- "tai nghe khong day" → best_sim = 0.69 → ACCEPTED ✅
+- Off-topic: "thời tiết hôm nay" → best_sim = 0.31 → REJECTED ✅ (correct)
+
+**Kết luận:** ⚠️ NOT a bug — intentional calibration. Threshold cần re-calibrate khi đổi embedding model.
 
 ### Dynamic Threshold per Intent / Channel
 
@@ -620,12 +691,13 @@ Spec: `float(os.getenv(f"THRESHOLD_{intent.upper()}", 0.75))` — ngưỡng riê
 | Hybrid Search + RRF (k=60) | `services/rag/retrieval.py` | Python-side merge |
 | Over-fetch (2×) trước RRF | `retrieval.py` `fetch_k = top_k * 2` | |
 | Timeout protection (10s) | `retrieval.py` `asyncio.wait_for` | Bonus vs spec |
-| Query Normalization + `is_valid` guard | `services/ai.py` | `light-chat` model + heuristic pre-check |
+| Keyword extraction timeout (45s) | `services/rag/ingest.py` | Prevents qwen3:0.6b hang |
+| Query Normalization + `is_valid` guard | `services/ai.py` | `economy-chat` model + heuristic pre-check |
 | Selective normalization heuristic | `services/ai.py` | `len<3` / `isdigit()` skip LLM |
-| Metadata Enrichment + Critic | `services/rag/ingest.py` | Simplified critic |
-| Adaptive TopK (5/15/20) | `services/rag/query.py` | |
-| Context Compression (3 steps) | `services/rag/compression.py` | |
-| Confidence Guard → DECLINE | `services/rag/pipeline.py` | Threshold 0.35 |
+| Metadata Enrichment + Critic (specs_valid) | `services/rag/ingest.py` | `is_valid = specs_valid` only |
+| Adaptive TopK (5/10/15/20) + intent override | `services/rag/query.py` | PRICING→5, COMPARISON→10 |
+| Context Compression (3 steps, relative) | `services/rag/compression.py` | `max(0.25, best_sim×0.65)` |
+| Confidence Guard → DECLINE | `services/rag/pipeline.py` | Threshold **0.45** (calibrated) |
 | Similarity Gap (top1 − top2) | `services/rag/pipeline.py` step 8 | `RAGResult.similarity_gap` |
 | model_trace writes (guard+gap+cost) | `services/rag/pipeline.py` | `_write_model_trace()` helper |
 | Semantic Cache L1 (SHA256) | `services/semantic_cache.py` | |
@@ -633,7 +705,7 @@ Spec: `float(os.getenv(f"THRESHOLD_{intent.upper()}", 0.75))` — ngưỡng riê
 | Basic Citations (product_id/chunk_id/sku) | `pipeline.py` step 11 | |
 | Eval CLI (Tier 1 + Tier 2 HITL) | `scripts/tier1_eval.py` | Vượt spec |
 | Gold Dataset (20 queries, bilingual) | `tests/eval/gold_dataset.json` | |
-| Observability (Logfire + OTLP) | `core/logging.py` | |
+| Observability (Logfire console + Phoenix gRPC) | `core/logging.py` | Phoenix wired via `additional_span_processors` |
 
 ### ⚠️ Implement theo cách khác (Alternative)
 
@@ -641,9 +713,9 @@ Spec: `float(os.getenv(f"THRESHOLD_{intent.upper()}", 0.75))` — ngưỡng riê
 |---|---|---|---|
 | FTS Dictionary | `'vietnamese'` + `unaccent` | `'simple'` + `unaccent` | `'simple'` là đúng — VI không cần stemming; `unaccent` đã xử lý dấu |
 | RRF Fusion location | DB CTE (1 round-trip) | Python-side (2 queries) | Python dễ debug; DB CTE tốt hơn cho scale lớn |
-| Generated Column tsvector | `GENERATED ALWAYS AS` | ✅ Stored generated column | Đã implement đúng spec với `f8a2c1d3e5b7` |
-| Confidence Threshold | 0.7 | 0.35 | Calibrated cho bge-m3 cross-lingual similarity scale — đúng về mặt kỹ thuật |
-| Critic pattern | LLM-based critic | String matching (70% keyword coverage) | Rẻ hơn; miss paraphrase cases |
+| Confidence Threshold | 0.7 | **0.45** | Calibrated cho bge-m3 cross-lingual — đúng về kỹ thuật, khác spec |
+| Critic pattern | LLM-based critic | String matching (specs_valid only) | Rẻ hơn; miss paraphrase cases; keywords diagnostic only |
+| normalize_query model | `light-chat` (spec không định rõ) | `economy-chat` | Tránh Ollama model swap → prevent OOM |
 | Gold dataset format | Triplets (query+context+expected_answer) | keyword-based (query+expected_keywords) | Evaluation đơn giản hơn; không đo Faithfulness/Relevancy |
 | Fallback graduated response | 3 levels (0.6/0.4/0.4) | 1 static message | Đủ cho week 2; nâng cấp khi có UX layer |
 
@@ -661,13 +733,15 @@ Spec: `float(os.getenv(f"THRESHOLD_{intent.upper()}", 0.75))` — ngưỡng riê
 
 ## 💡 Khuyến nghị ưu tiên (Quick Wins)
 
-### ✅ Đã hoàn thành trong sprint này
+### ✅ Đã hoàn thành trong sprint 2026-03-01
 
-1. **Similarity Gap trong pipeline** — `RAGResult.similarity_gap = top1 − top2`
-2. **model_trace writes** — `_write_model_trace()` ghi sau guard + LLM generation
-3. **`is_valid` spam filter** — Heuristic pre-check + LLM field + pipeline guard
-4. **unaccent + Vietnamese FTS** — Migration `f8a2c1d3e5b7`, stored `content_tsvector`
-5. **3-tier model strategy** — `light-chat` (qwen3:0.6b) / `economy-chat` (qwen3-4b-q6) / `premium-local-chat` (deepseek-r1)
+1. **Intent-driven TopK override** — PRICING/INFO_QUERY→5, COMPARISON→10 (step 2b)
+2. **Relative Compression Threshold** — `max(0.25, best_sim×0.65)` → adaptive lọc chunks
+3. **Confidence Threshold 0.45** — Calibrated sau 7 real queries với bge-m3
+4. **Metadata Critic fix** — `is_valid = specs_valid` (keywords diagnostic only) → 16/19 enriched
+5. **Keyword extraction timeout=45s** — Prevents qwen3:0.6b hang incident
+6. **normalize_query → economy-chat** — Tránh Ollama model swap OOM
+7. **Phoenix OTLP via gRPC** — `additional_span_processors` wired, Phoenix nhận spans
 
 ### Làm khi có UX/production data
 
@@ -682,4 +756,6 @@ Spec: `float(os.getenv(f"THRESHOLD_{intent.upper()}", 0.75))` — ngưỡng riê
 
 ---
 
-*Audit thực hiện từ toàn bộ source code trong `services/`, `models/`, `scripts/`, `migrations/`, `tests/`.*
+*Audit lần đầu: 2026-02-28. Cập nhật lần 2: 2026-03-01 sau RAG optimization sprint.*  
+*Source: toàn bộ source code trong `services/`, `models/`, `scripts/`, `migrations/`, `tests/`, `core/`.*  
+*Tham chiếu: `week2.md` (developer knowledge base), `week2-techniques-overview.md` (spec).*
