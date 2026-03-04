@@ -14,20 +14,25 @@ import sys
 from typing import TYPE_CHECKING
 
 import litellm
+from sqlalchemy import insert
 
+from models.schema import ModelTrace
 from services.rag.constants import DECLINE_MESSAGE
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from core.agent.state import AgentState
 
 
-async def answer_node(state: AgentState) -> dict:
+async def answer_node(state: AgentState, db: AsyncSession | None = None) -> dict:
     """Generate final answer or decline message (T048).
 
     Universal trace point: writes model_traces regardless of accept/decline (FR-008).
 
     Args:
         state: Current agent state
+        db: AsyncSession for database writes (injected by graph)
 
     Returns:
         State update dict with response, model_used
@@ -36,6 +41,7 @@ async def answer_node(state: AgentState) -> dict:
     if state.get("declined", False):
         _write_model_trace(
             state,
+            db=db,
             metadata_={
                 "guard_decision": "REJECTED",
                 "escalation_reason": state.get("escalation_reason"),
@@ -87,7 +93,7 @@ User question: {state["user_message"]}"""
         "declined": False,
         "intended_model": model,
     }
-    _write_model_trace(state, metadata_=metadata_)
+    _write_model_trace(state, db=db, metadata_=metadata_)
 
     return {
         "response": response,
@@ -95,7 +101,9 @@ User question: {state["user_message"]}"""
     }
 
 
-def _write_model_trace(state: AgentState, metadata_: dict) -> None:
+async def _write_model_trace(
+    state: AgentState, db: AsyncSession | None = None, metadata_: dict | None = None
+) -> None:
     """Write model trace to agent_v1.model_traces table (T049).
 
     Called at end of answer_node for both accepted AND declined paths.
@@ -103,21 +111,32 @@ def _write_model_trace(state: AgentState, metadata_: dict) -> None:
 
     Args:
         state: Current agent state
+        db: AsyncSession for database writes
         metadata_: JSONB metadata dict
     """
-    # Phase 4 stub: actual implementation deferred to Phase 5
-    # Will write to database: INSERT INTO agent_v1.model_traces (session_id, metadata_)
-    # For now, just log success
+    if not db or not metadata_:
+        return
+
     try:
-        # TODO(Phase 5): Implement actual DB write
-        # await db.execute(
-        #     model_traces.insert().values(
-        #         session_id=state["session_id"],
-        #         metadata_=metadata_,
-        #     )
-        # )
-        pass
+        # Extract message_id if conversation message exists
+        message_id = state.get("message_id")
+
+        # Build insert statement per FR-008
+        stmt = insert(ModelTrace).values(
+            message_id=message_id,
+            model_name=metadata_.get("intended_model", "unknown"),
+            prompt_tokens=0,  # TODO(Phase 5): Track from LLM response
+            completion_tokens=0,  # TODO(Phase 5): Track from LLM response
+            total_tokens=0,  # TODO(Phase 5): Track from LLM response
+            latency_ms=None,  # TODO(Phase 5): Track wall-clock time
+            cost=0.00,  # TODO(Phase 5): Calculate from token counts
+            metadata_=metadata_,
+        )
+
+        await db.execute(stmt)
+        await db.commit()
     except Exception as e:
+        # FR-008 requirement: Fail-safe logging without blocking response
         print(
             f"[TRACE_FAIL] session_id={state.get('session_id')}, error={e}",
             file=sys.stderr,
