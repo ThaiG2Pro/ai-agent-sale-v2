@@ -272,6 +272,9 @@ async def answer_with_rag(
                 "chunk_id": chunk["chunk_id"],
                 "sku": chunk["sku"],
                 "name": chunk["name"],
+                "source_text": (
+                    f"[{chunk['sku']}] {chunk['name']}\n{price_line}\n{chunk['description']}"
+                ),
             }
         )
 

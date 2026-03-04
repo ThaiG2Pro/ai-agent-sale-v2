@@ -14,21 +14,22 @@ from typing import TYPE_CHECKING
 from core.agent.tools import RAGSearchInput, make_rag_tool
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from langchain_core.runnables import RunnableConfig
 
     from core.agent.state import AgentState
 
 
-async def retrieval_node(state: AgentState, db: AsyncSession | None = None) -> dict:
+async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
     """Call RAG search tool and populate state with results (T046).
 
-    Args:
-        state: Current agent state
-        db: AsyncSession database connection (injected by graph)
+    DB session is injected via config["configurable"]["db"] — the caller must
+    set this in the graph config:
+        config = {"configurable": {"thread_id": ..., "db": db_session}}
 
     Returns:
         State update dict with retrieved_chunks, citations, similarity_score, declined
     """
+    db = (config.get("configurable") or {}).get("db")
     if db is None:
         return {
             "error": "Database connection not available",
@@ -48,9 +49,9 @@ async def retrieval_node(state: AgentState, db: AsyncSession | None = None) -> d
         model=state.get("model_used") or "economy-chat",
     )
 
-    # Call RAG tool
+    # Call RAG tool — LangChain @tool with param named "input" requires wrapping
     try:
-        rag_result = await rag_tool.ainvoke(rag_input)
+        rag_result = await rag_tool.ainvoke({"input": rag_input.model_dump()})
     except Exception as e:
         return {
             "error": f"RAG tool failed: {e!s}",

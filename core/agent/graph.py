@@ -121,7 +121,7 @@ async def astream_agent(
     Args:
         message: User message to process
         session_id: Session identifier for thread config
-        db: Optional AsyncSession (passed to all nodes needing DB access)
+        db: Optional AsyncSession — passed to retrieval/answer nodes via configurable
         checkpointer: Optional LangGraph checkpointer
 
     Yields:
@@ -131,14 +131,10 @@ async def astream_agent(
 
     graph = build_graph(checkpointer=checkpointer)
     initial_state = make_initial_state(message, session_id)
-    config = {"configurable": {"thread_id": session_id}}
+    # Pass db through configurable so nodes can inject via RunnableConfig
+    config: dict = {"configurable": {"thread_id": session_id, "db": db}}
 
-    # Pass db to nodes that accept it (retrieval_node, answer_node, escalation_node)
-    run_kwargs = {}
-    if db is not None:
-        run_kwargs["db"] = db
-
-    async for event in graph.astream_events(initial_state, config, version="v2", **run_kwargs):
+    async for event in graph.astream_events(initial_state, config, version="v2"):
         if event["event"] == "on_chain_end" and event.get("name") in GRAPH_NODES:
             # Extract delta from node output (not full accumulated state)
             delta = event["data"].get("output") or {}

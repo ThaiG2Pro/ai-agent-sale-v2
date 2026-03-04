@@ -52,32 +52,53 @@ class RAGSearchOutput(BaseModel):
     model_config = ConfigDict(strict=True)
 
     @classmethod
-    def from_rag_result(cls, rag_result: dict) -> RAGSearchOutput:
+    def from_rag_result(cls, rag_result) -> RAGSearchOutput:
         """Bridge from Week 2 RAGResult to Week 3 tool output.
 
+        Accepts both RAGResult Pydantic model and dict (for tests/legacy callers).
         Maps Week 2 fields to Week 3 schema:
         - best_similarity → similarity_score
         - best_similarity → confidence_score (same value in Phase 4)
         - chunks_after_compression → chunks_used
         """
-        citations_list = rag_result.get("citations", [])
+        # Normalise: accept both Pydantic model and plain dict
+        if isinstance(rag_result, dict):
+            citations_list = rag_result.get("citations", [])
+            answer = rag_result.get("answer", "")
+            declined = rag_result.get("declined", False)
+            best_similarity = rag_result.get("best_similarity", 0.0)
+            model_used = rag_result.get("model_used", "")
+            chunks_used = rag_result.get("chunks_after_compression", 0)
+        else:
+            citations_list = rag_result.citations or []
+            answer = rag_result.answer
+            declined = rag_result.declined
+            best_similarity = rag_result.best_similarity
+            model_used = rag_result.model_used
+            chunks_used = rag_result.chunks_after_compression
+
         # Ensure citations have source_text field
         citations_with_text = []
         for citation in citations_list:
             if isinstance(citation, dict):
-                # If missing source_text, use name as fallback
                 if "source_text" not in citation:
                     citation = {**citation, "source_text": citation.get("name", "")}
                 citations_with_text.append(citation)
+            else:
+                # Pydantic model
+                d = citation.model_dump() if hasattr(citation, "model_dump") else vars(citation)
+                if "source_text" not in d:
+                    d["source_text"] = d.get("name", "")
+                citations_with_text.append(d)
 
         return cls(
-            answer=rag_result.get("answer", ""),
-            declined=rag_result.get("declined", False),
+            answer=answer,
+            declined=declined,
             citations=[CitationItem(**c) for c in citations_with_text],
-            similarity_score=rag_result.get("best_similarity", 0.0),
-            confidence_score=rag_result.get("best_similarity", 0.0),  # Phase 4: same as similarity
-            model_used=rag_result.get("model_used", ""),
-            chunks_used=rag_result.get("chunks_after_compression", 0),
+            similarity_score=best_similarity,
+            confidence_score=best_similarity,  # Phase 4: same as similarity
+            model_used=model_used,
+            chunks_used=chunks_used,
         )
 
 
