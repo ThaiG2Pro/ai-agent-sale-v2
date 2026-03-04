@@ -27,7 +27,7 @@ class RAGResult(BaseModel):
     declined: bool
     citations: list[dict[str, Any]]  # [{product_id, chunk_id, sku, name}]
     best_similarity: float
-    similarity_gap: float  # Score_top1 - Score_top2; 0.0 on cache hit / single result
+    similarity_gap: float = 0.0  # Score_top1 - Score_top2; 0.0 on cache hit / single result
     rrf_scores: list[float]
     query_category: str
     top_k_used: int

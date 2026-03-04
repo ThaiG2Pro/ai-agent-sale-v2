@@ -2,10 +2,10 @@
 
 Tests full graph execution paths with mocked LLM and RAG calls.
 
-Note on patching litellm: Both router_node and answer_node call `litellm.acompletion`
-on the same shared module object. Patching them separately at different namespaces
-results in the last patch winning for all calls. Solution: patch `litellm.acompletion`
-once with side_effect=[router_response, answer_response] to control call order.
+Note on patching: Both router_node and answer_node call AIGateway.complete()
+which delegates to services.ai.ai_router.acompletion (LiteLLM Router).
+Patch "services.ai.ai_router.acompletion" once with side_effect=[router_response,
+answer_response] to control call order across all nodes.
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ async def test_complaint_escalation_flow(monkeypatch):
     config = {"configurable": {"thread_id": "test-complaint"}}
     state = make_initial_state("Tôi muốn khiếu nại về đơn hàng", "test-complaint")
 
-    with patch("litellm.acompletion", mock_llm):
+    with patch("services.ai.ai_router.acompletion", mock_llm):
         result = await graph.ainvoke(state, config)
 
     assert result["escalation_flag"] is True
@@ -172,7 +172,7 @@ async def test_low_confidence_fallback(monkeypatch):
     state = make_initial_state("Sản phẩm gì tốt nhất?", "test-low-conf")
 
     start = time.perf_counter()
-    with patch("litellm.acompletion", mock_llm):
+    with patch("services.ai.ai_router.acompletion", mock_llm):
         with patch("core.agent.nodes.retrieval.make_rag_tool", return_value=mock_tool):
             result = await graph.ainvoke(state, config)
     elapsed = time.perf_counter() - start
@@ -202,7 +202,7 @@ async def test_layer1_declined_propagation(monkeypatch):
     config = {"configurable": {"thread_id": "test-layer1"}}
     state = make_initial_state("Random unknown query", "test-layer1")
 
-    with patch("litellm.acompletion", mock_llm):
+    with patch("services.ai.ai_router.acompletion", mock_llm):
         with patch("core.agent.nodes.retrieval.make_rag_tool", return_value=mock_tool):
             result = await graph.ainvoke(state, config)
 
@@ -230,7 +230,7 @@ async def test_streaming_emits_events(monkeypatch):
     mock_tool = _mock_rag_tool(similarity_score=0.85, declined=False)
 
     events = []
-    with patch("litellm.acompletion", mock_llm):
+    with patch("services.ai.ai_router.acompletion", mock_llm):
         with patch("core.agent.nodes.retrieval.make_rag_tool", return_value=mock_tool):
             async for event in astream_agent(
                 "Còn hàng không?",
@@ -261,7 +261,7 @@ async def test_streaming_events_have_required_fields(monkeypatch):
     )
 
     events = []
-    with patch("litellm.acompletion", mock_llm):
+    with patch("services.ai.ai_router.acompletion", mock_llm):
         async for event in astream_agent("Xin chào!", "stream-test-2", checkpointer=MemorySaver()):
             events.append(event)
 
@@ -288,7 +288,7 @@ async def test_streaming_execution_replay(monkeypatch):
     mock_tool = _mock_rag_tool(similarity_score=0.85, declined=False)
 
     events = []
-    with patch("litellm.acompletion", mock_llm):
+    with patch("services.ai.ai_router.acompletion", mock_llm):
         with patch("core.agent.nodes.retrieval.make_rag_tool", return_value=mock_tool):
             async for event in astream_agent(
                 "Giá sản phẩm X?",

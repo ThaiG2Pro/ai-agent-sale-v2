@@ -119,15 +119,22 @@ def test_get_next_node_routing_map():
 
     Verify all intent → node routing is correct.
     """
+    from core.agent.state import IntentClassification
+
+    def make_clf(intent: IntentEnum) -> IntentClassification:
+        return IntentClassification(
+            primary_intent=intent, secondary_intents=[], confidence=0.9, reasoning="test"
+        )
+
     # Escalation intents
-    assert _get_next_node(IntentEnum.COMPLAINT) == "escalation_node"
-    assert _get_next_node(IntentEnum.NEGOTIATION) == "escalation_node"
+    assert _get_next_node(make_clf(IntentEnum.COMPLAINT)) == "escalation_node"
+    assert _get_next_node(make_clf(IntentEnum.NEGOTIATION)) == "escalation_node"
 
     # Answer node (no retrieval)
-    assert _get_next_node(IntentEnum.SMALLTALK) == "answer_node"
+    assert _get_next_node(make_clf(IntentEnum.SMALLTALK)) == "answer_node"
 
     # Retrieval intents
-    assert _get_next_node(IntentEnum.INFO_QUERY) == "retrieval_node"
-    assert _get_next_node(IntentEnum.PRICING) == "retrieval_node"
-    assert _get_next_node(IntentEnum.COMPARISON) == "retrieval_node"
-    assert _get_next_node(IntentEnum.AVAILABILITY) == "retrieval_node"
+    assert _get_next_node(make_clf(IntentEnum.INFO_QUERY)) == "retrieval_node"
+    assert _get_next_node(make_clf(IntentEnum.PRICING)) == "retrieval_node"
+    assert _get_next_node(make_clf(IntentEnum.COMPARISON)) == "retrieval_node"
+    assert _get_next_node(make_clf(IntentEnum.AVAILABILITY)) == "retrieval_node"

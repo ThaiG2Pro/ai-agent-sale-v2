@@ -1,0 +1,18 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__(<p>__start__</p>)
+	router_node(router_node)
+	retrieval_node(retrieval_node)
+	confidence_node(confidence_node)
+	escalation_node(escalation_node)
+	answer_node(answer_node)
+	__end__(<p>__end__</p>)
+	__start__ --> router_node;
+	router_node --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

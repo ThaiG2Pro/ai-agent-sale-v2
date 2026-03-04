@@ -13,10 +13,10 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-import litellm
 from sqlalchemy import insert
 
 from models.schema import ModelTrace
+from services.ai import AIGateway
 from services.rag.constants import DECLINE_MESSAGE
 
 if TYPE_CHECKING:
@@ -75,7 +75,7 @@ async def answer_node(state: AgentState, db: AsyncSession | None = None) -> dict
 User question: {state["user_message"]}"""
 
     try:
-        result = await litellm.acompletion(
+        result = await AIGateway.complete(
             model=model,
             messages=[{"role": "user", "content": prompt}],
         )

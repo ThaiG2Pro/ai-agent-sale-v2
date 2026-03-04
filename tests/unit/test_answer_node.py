@@ -24,7 +24,7 @@ async def test_answer_node_fallback_no_llm_call():
     state["declined"] = True
     state["model_used"] = "economy-chat"  # intended model before decline
 
-    with patch("core.agent.nodes.answer.litellm.acompletion", new_callable=AsyncMock) as mock_llm:
+    with patch("services.ai.ai_router.acompletion", new_callable=AsyncMock) as mock_llm:
         with patch(
             "core.agent.nodes.answer._write_model_trace", new_callable=AsyncMock
         ) as mock_trace:
@@ -46,7 +46,7 @@ async def test_answer_node_fallback_state():
     state["declined"] = True
     state["escalation_flag"] = False  # must stay False
 
-    with patch("core.agent.nodes.answer.litellm.acompletion", new_callable=AsyncMock):
+    with patch("services.ai.ai_router.acompletion", new_callable=AsyncMock):
         with patch("core.agent.nodes.answer._write_model_trace", new_callable=AsyncMock):
             result = await answer_node(state)
 

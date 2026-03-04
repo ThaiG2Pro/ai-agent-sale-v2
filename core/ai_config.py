@@ -51,6 +51,16 @@ LITELLM_CONFIG = {
                 "stream": True,
             },
         },
+        # qwen3-4b: alias used by PREMIUM_MODEL env var in dev environments
+        {
+            "model_name": "qwen3-4b",
+            "model_info": {"id": "qwen3-4b-local"},
+            "litellm_params": {
+                "model": "ollama/qwen3-4b-q6",
+                "api_base": settings.OLLAMA_BASE_URL,
+                "stream": False,
+            },
+        },
         # ── Cloud fallback — when local unavailable ───────────────────────────
         {
             "model_name": "premium-chat",

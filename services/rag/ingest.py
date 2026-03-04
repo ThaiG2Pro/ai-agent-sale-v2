@@ -76,7 +76,7 @@ async def extract_keywords_structured(
             c=len(extracted.keywords),
             l=latency,
         )
-        return extracted.keywords
+        return extracted.keywords[:count]
     except Exception as exc:
         latency = time.perf_counter() - start_time
         logfire.warn(

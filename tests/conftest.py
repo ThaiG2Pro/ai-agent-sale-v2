@@ -41,6 +41,8 @@ os.environ["DB_NAME"] = "ai_agent_test"
 import pytest
 import pytest_asyncio
 from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -119,15 +121,25 @@ def _setup_test_database() -> None:  # type: ignore[return]
 async def db_session():
     """Provides a clean database session for each test using the migrated test DB.
 
-    Uses the project's AsyncSessionLocal factory so sessions are configured
-    identically to the application runtime.
+    Uses NullPool to prevent asyncpg connections from being reused across
+    different per-function event loops (pytest-asyncio creates one loop per
+    test).  Without NullPool, connections acquired in one test are returned to
+    the pool but remain bound to that test's (now-closed) event loop, causing
+    ``RuntimeError: Event loop is closed`` during teardown of the next test.
     """
-    # Import here to ensure Settings() has been evaluated with DB_NAME override
-    # Local imports keep test-session initialization order predictable.
+    from core.config import settings
     from models.schema import Product, SemanticCache, TextEmbedding
-    from services.database import AsyncSessionLocal
 
-    async with AsyncSessionLocal() as session:
+    # NullPool: no connection reuse across tests → safe for per-function loops
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    session_factory = async_sessionmaker(
+        bind=engine,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+
+    async with session_factory() as session:
         yield session
         # Cleanup created rows between tests
         await session.execute(delete(TextEmbedding))

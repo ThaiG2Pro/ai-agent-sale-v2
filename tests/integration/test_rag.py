@@ -81,7 +81,7 @@ async def test_rag_ingestion_and_search(db_session: AsyncSession):
 
     assert len(results) > 0
     assert results[0]["sku"] == sku
-    assert results[0]["score"] > 0.5
+    assert results[0]["score"] > 0.01  # RRF score: rank-1 ≈ 0.033, never cosine similarity
 
 
 @pytest.mark.asyncio
@@ -171,7 +171,8 @@ async def test_confidence_guard_declines_low_similarity(db_session: AsyncSession
     """
     Why this exists: Verifies confidence guard declines low-similarity queries (US3).
     """
-    query = "xyzzy thần kỳ không tồn tại"
+    # valid Vietnamese query that matches no specific product (triggers decline)
+    query = "điện thoại thông minh cao cấp màn hình 100 inch"
     try:
         result = await answer_with_rag(db=db_session, query=query)
     except Exception as e:
@@ -197,7 +198,22 @@ async def test_compression_to_empty_triggers_decline(db_session: AsyncSession, m
     # Patch hybrid_search_rrf to simulate zero retrieval
     from unittest.mock import AsyncMock
 
-    monkeypatch.setattr("services.rag.hybrid_search_rrf", AsyncMock(return_value=[]))
+    monkeypatch.setattr("services.rag.pipeline.hybrid_search_rrf", AsyncMock(return_value=[]))
+
+    # Also bypass the is_valid guard so the pipeline reaches hybrid_search_rrf
+    from services.ai import NormalizedQuery
+
+    mock_normalized = NormalizedQuery(
+        canonical="sản phẩm không tồn tại",
+        detected_language="vi",
+        is_valid=True,
+        intent="INFO_QUERY",
+        extracted_keywords=["sản phẩm"],
+    )
+    monkeypatch.setattr(
+        "services.rag.pipeline.AIGateway.normalize_query",
+        AsyncMock(return_value=mock_normalized),
+    )
 
     try:
         result = await answer_with_rag(db=db_session, query="trigger empty")
