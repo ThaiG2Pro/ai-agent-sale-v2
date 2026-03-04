@@ -11,9 +11,8 @@ authors = [
 ]
 dependencies = [
     "fastapi",
-
     "uvicorn[standard]",
-    "langgraph",
+    "langgraph>=0.3",
     "litellm",
     "sqlalchemy[asyncio]>=2.0.30",
     "asyncpg",
@@ -44,7 +43,8 @@ seed-bulk   = "scripts.seed_bulk:app"
 [dependency-groups]
 dev = [
     "pytest",
-    "pytest-asyncio",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
     "ruff",
 ]
 

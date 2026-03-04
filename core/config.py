@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     OTLP_ENDPOINT: str = "http://localhost:4317"
     OTEL_SERVICE_NAME: str = "ai-sales-agent"
 
+    # Week 3: Agent Configuration
+    LAYER1_CONFIDENCE_THRESHOLD: float = 0.45  # RAG layer threshold (must be ≤ 0.6)
+    RERANKER_ENABLED: bool = False
+    AGENT_MAX_TURNS: int = 5
+    AGENT_CONFIDENCE_THRESHOLD: float = 0.70  # Agent response threshold (must be > L1)
+    AGENT_ALPHA: float = 0.7
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
