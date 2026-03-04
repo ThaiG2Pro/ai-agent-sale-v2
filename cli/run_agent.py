@@ -20,6 +20,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from core.agent.graph import astream_agent, build_graph
 from core.agent.state import make_initial_state
+from core.logging import setup_logging
 
 
 async def main(message: str, stream: bool = False, session: str = "debug-session"):
@@ -90,4 +91,5 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="Print full tracebacks")
     args = parser.parse_args()
 
+    setup_logging()  # OTEL → Phoenix + instrumentors (same as API)
     asyncio.run(main(args.message, stream=args.stream, session=args.session))

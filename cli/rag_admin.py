@@ -15,7 +15,6 @@ from functools import wraps
 
 import httpx
 import typer
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -499,8 +498,7 @@ def _display_stats(stats_data: dict, metadata: dict | None = None):
 
 def main():
     """Entry point for the CLI application."""
-    setup_logging()
-    HTTPXClientInstrumentor().instrument()
+    setup_logging()  # registers HTTPX, LangGraph, logging instrumentors
     app()
 
 

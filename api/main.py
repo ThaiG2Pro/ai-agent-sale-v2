@@ -9,8 +9,6 @@ from contextlib import asynccontextmanager
 
 import logfire
 from fastapi import FastAPI, HTTPException
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from sqlalchemy import text
 
 from api.middleware import (
@@ -19,10 +17,11 @@ from api.middleware import (
     http_exception_handler,
 )
 from api.routes import admin, health, query
-from core.logging import setup_logging
+from core.logging import instrument_fastapi, instrument_sqlalchemy, setup_logging
 from services.database import engine
 
-# Article XII: Zero-Cost Baseline - Initialize Observability FIRST (T009)
+# Initialize observability FIRST — sets OTel TracerProvider → Phoenix.
+# Must run before any instrumented code or FastAPI app creation.
 setup_logging()
 
 
@@ -36,8 +35,8 @@ async def lifespan(app: FastAPI):
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
 
-    # Instrument SQLAlchemy (T011)
-    SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
+    # Wire SQLAlchemy engine to OTel — must happen after engine is created
+    instrument_sqlalchemy(engine.sync_engine)
 
     logfire.info("Application foundation initialized successfully.")
 
@@ -74,8 +73,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Initialize OpenTelemetry instrumentation for FastAPI (T011)
-FastAPIInstrumentor.instrument_app(app)
+# Wire FastAPI app to OTel — creates HTTP request spans for every endpoint
+instrument_fastapi(app)
 
 # Register Middleware (T010)
 app.add_middleware(TimingMiddleware)
@@ -88,8 +87,6 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 app.include_router(health.router)
 app.include_router(admin.router)
 app.include_router(query.router)
-
-# Article I: Modular Core - Base path info
 
 
 @app.get("/")

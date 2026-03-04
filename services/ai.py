@@ -9,7 +9,6 @@ from __future__ import annotations
 import time
 from typing import Any, Literal
 
-import litellm
 import logfire
 from litellm import Router
 from pydantic import BaseModel, Field
@@ -114,9 +113,11 @@ class ProductMetadata(BaseModel):
 # Initialize LiteLLM Router for advanced routing and fallbacks
 ai_router = Router(**LITELLM_CONFIG)
 
-# Enable OpenTelemetry/Logfire callbacks for LiteLLM (T011)
-litellm.success_callback = ["logfire"]
-litellm.failure_callback = ["logfire"]
+# LiteLLM traces are captured via HTTPXClientInstrumentor (registered in core/logging.py).
+# Do NOT set litellm.success_callback = ["logfire"] — LiteLLM's own OTel integration
+# tries to create a new TracerProvider, conflicting with logfire's ProxyTracerProvider
+# (they are different types and OTel only allows one provider).
+# HTTPX auto-instrumentation produces spans for every outbound call to Ollama/OpenAI.
 
 
 class AIGateway:

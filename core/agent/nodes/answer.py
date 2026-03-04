@@ -39,7 +39,7 @@ async def answer_node(state: AgentState, db: AsyncSession | None = None) -> dict
     """
     # Path 1: Declined (Layer 1 or Layer 2 guard) → return without LLM
     if state.get("declined", False):
-        _write_model_trace(
+        await _write_model_trace(
             state,
             db=db,
             metadata_={
@@ -93,7 +93,7 @@ User question: {state["user_message"]}"""
         "declined": False,
         "intended_model": model,
     }
-    _write_model_trace(state, db=db, metadata_=metadata_)
+    await _write_model_trace(state, db=db, metadata_=metadata_)
 
     return {
         "response": response,

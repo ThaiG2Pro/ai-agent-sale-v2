@@ -21,85 +21,68 @@ from services.rag import (
 
 
 class TestClassifyQuery:
-    """FR-015: short ≤5 words → 'short', 6-15 → 'long', >15+no signals → 'ambiguous'."""
+    """FR-015: short ≤ 10 words → 'short', 11-20 → 'long', >20+no signals → 'ambiguous'."""
 
-    # Short queries (≤ 5 words)
+    # Short queries (≤ 10 words)
     def test_single_word(self):
         assert classify_query("price") == "short"
 
-    def test_exactly_five_words(self):
-        assert classify_query("giá widget cao cấp gì") == "short"
+    def test_exactly_ten_words(self):
+        # 10 words is now 'short'
+        assert classify_query(" ".join(["word"] * 10)) == "short"
 
     def test_four_words_english(self):
         assert classify_query("What is this?") == "short"
 
-    # Long queries (6-15 words)
-    def test_six_words(self):
-        assert classify_query("How much does the Pro Widget cost") == "long"
+    # Long queries (11-20 words)
+    def test_eleven_words(self):
+        # 11 words is now 'long'
+        assert classify_query(" ".join(["word"] * 11)) == "long"
 
-    def test_exactly_fifteen_words(self):
-        words = " ".join(["word"] * 15)
+    def test_exactly_twenty_words(self):
+        words = " ".join(["word"] * 20)
         assert classify_query(words) == "long"
 
-    def test_long_query_with_product_name(self):
-        # >15 words but has a capitalised product name → 'long'
-        q = " ".join(["tell", "me", "about", "the"] + ["product"] * 12 + ["WidgetPro"])
+    def test_very_long_query_with_product_name(self):
+        # >20 words but has a capitalised product name → 'long'
+        q = " ".join(["tell", "me", "about", "the"] + ["product"] * 17 + ["WidgetPro"])
         assert classify_query(q) == "long"
 
-    def test_long_query_with_action_verb_price(self):
-        # >15 words but contains action verb 'price' → 'long'
-        q = "the " + " ".join(["something"] * 15) + " price"
+    def test_very_long_query_with_action_verb_price(self):
+        # >20 words but contains action verb 'price' → 'long'
+        q = "the " + " ".join(["something"] * 20) + " price"
         assert classify_query(q) == "long"
 
-    def test_long_query_with_action_verb_compare(self):
-        q = " ".join(["please"] * 16) + " compare"
-        assert classify_query(q) == "long"
-
-    # Ambiguous queries (>15 words, no action verb, no product name)
+    # Ambiguous queries (>20 words, no action verb, no product name)
     def test_ambiguous_open_ended(self):
-        # >15 words, Vietnamese generic vocabulary (no action verb, no product name)
-        q = "hãy cho tôi biết tất cả những sản phẩm mà công ty bạn đang kinh doanh hiện tại"
+        # >20 words, Vietnamese generic vocabulary (no action verb, no product name)
+        q = (
+            "hãy cho tôi biết tất cả những sản phẩm mà công ty bạn "
+            "đang kinh doanh hiện tại trong cửa hàng của bạn"
+        )
+        assert len(q.split()) > 20
         assert classify_query(q) == "ambiguous"
 
     def test_ambiguous_english_no_signals(self):
-        q = " ".join(
-            [
-                "tell",
-                "me",
-                "about",
-                "all",
-                "the",
-                "things",
-                "that",
-                "you",
-                "have",
-                "in",
-                "your",
-                "store",
-                "right",
-                "now",
-                "please",
-                "thanks",
-            ]
-        )
+        q = " ".join(["word"] * 21)
         assert classify_query(q) == "ambiguous"
 
     # Vietnamese action-verb edge cases
     def test_vietnamese_action_verb_giá(self):
-        # >15 words with 'giá' → 'long'
-        q = " ".join(["tôi"] * 15) + " giá"
+        # >20 words with 'giá' → 'long'
+        q = " ".join(["tôi"] * 20) + " giá"
         assert classify_query(q) == "long"
 
     def test_vietnamese_action_verb_mua(self):
-        q = " ".join(["một"] * 15) + " mua"
+        q = " ".join(["một"] * 20) + " mua"
         assert classify_query(q) == "long"
 
-    def test_boundary_exactly_16_no_signals(self):
-        q = " ".join(["word"] * 16)
+    def test_boundary_exactly_21_no_signals(self):
+        q = " ".join(["word"] * 21)
         assert classify_query(q) == "ambiguous"
 
-    def test_boundary_exactly_16_has_price(self):
-        q = " ".join(["word"] * 15) + " price"
+    def test_boundary_exactly_21_has_price(self):
+        q = " ".join(["word"] * 20) + " price"
         assert classify_query(q) == "long"
 
 
@@ -114,24 +97,24 @@ class TestComputeAdaptiveTopk:
     def test_short_returns_5(self):
         assert compute_adaptive_topk("giá") == 5
 
-    def test_short_five_words(self):
-        assert compute_adaptive_topk("giá widget cao cấp gì") == 5
+    def test_short_ten_words(self):
+        assert compute_adaptive_topk(" ".join(["word"] * 10)) == 5
 
     def test_long_returns_15(self):
-        assert compute_adaptive_topk("How much does the Pro Widget cost today") == 15
+        assert compute_adaptive_topk(" ".join(["word"] * 15)) == 15
 
     def test_ambiguous_returns_20(self):
-        q = " ".join(["word"] * 16)
+        q = " ".join(["word"] * 21)
         assert compute_adaptive_topk(q) == 20
 
-    def test_boundary_6_words_is_long(self):
-        assert compute_adaptive_topk("a b c d e f") == 15
+    def test_boundary_11_words_is_long(self):
+        assert compute_adaptive_topk(" ".join(["word"] * 11)) == 15
 
-    def test_boundary_15_words_is_long(self):
-        assert compute_adaptive_topk(" ".join(["w"] * 15)) == 15
+    def test_boundary_20_words_is_long(self):
+        assert compute_adaptive_topk(" ".join(["w"] * 20)) == 15
 
-    def test_boundary_16_words_no_signals_is_ambiguous(self):
-        assert compute_adaptive_topk(" ".join(["w"] * 16)) == 20
+    def test_boundary_21_words_no_signals_is_ambiguous(self):
+        assert compute_adaptive_topk(" ".join(["w"] * 21)) == 20
 
     def test_vn_010_ambiguous(self):
         q = (
@@ -358,13 +341,13 @@ class TestArticleXIIEfficiency:
     """Article XII efficiency tests: TopK and classification behaviour."""
 
     def test_easy_query_topk_is_minimal(self):
-        # short easy query → TopK 5 and category 'short'
+        # short easy query (≤ 10 words) → TopK 5 and category 'short'
         assert compute_adaptive_topk("giá") == 5
         assert classify_query("giá") == "short"
 
     def test_ambiguous_query_topk_is_maximal(self):
-        # ambiguous long query (16 words) → TopK 20
-        q = " ".join(["word"] * 16)
+        # ambiguous long query (21 words) → TopK 20
+        q = " ".join(["word"] * 21)
         assert compute_adaptive_topk(q) == 20
 
 

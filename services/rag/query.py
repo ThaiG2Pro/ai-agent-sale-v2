@@ -18,12 +18,16 @@ def classify_query(query: str) -> Literal["short", "long", "ambiguous"]:
     wc = len(words)
     if wc <= 10:
         return "short"
-    if wc <= 25:
-        return "long"
+
     has_action_verb = any(word.lower().strip("?,.:;!") in ACTION_VERBS for word in words)
     has_proper_noun = any(word[0].isupper() for word in words if len(word) > 1)
+
+    if wc <= 20:
+        return "long"
+
     if has_action_verb or has_proper_noun:
         return "long"
+
     return "ambiguous"
 
 
