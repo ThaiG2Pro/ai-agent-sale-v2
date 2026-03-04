@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.config import settings
-
 if TYPE_CHECKING:
     from core.agent.state import AgentState
+
+from core.config import settings
 
 # ──────────────────────────────────────────────────────────────────────────
 # CONFIDENCE NODE LOGIC (FR-007 + FR-010 interaction)

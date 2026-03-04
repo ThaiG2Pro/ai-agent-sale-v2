@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from core.agent.state import AgentState
 
 
-async def retrieval_node(state: "AgentState", db: "AsyncSession | None" = None) -> dict:
+async def retrieval_node(state: AgentState, db: AsyncSession | None = None) -> dict:
     """Call RAG search tool and populate state with results (T046).
 
     Args:

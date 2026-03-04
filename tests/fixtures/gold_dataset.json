@@ -1,0 +1,72 @@
+[
+  {
+    "id": "gd-001",
+    "input": "Giá của iPhone 15 Pro Max là bao nhiêu?",
+    "expected_intent": "PRICING",
+    "expected_response_contains": ["giá", "VNĐ"],
+    "tier": 2
+  },
+  {
+    "id": "gd-002",
+    "input": "Sản phẩm này giá bao nhiêu tiền vậy?",
+    "expected_intent": "PRICING",
+    "expected_response_contains": ["giá", "VNĐ"],
+    "tier": 2
+  },
+  {
+    "id": "gd-003",
+    "input": "Cho tôi biết thông số kỹ thuật của laptop Dell XPS 15.",
+    "expected_intent": "INFO_QUERY",
+    "expected_response_contains": ["thông số", "CPU", "RAM"],
+    "tier": 2
+  },
+  {
+    "id": "gd-004",
+    "input": "MacBook Pro M3 có mấy cổng USB-C?",
+    "expected_intent": "INFO_QUERY",
+    "expected_response_contains": ["cổng", "USB-C"],
+    "tier": 2
+  },
+  {
+    "id": "gd-005",
+    "input": "So sánh iPhone 15 và Samsung S23, cái nào chụp ảnh đẹp hơn?",
+    "expected_intent": "COMPARISON",
+    "expected_response_contains": ["so sánh", "iPhone", "Samsung"],
+    "tier": 2
+  },
+  {
+    "id": "gd-006",
+    "input": "Tôi rất thất vọng vì sản phẩm nhận được bị vỡ màn hình.",
+    "expected_intent": "COMPLAINT",
+    "expected_response_contains": ["xin lỗi", "khiếu nại", "giải quyết"],
+    "tier": 2
+  },
+  {
+    "id": "gd-007",
+    "input": "Nếu tôi mua 10 cái thì có được giảm giá thêm không?",
+    "expected_intent": "NEGOTIATION",
+    "expected_response_contains": ["giảm giá", "chiết khấu", "số lượng"],
+    "tier": 2
+  },
+  {
+    "id": "gd-008",
+    "input": "Tai nghe Sony WH-1000XM5 còn hàng không shop?",
+    "expected_intent": "AVAILABILITY",
+    "expected_response_contains": ["còn hàng", "sẵn có"],
+    "tier": 2
+  },
+  {
+    "id": "gd-009",
+    "input": "Chào buổi sáng, bạn khỏe không?",
+    "expected_intent": "SMALLTALK",
+    "expected_response_contains": ["chào", "khỏe", "giúp"],
+    "tier": 2
+  },
+  {
+    "id": "gd-010",
+    "input": "Bạn có bán máy giặt Toshiba không?",
+    "expected_intent": "INFO_QUERY",
+    "expected_response_contains": ["không bán", "không tìm thấy", "xin lỗi"],
+    "tier": 2
+  }
+]

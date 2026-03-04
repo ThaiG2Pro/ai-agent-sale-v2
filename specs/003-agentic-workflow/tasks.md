@@ -150,7 +150,7 @@
 
 **Checkpoint**: All types defined and importable — run `uv run python -c "from core.agent.state import AgentState, IntentEnum; print('OK')"` before proceeding.
 
-- [ ] T101 [P] Compile initial **Gold Dataset** (`tests/fixtures/gold_dataset.json`) — 10+ canonical QA pairs covering all 7 intent types, **in Vietnamese**. Used as the ground truth for Tier 2 manual evaluation (T100) and future automated grading (Article III). **Format**:
+- [X] T101 [P] Compile initial **Gold Dataset** (`tests/fixtures/gold_dataset.json`) — 10+ canonical QA pairs covering all 7 intent types, **in Vietnamese**. Used as the ground truth for Tier 2 manual evaluation (T100) and future automated grading (Article III). **Format**:
   ```json
   [
     {"id": "gd-001", "input": "Giá sản phẩm X là bao nhiêu?", "expected_intent": "PRICING", "expected_response_contains": ["giá", "VNĐ"], "tier": 2},
@@ -247,7 +247,7 @@
 
 **Independent Test**: `uv run python cli/run_agent.py "Giá sản phẩm X là bao nhiêu?"` — verify output includes a citation, confidence_score, and `model_used == "economy-chat"`.
 
-- [ ] T042 [US1] Implement `make_rag_tool(db: AsyncSession)` factory in `core/agent/tools.py`. The inner `@tool async def rag_search(input: RAGSearchInput) -> RAGSearchOutput` must call `answer_with_rag(db, input.query, input.model)` and convert `RAGResult` → `RAGSearchOutput`. Implement `from_rag_result` classmethod. **Boilerplate**:
+- [x] T042 [US1] Implement `make_rag_tool(db: AsyncSession)` factory in `core/agent/tools.py`. The inner `@tool async def rag_search(input: RAGSearchInput) -> RAGSearchOutput` must call `answer_with_rag(db, input.query, input.model)` and convert `RAGResult` → `RAGSearchOutput`. Implement `from_rag_result` classmethod. **Boilerplate**:
   ```python
   def make_rag_tool(db: AsyncSession):
       @tool
@@ -257,9 +257,9 @@
       return rag_search
   ```
 
-- [ ] T043 [US1] Implement `inventory_lookup` stub tool in `core/agent/tools.py`. Decorated with `@tool`. Always returns `InventoryLookupOutput(sku=input.sku, stock_level=99, warehouse_id=None, available=True, error=None)`. Add docstring: "Week 3 stub — real ERP integration deferred to Week 6." **Keywords**: `@tool`, stub implementation, Week 6 placeholder
+- [x] T043 [US1] Implement `inventory_lookup` stub tool in `core/agent/tools.py`. Decorated with `@tool`. Always returns `InventoryLookupOutput(sku=input.sku, stock_level=99, warehouse_id=None, available=True, error=None)`. Add docstring: "Week 3 stub — real ERP integration deferred to Week 6." **Keywords**: `@tool`, stub implementation, Week 6 placeholder
 
-- [ ] T044 [US1] Create `core/agent/nodes/router.py`. Implement `async def router_node(state: AgentState) -> Command` using `litellm.acompletion` with `model="economy-chat"`, `response_format=IntentClassification`. Use `classification.primary_intent` for routing; store both `primary_intent` and `secondary_intents` in state update. **Critical**: use `economy-chat` NOT `light-chat` (Ollama G1 constraint — research Decision 10). **Boilerplate**:
+- [x] T044 [US1] Create `core/agent/nodes/router.py`. Implement `async def router_node(state: AgentState) -> Command` using `litellm.acompletion` with `model="economy-chat"`, `response_format=IntentClassification`. Use `classification.primary_intent` for routing; store both `primary_intent` and `secondary_intents` in state update. **Critical**: use `economy-chat` NOT `light-chat` (Ollama G1 constraint — research Decision 10). **Boilerplate**:
   ```python
   from langgraph.types import Command
   import litellm
@@ -281,18 +281,18 @@
       )
   ```
 
-- [ ] T045 [US1] Implement `_get_next_node(primary_intent: IntentEnum) -> str` helper in `core/agent/nodes/router.py`. **Routing map**: `COMPLAINT/NEGOTIATION → "escalation_node"`, `SMALLTALK → "answer_node"` (SMALLTALK bypasses retrieval entirely—no RAG lookup), all others (`INFO_QUERY`, `PRICING`, `COMPARISON`, `AVAILABILITY`) → `"retrieval_node"`. Default unknown intent → `"retrieval_node"` (spec edge case). **Keywords**: routing map, `match/case`, SMALLTALK bypass, fallback default
+- [x] T045 [US1] Implement `_get_next_node(primary_intent: IntentEnum) -> str` helper in `core/agent/nodes/router.py`. **Routing map**: `COMPLAINT/NEGOTIATION → "escalation_node"`, `SMALLTALK → "answer_node"` (SMALLTALK bypasses retrieval entirely—no RAG lookup), all others (`INFO_QUERY`, `PRICING`, `COMPARISON`, `AVAILABILITY`) → `"retrieval_node"`. Default unknown intent → `"retrieval_node"` (spec edge case). **Keywords**: routing map, `match/case`, SMALLTALK bypass, fallback default
 
-- [ ] T046 [US1] Create `core/agent/nodes/retrieval.py`. Implement `async def retrieval_node(state: AgentState, tools: list) -> dict`. Find `rag_search` tool from `tools` list. Build `RAGSearchInput`. Call tool. Populate state: `retrieved_chunks`, `citations`, `similarity_score`, and propagate `declined=True` if `rag_result.declined` (Layer 1 fast-path). **Keywords**: tool invocation, Layer 1 propagation, `RAGSearchInput`, async tool call
+- [x] T046 [US1] Create `core/agent/nodes/retrieval.py`. Implement `async def retrieval_node(state: AgentState, tools: list) -> dict`. Find `rag_search` tool from `tools` list. Build `RAGSearchInput`. Call tool. Populate state: `retrieved_chunks`, `citations`, `similarity_score`, and propagate `declined=True` if `rag_result.declined` (Layer 1 fast-path). **Keywords**: tool invocation, Layer 1 propagation, `RAGSearchInput`, async tool call
 
-- [ ] T047 [US1] Create `core/agent/nodes/confidence.py`. Implement `async def confidence_node(state: AgentState) -> dict`. Logic:
+- [x] T047 [US1] Create `core/agent/nodes/confidence.py`. Implement `async def confidence_node(state: AgentState) -> dict`. Logic:
   1. If `state["declined"]` is True → return `{"declined": True, "confidence_score": state["similarity_score"]}` (fast-path from Layer 1).
   2. Compute fused score: if `rerank_score` is not None → `(1 - alpha) * similarity + alpha * rerank` else `confidence = similarity`.
   3. **Special case — INFO_QUERY borderline** (0.45 ≤ similarity < 0.7): Do NOT mark as declined; leave `declined=False` so T047b can route to escalation_node.
   4. For all other intents or INFO_QUERY with similarity ≥ 0.7: if `confidence_score < 0.70` → `declined=True`.
   5. Return state delta `{confidence_score, declined}`. **Keywords**: `AGENT_ALPHA=0.7`, Layer 2 guard, `AGENT_CONFIDENCE_THRESHOLD`, borderline INFO_QUERY carve-out, FR-007
 
-- [ ] T047b [US1] Implement `_route_after_confidence(state: AgentState) -> str` routing helper in `core/agent/nodes/confidence.py`. Used as the conditional edge function from `confidence_node`. **Logic**: 
+- [x] T047b [US1] Implement `_route_after_confidence(state: AgentState) -> str` routing helper in `core/agent/nodes/confidence.py`. Used as the conditional edge function from `confidence_node`. **Logic**: 
   - If `intent == "INFO_QUERY"` AND `0.45 ≤ similarity_score < 0.7` AND NOT already declined → `"escalation_node"` (borderline, FR-007 escalation).
   - Elif `declined=True` → `"answer_node"` (final decline).
   - Else → `"answer_node"` (normal acceptance). **Boilerplate**:
@@ -307,9 +307,9 @@
   ```
   **Keywords**: conditional edge, INFO_QUERY escalation path, FR-007 routing, priority ordering
 
-- [ ] T048 [US1] Create `core/agent/nodes/answer.py`. Implement `async def answer_node(state: AgentState) -> dict`. All graph paths (both accepted AND declined) route through this node to ensure trace is always written (FR-008). If `state["declined"]` → return `{"response": DECLINE_MESSAGE, "model_used": None}` without LLM call. Else: call `litellm.acompletion` with `model=state["model_used"] or "economy-chat"`, build prompt with citations context, return `{"response": content, "model_used": ...}`. Import `DECLINE_MESSAGE` from `services.rag.constants`. **Keywords**: `DECLINE_MESSAGE`, universal trace path, citation context injection, LiteLLM call
+- [x] T048 [US1] Create `core/agent/nodes/answer.py`. Implement `async def answer_node(state: AgentState) -> dict`. All graph paths (both accepted AND declined) route through this node to ensure trace is always written (FR-008). If `state["declined"]` → return `{"response": DECLINE_MESSAGE, "model_used": None}` without LLM call. Else: call `litellm.acompletion` with `model=state["model_used"] or "economy-chat"`, build prompt with citations context, return `{"response": content, "model_used": ...}`. Import `DECLINE_MESSAGE` from `services.rag.constants`. **Keywords**: `DECLINE_MESSAGE`, universal trace path, citation context injection, LiteLLM call
 
-- [ ] T048b [P] Add **pseudo-code + logic flowchart** comment block to `core/agent/nodes/confidence.py` to clarify the two-layer guard + escalation interaction. Document the three paths:
+- [x] T048b [P] Add **pseudo-code + logic flowchart** comment block to `core/agent/nodes/confidence.py` to clarify the two-layer guard + escalation interaction. Document the three paths:
   ```python
   # CONFIDENCE NODE LOGIC (FR-007 + FR-010 interaction)
   # Path 1: Declined at Layer 1 (sim < 0.45) → skip confidence check, return declined=True
@@ -320,7 +320,7 @@
   ```
   Reference data-model.md §5 Graph Topology in the comment. **Keywords**: pseudo-code, logic clarification, Article IV integration-first
 
-- [ ] T049 [US1] Implement `_write_model_trace` call at end of `answer_node` in `core/agent/nodes/answer.py`. Write to `agent_v1.model_traces` regardless of whether the run was accepted or declined — this is the **universal trace point** (FR-008 requires trace after every run). The `metadata_` JSONB MUST include: `escalation_reason`, `escalation_failure` (bool — FR-007 edge case key), `guard_decision` (`"ACCEPTED"` or `"REJECTED"`), `declined` flag, and `intended_model`. On trace write failure: log to `sys.stderr` with context (e.g., `f"[TRACE_FAIL] session={state['session_id']}, error={e}"`) and continue without blocking response. **Boilerplate**:
+- [x] T049 [US1] Implement `_write_model_trace` call at end of `answer_node` in `core/agent/nodes/answer.py`. Write to `agent_v1.model_traces` regardless of whether the run was accepted or declined — this is the **universal trace point** (FR-008 requires trace after every run). The `metadata_` JSONB MUST include: `escalation_reason`, `escalation_failure` (bool — FR-007 edge case key), `guard_decision` (`"ACCEPTED"` or `"REJECTED"`), `declined` flag, and `intended_model`. On trace write failure: log to `sys.stderr` with context (e.g., `f"[TRACE_FAIL] session={state['session_id']}, error={e}"`) and continue without blocking response. **Boilerplate**:
   ```python
   try:
       _write_model_trace(state, metadata_)
@@ -330,7 +330,7 @@
   ```
   **Keywords**: `model_traces`, JSONB `metadata_`, `escalation_failure` key, `intended_model`, universal trace, FR-008, stderr logging, fail-safe
 
-- [ ] T050 [US1] Create `core/agent/graph.py` with `build_graph()` function. Create `StateGraph(AgentState)`. Add nodes: `router_node`, `retrieval_node`, `confidence_node`, `escalation_node`, `answer_node` (5 nodes total). Add edges: START → router_node (via `Command` routing), retrieval_node → confidence_node, **conditional** confidence_node → (escalation_node OR answer_node via `_route_after_confidence`), escalation_node → answer_node, answer_node → END. Set `recursion_limit=settings.AGENT_MAX_TURNS`. **Boilerplate**:
+- [x] T050 [US1] Create `core/agent/graph.py` with `build_graph()` function. Create `StateGraph(AgentState)`. Add nodes: `router_node`, `retrieval_node`, `confidence_node`, `escalation_node`, `answer_node` (5 nodes total). Add edges: START → router_node (via `Command` routing), retrieval_node → confidence_node, **conditional** confidence_node → (escalation_node OR answer_node via `_route_after_confidence`), escalation_node → answer_node, answer_node → END. Set `recursion_limit=settings.AGENT_MAX_TURNS`. **Boilerplate**:
   ```python
   from langgraph.graph import StateGraph, START, END
   def build_graph(checkpointer=None):
@@ -340,16 +340,16 @@
       return builder.compile(checkpointer=checkpointer)
   ```
 
-- [ ] T051 [US1] Add **conditional edge** from `confidence_node` in `core/agent/graph.py` using `_route_after_confidence` helper. Three possible destinations: `"answer_node"` (declined OR normal), `"escalation_node"` (INFO_QUERY borderline). **Boilerplate**:
+- [x] T051 [US1] Add **conditional edge** from `confidence_node` in `core/agent/graph.py` using `_route_after_confidence` helper. Three possible destinations: `"answer_node"` (declined OR normal), `"escalation_node"` (INFO_QUERY borderline). **Boilerplate**:
   ```python
   from core.agent.nodes.confidence import _route_after_confidence
   builder.add_conditional_edges("confidence_node", _route_after_confidence)
   ```
   **Rationale**: INFO_QUERY with `0.45 ≤ similarity < 0.7` must reach `escalation_node` to select premium model (FR-007); this path was impossible with an unconditional edge to `answer_node`.
 
-- [ ] T052 [US1] Add `get_mermaid_diagram()` function to `core/agent/graph.py` that calls `build_graph().get_graph().draw_mermaid()` and returns the diagram string. Also add `export_mermaid_to_file(path: str)` convenience function. **Keywords**: `draw_mermaid()`, FR-004, static artifact, `docs/week3/agent-graph.mmd`
+- [x] T052 [US1] Add `get_mermaid_diagram()` function to `core/agent/graph.py` that calls `build_graph().get_graph().draw_mermaid()` and returns the diagram string. Also add `export_mermaid_to_file(path: str)` convenience function. **Keywords**: `draw_mermaid()`, FR-004, static artifact, `docs/week3/agent-graph.mmd`
 
-- [ ] T053 [US1] Create `cli/run_agent.py` debug CLI script. Accept positional `message` arg, optional `--stream` flag, optional `--session` arg. Build graph with `MemorySaver`. Call `graph.ainvoke` with initial state. Print final `state["response"]`. **Boilerplate**:
+- [x] T053 [US1] Create `cli/run_agent.py` debug CLI script. Accept positional `message` arg, optional `--stream` flag, optional `--session` arg. Build graph with `MemorySaver`. Call `graph.ainvoke` with initial state. Print final `state["response"]`. **Boilerplate**:
   ```python
   #!/usr/bin/env python
   """Debug CLI for LangGraph agent — Article I exemption (no parser, offline use only)."""
@@ -364,7 +364,7 @@
       asyncio.run(main(sys.argv[1]))
   ```
 
-- [ ] T054 [US1] Implement `AgentState` initialization helper `make_initial_state(user_message: str, session_id: str) -> AgentState` in `core/agent/state.py`. Sets all required fields with safe defaults — all boolean flags MUST be explicitly `False` (not falsy or None). **Boilerplate**:
+- [x] T054 [US1] Implement `AgentState` initialization helper `make_initial_state(user_message: str, session_id: str) -> AgentState` in `core/agent/state.py`. Sets all required fields with safe defaults — all boolean flags MUST be explicitly `False` (not falsy or None). **Boilerplate**:
   ```python
   def make_initial_state(user_message: str, session_id: str) -> AgentState:
       return AgentState(
@@ -390,21 +390,21 @@
   ```
   **Keywords**: state initialization, TypedDict factory, explicit bool defaults, safe defaults
 
-- [ ] T055 [US1] Write unit test `tests/unit/test_agent_state.py::test_agent_state_fields_complete` — verify `AgentState` TypedDict has all required fields from spec FR-001: `session_id`, `intent`, `model_used`, `escalation_flag`, `escalation_failure`, `response`, `similarity_score`, `rerank_score`, `confidence_score`, `intent_confidence`, `citations`, `messages` (do NOT check for `conversation_history` — it is NOT a separate field, `messages` is the canonical name per FR-001). Assert all required field names exist in `AgentState.__annotations__`. **Keywords**: TypedDict `__annotations__`, FR-001 compliance, `messages` not `conversation_history`
+- [x] T055 [US1] Write unit test `tests/unit/test_agent_state.py::test_agent_state_fields_complete` — verify `AgentState` TypedDict has all required fields from spec FR-001: `session_id`, `intent`, `model_used`, `escalation_flag`, `escalation_failure`, `response`, `similarity_score`, `rerank_score`, `confidence_score`, `intent_confidence`, `citations`, `messages` (do NOT check for `conversation_history` — it is NOT a separate field, `messages` is the canonical name per FR-001). Assert all required field names exist in `AgentState.__annotations__`. **Keywords**: TypedDict `__annotations__`, FR-001 compliance, `messages` not `conversation_history`
 
-- [ ] T056 [US1] Write unit test `tests/unit/test_agent_state.py::test_intent_enum_values` — assert all 7 `IntentEnum` values exist, confirm `str(IntentEnum.INFO_QUERY)` serializes correctly. **Keywords**: `str(Enum)`, enum serialization, JSONB compatibility
+- [x] T056 [US1] Write unit test `tests/unit/test_agent_state.py::test_intent_enum_values` — assert all 7 `IntentEnum` values exist, confirm `str(IntentEnum.INFO_QUERY)` serializes correctly. **Keywords**: `str(Enum)`, enum serialization, JSONB compatibility
 
-- [ ] T057 [US1] Write unit test `tests/unit/test_router_node.py` — mock `litellm.acompletion` to return `IntentClassification(intent=INFO_QUERY, confidence=0.9, reasoning="test")`. Call `router_node(state)`. Assert `Command.goto == "retrieval_node"`, state update has `intent="INFO_QUERY"`. Use `unittest.mock.AsyncMock`. **Keywords**: `AsyncMock`, `litellm.acompletion` mock, `Command.goto` assertion
+- [x] T057 [US1] Write unit test `tests/unit/test_router_node.py` — mock `litellm.acompletion` to return `IntentClassification(intent=INFO_QUERY, confidence=0.9, reasoning="test")`. Call `router_node(state)`. Assert `Command.goto == "retrieval_node"`, state update has `intent="INFO_QUERY"`. Use `unittest.mock.AsyncMock`. **Keywords**: `AsyncMock`, `litellm.acompletion` mock, `Command.goto` assertion
 
-- [ ] T058 [US1] Write unit test `tests/unit/test_confidence_node.py::test_fused_score_with_reranker` — call `confidence_node` with `similarity_score=0.8`, `rerank_score=0.9`, `declined=False`. Assert `confidence_score ≈ (1-0.7)*0.8 + 0.7*0.9 = 0.87`. **Keywords**: fusion formula, `pytest.approx`, AGENT_ALPHA=0.7
+- [x] T058 [US1] Write unit test `tests/unit/test_confidence_node.py::test_fused_score_with_reranker` — call `confidence_node` with `similarity_score=0.8`, `rerank_score=0.9`, `declined=False`. Assert `confidence_score ≈ (1-0.7)*0.8 + 0.7*0.9 = 0.87`. **Keywords**: fusion formula, `pytest.approx`, AGENT_ALPHA=0.7
 
-- [ ] T059 [US1] Write unit test `tests/unit/test_confidence_node.py::test_fused_score_no_reranker` — call with `similarity_score=0.75`, `rerank_score=None`. Assert `confidence_score == 0.75` (α=0 fallback). **Keywords**: α=0 fallback, dev mode, no reranker
+- [x] T059 [US1] Write unit test `tests/unit/test_confidence_node.py::test_fused_score_no_reranker` — call with `similarity_score=0.75`, `rerank_score=None`. Assert `confidence_score == 0.75` (α=0 fallback). **Keywords**: α=0 fallback, dev mode, no reranker
 
-- [ ] T060 [US1] Write unit test `tests/unit/test_confidence_node.py::test_layer1_fast_path` — call `confidence_node` with `declined=True` (Layer 1 already fired), assert function returns immediately with `declined=True` and skips fusion computation (verify by checking `confidence_score == state["similarity_score"]`). **Keywords**: dual-layer guard, Layer 1 propagation, fast-path
+- [x] T060 [US1] Write unit test `tests/unit/test_confidence_node.py::test_layer1_fast_path` — call `confidence_node` with `declined=True` (Layer 1 already fired), assert function returns immediately with `declined=True` and skips fusion computation (verify by checking `confidence_score == state["similarity_score"]`). **Keywords**: dual-layer guard, Layer 1 propagation, fast-path
 
-- [ ] T061 [US1] Write integration test `tests/integration/test_agent_flow.py::test_info_query_full_flow` — build graph with `MemorySaver`, mock `litellm.acompletion` for router (INFO_QUERY) and answer nodes, mock DB session with fake `answer_with_rag` result (`similarity_score=0.85`, `declined=False`). Assert final state has `intent="INFO_QUERY"`, `model_used="economy-chat"`, `escalation_flag=False`, `response` is non-empty. **Keywords**: `MemorySaver`, `ainvoke`, integration test, mocked LLM
+- [x] T061 [US1] Write integration test `tests/integration/test_agent_flow.py::test_info_query_full_flow` — build graph with `MemorySaver`, mock `litellm.acompletion` for router (INFO_QUERY) and answer nodes, mock DB session with fake `answer_with_rag` result (`similarity_score=0.85`, `declined=False`). Assert final state has `intent="INFO_QUERY"`, `model_used="economy-chat"`, `escalation_flag=False`, `response` is non-empty. **Keywords**: `MemorySaver`, `ainvoke`, integration test, mocked LLM
 
-- [ ] T062 [US1] Run `uv run pytest tests/unit/ tests/contract/ -v --tb=short` and confirm all unit tests pass and contract tests still fail (Red stays Red until tools implemented). **Keywords**: TDD verification, unit pass / contract fail
+- [x] T062 [US1] Run `uv run pytest tests/unit/ tests/contract/ -v --tb=short` and confirm all unit tests pass and contract tests still fail (Red stays Red until tools implemented). **Keywords**: TDD verification, unit pass / contract fail
 
 ---
 
