@@ -29,6 +29,8 @@ class CitationItem(BaseModel):
     name: str
     source_text: str
 
+    model_config = ConfigDict(strict=True)
+
 
 class RAGSearchOutput(BaseModel):
     """Output schema for RAG search tool."""
@@ -36,10 +38,12 @@ class RAGSearchOutput(BaseModel):
     answer: str
     declined: bool
     citations: list[CitationItem]
-    similarity_score: float
-    confidence_score: float
+    similarity_score: float = Field(ge=0.0, le=1.0)
+    confidence_score: float = Field(ge=0.0, le=1.0)
     model_used: str
     chunks_used: int
+
+    model_config = ConfigDict(strict=True)
 
     @classmethod
     def from_rag_result(cls, rag_result: dict) -> RAGSearchOutput:
@@ -61,9 +65,7 @@ class InventoryLookupInput(BaseModel):
     """Input schema for inventory lookup tool."""
 
     sku: str = Field(min_length=1, max_length=50, pattern=r"^[A-Z0-9_\-]+$")
-    warehouse_id: str | None = Field(
-        default=None, pattern=r"^[A-Z0-9]{3,10}$" if None is not None else None
-    )
+    warehouse_id: str | None = Field(default=None, pattern=r"^[A-Z0-9]{3,10}$")
 
     model_config = ConfigDict(strict=True)
 
@@ -76,3 +78,5 @@ class InventoryLookupOutput(BaseModel):
     warehouse_id: str | None = None
     available: bool
     error: str | None = None
+
+    model_config = ConfigDict(strict=True)

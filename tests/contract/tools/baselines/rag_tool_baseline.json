@@ -1,0 +1,9 @@
+{
+  "answer": "str",
+  "declined": "bool",
+  "citations": "list",
+  "similarity_score": "float",
+  "confidence_score": "float",
+  "model_used": "str",
+  "chunks_used": "int"
+}

@@ -1,0 +1,7 @@
+{
+  "sku": "str",
+  "stock_level": "int",
+  "warehouse_id": "str|None",
+  "available": "bool",
+  "error": "str|None"
+}
