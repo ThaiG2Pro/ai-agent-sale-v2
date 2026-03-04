@@ -7,6 +7,7 @@ What it does: Provides typed state, enums, and I/O contracts used by all nodes.
 from __future__ import annotations
 
 import operator
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated
 
@@ -43,7 +44,8 @@ class Citation(BaseModel):
     sku: str
     name: str
     source_text: str = Field(
-        ..., description="Raw chunk text used for grounding (Article IX auditability)"
+        ...,
+        description="Raw chunk text used for grounding (Article IX auditability)",
     )
 
     model_config = ConfigDict(strict=True)
@@ -60,9 +62,7 @@ class IntentClassification(BaseModel):
     def has_escalation_intent(self) -> bool:
         """True if ANY intent (primary or secondary) is COMPLAINT or NEGOTIATION."""
         escalation = {IntentEnum.COMPLAINT, IntentEnum.NEGOTIATION}
-        return self.primary_intent in escalation or bool(
-            escalation & set(self.secondary_intents)
-        )
+        return self.primary_intent in escalation or bool(escalation & set(self.secondary_intents))
 
 
 class EscalationDecision(BaseModel):
@@ -109,6 +109,18 @@ class AgentState(TypedDict):
     response: str | None
     declined: bool
     error: str | None
+
+
+class NodeStreamEvent(BaseModel):
+    """Per-node streaming event (T080, FR-006).
+
+    Emitted by astream_agent for each node completion.
+    state_snapshot contains only the delta (fields changed by that node).
+    """
+
+    node_name: str
+    state_snapshot: dict
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 def make_initial_state(user_message: str, session_id: str) -> AgentState:

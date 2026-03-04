@@ -9,14 +9,28 @@ and exports mermaid diagram for documentation.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from langgraph.graph import END, START, StateGraph
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 from core.agent.nodes.answer import answer_node
 from core.agent.nodes.confidence import _route_after_confidence, confidence_node
 from core.agent.nodes.escalation import escalation_node
 from core.agent.nodes.retrieval import retrieval_node
 from core.agent.nodes.router import router_node
-from core.agent.state import AgentState
+from core.agent.state import AgentState, NodeStreamEvent
+
+# All registered node names — used to filter streaming events (T081)
+GRAPH_NODES = {
+    "router_node",
+    "retrieval_node",
+    "confidence_node",
+    "escalation_node",
+    "answer_node",
+}
 
 
 def build_graph(checkpointer=None):
@@ -91,3 +105,41 @@ def export_mermaid_to_file(path: str) -> None:
     with open(path, "w") as f:
         f.write(diagram)
     print(f"[INFO] Agent graph exported to {path}")
+
+
+async def astream_agent(
+    message: str,
+    session_id: str,
+    db=None,
+    checkpointer=None,
+) -> AsyncGenerator[NodeStreamEvent]:
+    """Stream per-node events as graph executes (T081, FR-006).
+
+    Yields a NodeStreamEvent for each node completion containing only the
+    delta (fields changed by that node), not the full accumulated state.
+
+    Args:
+        message: User message to process
+        session_id: Session identifier for thread config
+        db: Optional AsyncSession (passed to retrieval_node)
+        checkpointer: Optional LangGraph checkpointer
+
+    Yields:
+        NodeStreamEvent for each completed graph node
+    """
+    from core.agent.state import make_initial_state
+
+    graph = build_graph(checkpointer=checkpointer)
+    initial_state = make_initial_state(message, session_id)
+    config = {"configurable": {"thread_id": session_id}}
+
+    async for event in graph.astream_events(initial_state, config, version="v2"):
+        if event["event"] == "on_chain_end" and event.get("name") in GRAPH_NODES:
+            # Extract delta from node output (not full accumulated state)
+            delta = event["data"].get("output") or {}
+            # Unwrap Command.update if node returned a Command
+            if hasattr(delta, "update"):
+                delta = delta.update or {}
+            if not isinstance(delta, dict):
+                delta = {}
+            yield NodeStreamEvent(node_name=event["name"], state_snapshot=delta)

@@ -414,31 +414,31 @@
 
 **Independent Test**: `uv run python cli/run_agent.py "Tôi muốn khiếu nại về đơn hàng"` — verify `model_used` is the premium model alias and `escalation_flag=True`.
 
-- [ ] T063 [US2] Create `core/agent/nodes/escalation.py`. Implement `async def escalation_node(state: AgentState) -> dict` as pure Python (zero LLM call). **Logic**: 
+- [X] T063 [US2] Create `core/agent/nodes/escalation.py`. Implement `async def escalation_node(state: AgentState) -> dict` as pure Python (zero LLM call). **Logic**: 
   - **Intent-based** (COMPLAINT or NEGOTIATION): Check `state["intent"]` AND `state["secondary_intents"]` — if ANY intent is COMPLAINT/NEGOTIATION → `escalate=True`, `reason="intent_escalation"`, `selected_model=settings.PREMIUM_MODEL` (alias, not hardcoded).
   - **Score-based** (INFO_QUERY borderline): If `state["intent"] == "INFO_QUERY"` (from router) → `escalate=True`, `reason="low_confidence"`, `selected_model=settings.PREMIUM_MODEL`.
   - Otherwise → `escalate=False`, `reason="none"`, selected_model stays `None`.
   - Return state delta: `{escalation_flag, escalation_reason, model_used}`. **Keywords**: intent-first escalation, multi-intent check, INFO_QUERY score-based, pure Python, `EscalationDecision`, zero LLM cost
 
-- [ ] T064 [US2] Add premium model fallback logic in `escalation_node`: if `settings.PREMIUM_MODEL` is unavailable (check via LiteLLM router health or config), fall back to `economy-chat` and set `escalation_failure=True` in state. Log warning. **Boilerplate**: wrap escalation model check in `try/except`, log to `logfire.warning("escalation_failure", reason=str(e))`. **Keywords**: graceful fallback, `escalation_failure`, `logfire.warning`
+- [X] T064 [US2] Add premium model fallback logic in `escalation_node`: if `settings.PREMIUM_MODEL` is unavailable (check via LiteLLM router health or config), fall back to `economy-chat` and set `escalation_failure=True` in state. Log warning. **Boilerplate**: wrap escalation model check in `try/except`, log to `logfire.warning("escalation_failure", reason=str(e))`. **Keywords**: graceful fallback, `escalation_failure`, `logfire.warning`
 
-- [ ] T065 [US2] Wire `escalation_node` into `core/agent/graph.py`. Add to `StateGraph`. Ensure edge: `router_node` → `escalation_node` (via `Command` for COMPLAINT/NEGOTIATION), `escalation_node` → `answer_node`. **Keywords**: `Command(goto="escalation_node")`, graph edges, node registration
+- [X] T065 [US2] Wire `escalation_node` into `core/agent/graph.py`. Add to `StateGraph`. Ensure edge: `router_node` → `escalation_node` (via `Command` for COMPLAINT/NEGOTIATION), `escalation_node` → `answer_node`. **Keywords**: `Command(goto="escalation_node")`, graph edges, node registration
 
-- [ ] T066 [US2] Update `answer_node` in `core/agent/nodes/answer.py` to write full escalation context in `model_trace.metadata_` JSONB. Ensure `metadata_` includes: `escalation_reason` (e.g. `"intent_escalation"`), `escalation_failure` (bool — `True` if premium was unavailable and economy was used as fallback, FR-007 edge case), and `escalation_flag` (bool). **Keywords**: `metadata_` JSONB, `model_traces`, `escalation_reason`, `escalation_failure` key, FR-007
+- [X] T066 [US2] Update `answer_node` in `core/agent/nodes/answer.py` to write full escalation context in `model_trace.metadata_` JSONB. Ensure `metadata_` includes: `escalation_reason` (e.g. `"intent_escalation"`), `escalation_failure` (bool — `True` if premium was unavailable and economy was used as fallback, FR-007 edge case), and `escalation_flag` (bool). **Keywords**: `metadata_` JSONB, `model_traces`, `escalation_reason`, `escalation_failure` key, FR-007
 
-- [ ] T067 [US2] Write unit test `tests/unit/test_escalation_node.py::test_complaint_escalates_to_premium` — call `escalation_node` with `state["intent"]="COMPLAINT"`. Assert `result["escalation_flag"]=True`, `result["escalation_reason"]="intent_escalation"`, `result["model_used"]` contains premium model alias. **Keywords**: `AsyncMock`, intent-first logic, premium model assertion
+- [X] T067 [US2] Write unit test `tests/unit/test_escalation_node.py::test_complaint_escalates_to_premium` — call `escalation_node` with `state["intent"]="COMPLAINT"`. Assert `result["escalation_flag"]=True`, `result["escalation_reason"]="intent_escalation"`, `result["model_used"]` contains premium model alias. **Keywords**: `AsyncMock`, intent-first logic, premium model assertion
 
-- [ ] T068 [US2] Write unit test `tests/unit/test_escalation_node.py::test_negotiation_escalates_to_premium` — same as T067 but with `intent="NEGOTIATION"`. Assert `escalate=True` and `reason="intent_escalation"` (not `"low_confidence"`). **Keywords**: SC-002 compliance, NEGOTIATION path
+- [X] T068 [US2] Write unit test `tests/unit/test_escalation_node.py::test_negotiation_escalates_to_premium` — same as T067 but with `intent="NEGOTIATION"`. Assert `escalate=True` and `reason="intent_escalation"` (not `"low_confidence"`). **Keywords**: SC-002 compliance, NEGOTIATION path
 
-- [ ] T069 [US2] Write unit test `tests/unit/test_escalation_node.py::test_info_query_no_escalation` — call `escalation_node` with `intent="INFO_QUERY"`. Assert `escalation_flag=False`, `reason="none"`, `model_used="economy-chat"`. **Keywords**: no-escalation path, economy model retained
+- [X] T069 [US2] Write unit test `tests/unit/test_escalation_node.py::test_info_query_no_escalation` — call `escalation_node` with `intent="INFO_QUERY"`. Assert `escalation_flag=False`, `reason="none"`, `model_used="economy-chat"`. **Keywords**: no-escalation path, economy model retained
 
-- [ ] T070 [US2] Write unit test `tests/unit/test_escalation_node.py::test_premium_model_unavailable_fallback` — mock premium model as unavailable. Assert fallback to economy model and state contains `escalation_failure` flag in trace metadata. **Keywords**: graceful fallback, `escalation_failure`, model unavailability
+- [X] T070 [US2] Write unit test `tests/unit/test_escalation_node.py::test_premium_model_unavailable_fallback` — mock premium model as unavailable. Assert fallback to economy model and state contains `escalation_failure` flag in trace metadata. **Keywords**: graceful fallback, `escalation_failure`, model unavailability
 
-- [ ] T071 [US2] Write integration test `tests/integration/test_agent_flow.py::test_complaint_escalation_flow` — build graph with `MemorySaver`, mock router returning `COMPLAINT`, verify final state has `model_used=premium_model`, `escalation_flag=True`, `escalation_reason="intent_escalation"`. **Keywords**: full flow, escalation integration, SC-002
+- [X] T071 [US2] Write integration test `tests/integration/test_agent_flow.py::test_complaint_escalation_flow` — build graph with `MemorySaver`, mock router returning `COMPLAINT`, verify final state has `model_used=premium_model`, `escalation_flag=True`, `escalation_reason="intent_escalation"`. **Keywords**: full flow, escalation integration, SC-002
 
-- [ ] T071b [US2] Write unit test `tests/unit/test_escalation_node.py::test_simple_pricing_no_escalation` — ensure Article XII compliance (prevent wasteful escalation). Call `escalation_node` with `intent="PRICING"` and high similarity_score=0.95. Assert `escalation_flag=False`, `model_used=None` (no premium), `reason="none"`. **Rationale**: PRICING queries with high confidence should use economy model; only COMPLAINT/NEGOTIATION force premium (Article XII — cost-aware routing). **Keywords**: negative escalation test, Article XII, no-escalation path, cost efficiency
+- [X] T071b [US2] Write unit test `tests/unit/test_escalation_node.py::test_simple_pricing_no_escalation` — ensure Article XII compliance (prevent wasteful escalation). Call `escalation_node` with `intent="PRICING"` and high similarity_score=0.95. Assert `escalation_flag=False`, `model_used=None` (no premium), `reason="none"`. **Rationale**: PRICING queries with high confidence should use economy model; only COMPLAINT/NEGOTIATION force premium (Article XII — cost-aware routing). **Keywords**: negative escalation test, Article XII, no-escalation path, cost efficiency
 
-- [ ] T072 [US2] Run `uv run pytest tests/unit/test_escalation_node.py tests/integration/test_agent_flow.py -v` — all must pass. **Keywords**: US2 verification checkpoint
+- [X] T072 [US2] Run `uv run pytest tests/unit/test_escalation_node.py tests/integration/test_agent_flow.py -v` — all must pass. **Keywords**: US2 verification checkpoint
 
 ---
 
@@ -448,19 +448,19 @@
 
 **Independent Test**: Submit query with no relevant data in DB — verify `response == DECLINE_MESSAGE`, `model_used=None`, `escalation_flag=False`, and response arrives in < 200ms.
 
-- [ ] T073 [US3] Add `test_confidence_node_layer2_guard_fires` to `tests/unit/test_confidence_node.py` — set `similarity_score=0.55`, `rerank_score=None`, `declined=False`. Assert confidence_node sets `declined=True`, `confidence_score=0.55` (below 0.70 threshold). This test should already pass from T047 implementation. **Keywords**: Layer 2 guard, threshold 0.70, SC-003
+- [X] T073 [US3] Add `test_confidence_node_layer2_guard_fires` to `tests/unit/test_confidence_node.py` — set `similarity_score=0.55`, `rerank_score=None`, `declined=False`. Assert confidence_node sets `declined=True`, `confidence_score=0.55` (below 0.70 threshold). This test should already pass from T047 implementation. **Keywords**: Layer 2 guard, threshold 0.70, SC-003
 
-- [ ] T074 [US3] Add `test_confidence_node_accepted` to `tests/unit/test_confidence_node.py` — set `similarity_score=0.85`, `rerank_score=None`, `declined=False`. Assert `declined=False`, `confidence_score=0.85`. **Keywords**: accepted path, threshold pass
+- [X] T074 [US3] Add `test_confidence_node_accepted` to `tests/unit/test_confidence_node.py` — set `similarity_score=0.85`, `rerank_score=None`, `declined=False`. Assert `declined=False`, `confidence_score=0.85`. **Keywords**: accepted path, threshold pass
 
-- [ ] T075 [US3] Add `test_answer_node_fallback_no_llm_call` to `tests/unit/` — mock `litellm.acompletion` with `AsyncMock`. Call `answer_node` with `declined=True`. Assert LLM was NOT called (`mock.assert_not_called()`), `response == DECLINE_MESSAGE`. **Note on `model_used`**: assert `state["model_used"] is None` (no model was invoked in this run) BUT verify `_write_model_trace` is called with `metadata_` containing `"intended_model"` key (FR-008: audit log must not hide escalation decisions even for declined runs). **Keywords**: SC-003 < 200ms (no LLM), `assert_not_called`, DECLINE_MESSAGE, `intended_model` in trace metadata
+- [X] T075 [US3] Add `test_answer_node_fallback_no_llm_call` to `tests/unit/` — mock `litellm.acompletion` with `AsyncMock`. Call `answer_node` with `declined=True`. Assert LLM was NOT called (`mock.assert_not_called()`), `response == DECLINE_MESSAGE`. **Note on `model_used`**: assert `state["model_used"] is None` (no model was invoked in this run) BUT verify `_write_model_trace` is called with `metadata_` containing `"intended_model"` key (FR-008: audit log must not hide escalation decisions even for declined runs). **Keywords**: SC-003 < 200ms (no LLM), `assert_not_called`, DECLINE_MESSAGE, `intended_model` in trace metadata
 
-- [ ] T076 [US3] Add `test_answer_node_fallback_state` to `tests/unit/` — verify `answer_node` with `declined=True` returns state update with `escalation_flag=False` (not changed to True). This guards against a bug where declined state could be confused with escalation. **Keywords**: state field isolation, declined vs escalation_flag
+- [X] T076 [US3] Add `test_answer_node_fallback_state` to `tests/unit/` — verify `answer_node` with `declined=True` returns state update with `escalation_flag=False` (not changed to True). This guards against a bug where declined state could be confused with escalation. **Keywords**: state field isolation, declined vs escalation_flag
 
-- [ ] T077 [US3] Write integration test `tests/integration/test_agent_flow.py::test_low_confidence_fallback` — mock `answer_with_rag` returning `similarity_score=0.50`, `declined=False` (passes Layer 1). Verify agent: passes retrieval → confidence_node sets `declined=True` (0.50 < 0.70) → routes to END without calling answer LLM. Assert `response == DECLINE_MESSAGE`, `model_used is None`. **Keywords**: dual-layer guard integration, Layer 1 pass + Layer 2 fail, expected behavior
+- [X] T077 [US3] Write integration test `tests/integration/test_agent_flow.py::test_low_confidence_fallback` — mock `answer_with_rag` returning `similarity_score=0.50`, `declined=False` (passes Layer 1). Verify agent: passes retrieval → confidence_node sets `declined=True` (0.50 < 0.70) → routes to END without calling answer LLM. Assert `response == DECLINE_MESSAGE`, `model_used is None`. **Keywords**: dual-layer guard integration, Layer 1 pass + Layer 2 fail, expected behavior
 
-- [ ] T078 [US3] Write integration test `tests/integration/test_agent_flow.py::test_layer1_declined_propagation` — mock `answer_with_rag` returning `declined=True` (Layer 1 fires, `similarity_score=0.40`). Verify confidence_node fast-path: `declined=True` propagated immediately, no fusion computed. Assert `response == DECLINE_MESSAGE`. **Keywords**: Layer 1 propagation, fast-path, data-model.md §4
+- [X] T078 [US3] Write integration test `tests/integration/test_agent_flow.py::test_layer1_declined_propagation` — mock `answer_with_rag` returning `declined=True` (Layer 1 fires, `similarity_score=0.40`). Verify confidence_node fast-path: `declined=True` propagated immediately, no fusion computed. Assert `response == DECLINE_MESSAGE`. **Keywords**: Layer 1 propagation, fast-path, data-model.md §4
 
-- [ ] T079 [US3] Add performance assertion to `test_low_confidence_fallback`: measure wall time of graph execution, assert `< 0.2s` (SC-003). Use `time.perf_counter()` or `pytest-benchmark`. **Keywords**: `time.perf_counter`, SC-003, 200ms budget, no-LLM path
+- [X] T079 [US3] Add performance assertion to `test_low_confidence_fallback`: measure wall time of graph execution, assert `< 0.2s` (SC-003). Use `time.perf_counter()` or `pytest-benchmark`. **Keywords**: `time.perf_counter`, SC-003, 200ms budget, no-LLM path
 
 ---
 
@@ -470,7 +470,7 @@
 
 **Independent Test**: `uv run python cli/run_agent.py --stream "Còn hàng không?"` — verify ≥ 4 distinct event types emitted (router, retrieval/escalation, confidence, answer) before final response.
 
-- [ ] T080 [US4] Define `NodeStreamEvent` Pydantic model in `core/agent/state.py`: `node_name: str`, `state_snapshot: dict`, `timestamp: str` (ISO format). This is the structured event format per FR-006. **Boilerplate**:
+- [X] T080 [US4] Define `NodeStreamEvent` Pydantic model in `core/agent/state.py`: `node_name: str`, `state_snapshot: dict`, `timestamp: str` (ISO format). This is the structured event format per FR-006. **Boilerplate**:
   ```python
   from datetime import datetime, timezone
   class NodeStreamEvent(BaseModel):
@@ -479,7 +479,7 @@
       timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
   ```
 
-- [ ] T081 [US4] Add `astream_agent(message: str, session_id: str, db, checkpointer) -> AsyncGenerator[NodeStreamEvent, None]` function to `core/agent/graph.py`. Uses `graph.astream_events(input, config, version="v2")`. Filter for `"on_chain_end"` events. Extract **delta** from `event["data"]["output"]` (not the raw `event["data"]` which may contain the full accumulated state) — per FR-006, `state_snapshot` MUST be a delta (only fields changed by that node). **Boilerplate**:
+- [X] T081 [US4] Add `astream_agent(message: str, session_id: str, db, checkpointer) -> AsyncGenerator[NodeStreamEvent, None]` function to `core/agent/graph.py`. Uses `graph.astream_events(input, config, version="v2")`. Filter for `"on_chain_end"` events. Extract **delta** from `event["data"]["output"]` (not the raw `event["data"]` which may contain the full accumulated state) — per FR-006, `state_snapshot` MUST be a delta (only fields changed by that node). **Boilerplate**:
   ```python
   async def astream_agent(message, session_id, db, checkpointer):
       graph = build_graph(checkpointer=checkpointer)
@@ -492,7 +492,7 @@
   ```
   **Keywords**: `astream_events`, `version="v2"`, `on_chain_end`, delta extraction, `event["data"]["output"]`, FR-006
 
-- [ ] T082 [US4] Update `cli/run_agent.py` to handle `--stream` flag. When `--stream` is set, call `astream_agent()` and print each `NodeStreamEvent` as: `[{node_name}] {key summary from state_snapshot}`. **Boilerplate**:
+- [X] T082 [US4] Update `cli/run_agent.py` to handle `--stream` flag. When `--stream` is set, call `astream_agent()` and print each `NodeStreamEvent` as: `[{node_name}] {key summary from state_snapshot}`. **Boilerplate**:
   ```python
   if stream:
       async for event in astream_agent(message, session, db, MemorySaver()):
@@ -500,11 +500,11 @@
   ```
   **Keywords**: streaming CLI output, `AsyncGenerator`, `--stream` argparse flag
 
-- [ ] T083 [US4] Write integration test `tests/integration/test_agent_flow.py::test_streaming_emits_events` — run `astream_agent` with mock LLM, collect all `NodeStreamEvent` instances into a list. Assert `len(events) >= 4`. Assert at minimum one event each for: `router_node`, and one of `retrieval_node`/`escalation_node`, `answer_node`. **Keywords**: streaming event collection, SC-004, execution replay
+- [X] T083 [US4] Write integration test `tests/integration/test_agent_flow.py::test_streaming_emits_events` — run `astream_agent` with mock LLM, collect all `NodeStreamEvent` instances into a list. Assert `len(events) >= 4`. Assert at minimum one event each for: `router_node`, and one of `retrieval_node`/`escalation_node`, `answer_node`. **Keywords**: streaming event collection, SC-004, execution replay
 
-- [ ] T084 [US4] Write integration test `tests/integration/test_agent_flow.py::test_streaming_events_have_required_fields` — verify each `NodeStreamEvent` has non-empty `node_name`, non-null `state_snapshot`, and valid ISO `timestamp`. **Keywords**: `NodeStreamEvent`, FR-006 validation, Pydantic parse
+- [X] T084 [US4] Write integration test `tests/integration/test_agent_flow.py::test_streaming_events_have_required_fields` — verify each `NodeStreamEvent` has non-empty `node_name`, non-null `state_snapshot`, and valid ISO `timestamp`. **Keywords**: `NodeStreamEvent`, FR-006 validation, Pydantic parse
 
-- [ ] T085 [US4] Write integration test `tests/integration/test_agent_flow.py::test_streaming_execution_replay` — verify that collected events, when sorted by timestamp, reconstruct the agent execution path in the correct order (router → retrieval/escalation → confidence → answer). **Keywords**: SC-004, execution replay from events
+- [X] T085 [US4] Write integration test `tests/integration/test_agent_flow.py::test_streaming_execution_replay` — verify that collected events, when sorted by timestamp, reconstruct the agent execution path in the correct order (router → retrieval/escalation → confidence → answer). **Keywords**: SC-004, execution replay from events
 
 ---
 

@@ -9,11 +9,7 @@ applies thresholds, and routes to escalation_node or answer_node.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from core.agent.state import AgentState
-
+from core.agent.state import AgentState  # noqa: TC001 (required for LangGraph type resolution)
 from core.config import settings
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -93,11 +89,7 @@ def _route_after_confidence(state: AgentState) -> str:
     # Priority 1: INFO_QUERY borderline escalation
     # Only escalate if: (1) intent is INFO_QUERY, (2) not already declined by Layer 1,
     # (3) similarity is borderline (below Layer 2 threshold)
-    if (
-        intent == "INFO_QUERY"
-        and not already_declined
-        and similarity < confidence_threshold
-    ):
+    if intent == "INFO_QUERY" and not already_declined and similarity < confidence_threshold:
         return "escalation_node"
 
     # Default: route to answer_node (handles both accepted and declined paths)

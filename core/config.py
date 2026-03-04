@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     AGENT_MAX_TURNS: int = 5
     AGENT_CONFIDENCE_THRESHOLD: float = 0.70  # Agent response threshold (must be > L1)
     AGENT_ALPHA: float = 0.7
+    # Escalation model alias (used by escalation_node for COMPLAINT/NEGOTIATION)
+    PREMIUM_MODEL: str = "premium-chat"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

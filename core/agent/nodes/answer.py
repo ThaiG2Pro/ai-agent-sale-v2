@@ -34,7 +34,16 @@ async def answer_node(state: AgentState) -> dict:
     """
     # Path 1: Declined (Layer 1 or Layer 2 guard) → return without LLM
     if state.get("declined", False):
-        _write_model_trace(state, metadata_={"guard_decision": "REJECTED"})
+        _write_model_trace(
+            state,
+            metadata_={
+                "guard_decision": "REJECTED",
+                "escalation_reason": state.get("escalation_reason"),
+                "escalation_failure": state.get("escalation_failure", False),
+                "escalation_flag": state.get("escalation_flag", False),
+                "intended_model": state.get("model_used"),
+            },
+        )
         return {
             "response": DECLINE_MESSAGE,
             "model_used": None,

@@ -146,3 +146,34 @@ def test_route_after_confidence_info_query_high_confidence():
     route = _route_after_confidence(state)
 
     assert route == "answer_node"  # Not borderline, proceed normally
+
+
+# Phase 6 tests (T073-T074)
+
+
+@pytest.mark.asyncio
+async def test_confidence_node_layer2_guard_fires():
+    """T073: Layer 2 guard fires for similarity=0.55 (below 0.70 threshold)."""
+    state = make_initial_state("Test query", "session-009")
+    state["similarity_score"] = 0.55
+    state["rerank_score"] = None
+    state["declined"] = False
+
+    result = await confidence_node(state)
+
+    assert result["declined"] is True
+    assert abs(result["confidence_score"] - 0.55) < 0.01
+
+
+@pytest.mark.asyncio
+async def test_confidence_node_accepted():
+    """T074: similarity=0.85 → accepted (above 0.70 threshold)."""
+    state = make_initial_state("Test query", "session-010")
+    state["similarity_score"] = 0.85
+    state["rerank_score"] = None
+    state["declined"] = False
+
+    result = await confidence_node(state)
+
+    assert result["declined"] is False
+    assert abs(result["confidence_score"] - 0.85) < 0.01

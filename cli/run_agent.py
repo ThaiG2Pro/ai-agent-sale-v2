@@ -11,35 +11,51 @@ Article I exemption: CLI tool, offline use only, no parser.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
+import json
 import sys
 
 from langgraph.checkpoint.memory import MemorySaver
 
-from core.agent.graph import build_graph
+from core.agent.graph import astream_agent, build_graph
 from core.agent.state import make_initial_state
 
 
 async def main(message: str, stream: bool = False, session: str = "debug-session"):
-    """Run agent with user message (T053).
+    """Run agent with user message (T053, T082).
 
     Args:
         message: User query
-        stream: Whether to stream node outputs (future)
+        stream: Whether to stream per-node events (T082)
         session: Session ID for checkpointer
     """
-    # Build graph with in-memory checkpointer
+    if stream:
+        # T082: Streaming mode — print each NodeStreamEvent
+        print(f"\n[STREAM] Processing: {message!r}")
+        print("-" * 60)
+        try:
+            async for event in astream_agent(message, session, checkpointer=MemorySaver()):
+                summary = json.dumps(event.state_snapshot, default=str)[:120]
+                print(f"[{event.node_name}] {summary}")
+        except Exception as e:
+            print(f"\n[ERROR] Stream failed: {e}", file=sys.stderr)
+            if "--debug" in sys.argv:
+                import traceback
+
+                traceback.print_exc()
+            sys.exit(1)
+        print("-" * 60)
+        return
+
+    # Non-streaming mode: invoke and print final result
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": session}}
-
-    # Create initial state
     initial_state = make_initial_state(message, session_id=session)
 
-    # Invoke graph
     try:
         final_state = await graph.ainvoke(initial_state, config=config)
 
-        # Print results
         print("\n" + "=" * 60)
         print("AGENT OUTPUT")
         print("=" * 60)
@@ -67,21 +83,11 @@ async def main(message: str, stream: bool = False, session: str = "debug-session
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(
-            "Usage: python cli/run_agent.py <message> [--stream] [--session SESSION]",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Debug CLI for LangGraph agent")
+    parser.add_argument("message", help="User message to process")
+    parser.add_argument("--stream", action="store_true", help="Stream per-node events")
+    parser.add_argument("--session", default="debug-session", help="Session ID")
+    parser.add_argument("--debug", action="store_true", help="Print full tracebacks")
+    args = parser.parse_args()
 
-    message = sys.argv[1]
-    stream = "--stream" in sys.argv
-    session = "debug-session"
-
-    # Parse --session argument
-    for i, arg in enumerate(sys.argv):
-        if arg == "--session" and i + 1 < len(sys.argv):
-            session = sys.argv[i + 1]
-            break
-
-    asyncio.run(main(message, stream=stream, session=session))
+    asyncio.run(main(args.message, stream=args.stream, session=args.session))
