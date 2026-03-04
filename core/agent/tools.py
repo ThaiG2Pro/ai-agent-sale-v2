@@ -7,7 +7,13 @@ DB session injected via factory closure pattern (see data-model.md §7).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class RAGSearchInput(BaseModel):
@@ -47,17 +53,33 @@ class RAGSearchOutput(BaseModel):
 
     @classmethod
     def from_rag_result(cls, rag_result: dict) -> RAGSearchOutput:
-        """Bridge from Week 2 RAGResult to Week 3 tool output."""
+        """Bridge from Week 2 RAGResult to Week 3 tool output.
+
+        Maps Week 2 fields to Week 3 schema:
+        - best_similarity → similarity_score
+        - best_similarity → confidence_score (same value in Phase 4)
+        - chunks_after_compression → chunks_used
+        """
+        citations_list = rag_result.get("citations", [])
+        # Ensure citations have source_text field
+        citations_with_text = []
+        for citation in citations_list:
+            if isinstance(citation, dict):
+                # If missing source_text, use name as fallback
+                if "source_text" not in citation:
+                    citation = {**citation, "source_text": citation.get("name", "")}
+                citations_with_text.append(citation)
+
         return cls(
             answer=rag_result.get("answer", ""),
             declined=rag_result.get("declined", False),
-            citations=[
-                CitationItem(**citation) for citation in rag_result.get("citations", [])
-            ],
-            similarity_score=rag_result.get("similarity_score", 0.0),
-            confidence_score=rag_result.get("confidence_score", 0.0),
+            citations=[CitationItem(**c) for c in citations_with_text],
+            similarity_score=rag_result.get("best_similarity", 0.0),
+            confidence_score=rag_result.get(
+                "best_similarity", 0.0
+            ),  # Phase 4: same as similarity
             model_used=rag_result.get("model_used", ""),
-            chunks_used=rag_result.get("chunks_used", 0),
+            chunks_used=rag_result.get("chunks_after_compression", 0),
         )
 
 
@@ -80,3 +102,52 @@ class InventoryLookupOutput(BaseModel):
     error: str | None = None
 
     model_config = ConfigDict(strict=True)
+
+
+# ── Tool Factories ────────────────────────────────────────────────────────
+
+
+def make_rag_tool(db: AsyncSession):
+    """Factory for RAG search tool with DB session closure.
+
+    Wraps Week 2 answer_with_rag() pipeline and bridges RAGResult → RAGSearchOutput.
+    Called by graph.py during initialization.
+    """
+    from services.rag import answer_with_rag
+
+    @tool
+    async def rag_search(input: RAGSearchInput) -> RAGSearchOutput:
+        """Search product knowledge base and return cited answer.
+
+        Args:
+            input: RAGSearchInput with query, session_id, model
+
+        Returns:
+            RAGSearchOutput with answer, citations, and confidence scores
+        """
+        result = await answer_with_rag(db, input.query, input.model)
+        return RAGSearchOutput.from_rag_result(result)
+
+    return rag_search
+
+
+@tool
+async def inventory_lookup(input: InventoryLookupInput) -> InventoryLookupOutput:
+    """Look up product stock levels (Week 3 stub).
+
+    Args:
+        input: InventoryLookupInput with SKU and optional warehouse
+
+    Returns:
+        InventoryLookupOutput with stock level and availability
+
+    Note:
+        Real ERP integration deferred to Week 6.
+    """
+    return InventoryLookupOutput(
+        sku=input.sku,
+        stock_level=99,
+        warehouse_id=input.warehouse_id,
+        available=True,
+        error=None,
+    )

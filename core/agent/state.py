@@ -109,3 +109,31 @@ class AgentState(TypedDict):
     response: str | None
     declined: bool
     error: str | None
+
+
+def make_initial_state(user_message: str, session_id: str) -> AgentState:
+    """Factory for creating initial AgentState with safe defaults (T054).
+
+    All boolean flags MUST be explicitly False (not None or falsy).
+    Ensures no undefined state fields reach the graph.
+    """
+    return {
+        "session_id": session_id,
+        "user_message": user_message,
+        "messages": [],
+        "intent": None,
+        "secondary_intents": [],
+        "intent_confidence": 0.0,
+        "retrieved_chunks": [],
+        "citations": [],
+        "similarity_score": 0.0,
+        "rerank_score": None,
+        "confidence_score": 0.0,
+        "model_used": None,
+        "escalation_flag": False,  # explicit False (FR-007)
+        "escalation_reason": None,
+        "escalation_failure": False,  # explicit False (FR-007)
+        "response": None,
+        "declined": False,  # explicit False (SC-001)
+        "error": None,
+    }

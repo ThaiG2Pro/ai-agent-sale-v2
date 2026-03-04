@@ -5,6 +5,7 @@ from core.agent.state import (
     EscalationReasonEnum,
     IntentClassification,
     IntentEnum,
+    make_initial_state,
 )
 
 
@@ -65,3 +66,75 @@ def test_intent_classification_has_escalation_intent():
         reasoning="Simple info query",
     )
     assert ic3.has_escalation_intent() is False
+
+
+def test_agent_state_fields_complete():
+    """Verify AgentState TypedDict has all required fields from FR-001 (T055)."""
+    required_fields = {
+        "session_id",
+        "user_message",
+        "messages",
+        "intent",
+        "secondary_intents",
+        "intent_confidence",
+        "retrieved_chunks",
+        "citations",
+        "similarity_score",
+        "rerank_score",
+        "confidence_score",
+        "model_used",
+        "escalation_flag",
+        "escalation_reason",
+        "escalation_failure",
+        "response",
+        "declined",
+        "error",
+    }
+    actual_fields = set(AgentState.__annotations__.keys())
+    assert required_fields == actual_fields, (
+        f"Missing or extra fields: {required_fields ^ actual_fields}"
+    )
+
+
+def test_intent_enum_serialization():
+    """Verify IntentEnum values serialize correctly to string (T056)."""
+    # StrEnum serializes directly to value (not full repr)
+    assert str(IntentEnum.INFO_QUERY) == "INFO_QUERY"
+    assert IntentEnum.INFO_QUERY.value == "INFO_QUERY"
+
+    # All enum values must be valid
+    for intent in IntentEnum:
+        assert isinstance(intent.value, str)
+        assert len(intent.value) > 0
+
+
+def test_make_initial_state():
+    """Verify make_initial_state() factory creates valid initial state (T054)."""
+    state = make_initial_state("Test query", "test-session-123")
+
+    # Check type
+    assert isinstance(state, dict)
+
+    # Check all required fields exist
+    assert state["session_id"] == "test-session-123"
+    assert state["user_message"] == "Test query"
+    assert state["messages"] == []
+
+    # Check bool flags are explicitly False (not None)
+    assert state["escalation_flag"] is False
+    assert state["escalation_failure"] is False
+    assert state["declined"] is False
+    assert isinstance(state["escalation_flag"], bool)
+    assert isinstance(state["escalation_failure"], bool)
+    assert isinstance(state["declined"], bool)
+
+    # Check numeric defaults
+    assert state["intent_confidence"] == 0.0
+    assert state["similarity_score"] == 0.0
+    assert state["confidence_score"] == 0.0
+
+    # Check optional fields
+    assert state["intent"] is None
+    assert state["rerank_score"] is None
+    assert state["model_used"] is None
+    assert state["response"] is None
