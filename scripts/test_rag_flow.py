@@ -87,10 +87,7 @@ async def verify_db_state(db) -> bool:
     console.print(f"  Embeddings: [bold]{n_embeddings}[/bold]")
 
     if n_products == 0:
-        _fail(
-            "No products found -- run: "
-            "uv run python scripts/ingest_catalog.py ingest --limit 1"
-        )
+        _fail("No products found -- run: uv run python scripts/ingest_catalog.py ingest --limit 1")
         return False
     if n_embeddings == 0:
         _fail("No embeddings found — product ingested without embedding?")
@@ -221,9 +218,7 @@ async def main() -> None:
         if all_pass:
             console.print("\n[bold green]✓ RAG flow working correctly[/bold green]")
         else:
-            console.print(
-                "\n[bold yellow]Some checks failed - review issues above[/bold yellow]"
-            )
+            console.print("\n[bold yellow]Some checks failed - review issues above[/bold yellow]")
             all_issues = [i for r in results for i in r["issues"]]
             for issue in all_issues:
                 console.print(f"  [red]•[/red] {issue}")

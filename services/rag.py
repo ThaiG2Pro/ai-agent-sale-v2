@@ -190,8 +190,7 @@ def compress_context(
     for candidate in step2_sorted:
         ctext = (candidate.get("description") or "").strip()
         is_dup = any(
-            _overlap_ratio(ctext, (kept.get("description") or "").strip())
-            > overlap_threshold
+            _overlap_ratio(ctext, (kept.get("description") or "").strip()) > overlap_threshold
             for kept in step3
         )
         if not is_dup:
@@ -263,13 +262,9 @@ async def hybrid_search_rrf(
         LIMIT :lim
     """)
     try:
-        fts_rows = (
-            await db.execute(fts_sql, {"qtext": query_text, "lim": fetch_k})
-        ).all()
+        fts_rows = (await db.execute(fts_sql, {"qtext": query_text, "lim": fetch_k})).all()
     except Exception as exc:
-        logfire.warn(
-            "FTS search failed, falling back to vector-only: {err}", err=str(exc)
-        )
+        logfire.warn("FTS search failed, falling back to vector-only: {err}", err=str(exc))
         fts_rows = []
 
     # ── RRF merge ─────────────────────────────────────────────────────────────
@@ -492,9 +487,7 @@ async def answer_with_rag(
     context_parts: list[str] = []
     citations: list[dict[str, Any]] = []
     for chunk in compressed:
-        context_parts.append(
-            f"[{chunk['sku']}] {chunk['name']}:\n{chunk['description']}"
-        )
+        context_parts.append(f"[{chunk['sku']}] {chunk['name']}:\n{chunk['description']}")
         citations.append(
             {
                 "product_id": chunk["id"],
@@ -576,9 +569,7 @@ async def ingest_product_text(
     await db.flush()
 
     logfire.info("Generating embedding for product: {sku}", sku=sku)
-    embeddings = await AIGateway.embed(
-        input_text=description, model="economy-embedding"
-    )
+    embeddings = await AIGateway.embed(input_text=description, model="economy-embedding")
     vector = embeddings[0]
 
     # Keyword extraction (T017b)
@@ -602,9 +593,7 @@ async def ingest_product_text(
     return product.id
 
 
-async def search_products(
-    db: AsyncSession, query: str, top_k: int = 5
-) -> list[dict[str, Any]]:
+async def search_products(db: AsyncSession, query: str, top_k: int = 5) -> list[dict[str, Any]]:
     """
     Why this exists: Semantic retrieval for the AI agent and backward compatibility.
     What it does: Embeds the query and searches pgvector. Returns normalised score dict.

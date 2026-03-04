@@ -69,9 +69,7 @@ def upgrade() -> None:
         sa.Column("query_hash", sa.String(length=64), nullable=False),
         sa.Column("query_text", sa.Text(), nullable=False),
         sa.Column("response", sa.Text(), nullable=False),
-        sa.Column(
-            "embedding", pgvector.sqlalchemy.vector.VECTOR(dim=1024), nullable=False
-        ),
+        sa.Column("embedding", pgvector.sqlalchemy.vector.VECTOR(dim=1024), nullable=False),
         sa.Column("model_name", sa.String(length=100), nullable=False),
         sa.Column("similarity_score", sa.Float(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -95,9 +93,7 @@ def upgrade() -> None:
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("token_count", sa.Integer(), nullable=True),
         sa.Column("model_name", sa.String(length=100), nullable=True),
-        sa.Column(
-            "source_chunk_ids", postgresql.JSONB(astext_type=sa.Text()), nullable=True
-        ),
+        sa.Column("source_chunk_ids", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(
@@ -112,9 +108,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("source_id", sa.UUID(), nullable=False),
         sa.Column("source_type", sa.String(length=50), nullable=False),
-        sa.Column(
-            "embedding", pgvector.sqlalchemy.vector.VECTOR(dim=1024), nullable=False
-        ),
+        sa.Column("embedding", pgvector.sqlalchemy.vector.VECTOR(dim=1024), nullable=False),
         sa.Column("model_name", sa.String(length=100), nullable=False),
         sa.Column("model_version", sa.String(length=50), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -157,9 +151,7 @@ def downgrade() -> None:
         postgresql_ops={"embedding": "vector_cosine_ops"},
     )
     op.drop_table("semantic_cache", schema="agent_v1")
-    op.drop_index(
-        op.f("ix_agent_v1_products_sku"), table_name="products", schema="agent_v1"
-    )
+    op.drop_index(op.f("ix_agent_v1_products_sku"), table_name="products", schema="agent_v1")
     op.drop_table("products", schema="agent_v1")
     op.drop_index(
         op.f("ix_agent_v1_conversation_sessions_external_id"),

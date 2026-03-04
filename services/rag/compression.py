@@ -50,8 +50,7 @@ def compress_context(
     for candidate in step2_sorted:
         ctext = (candidate.get("description") or "").strip()
         is_dup = any(
-            _overlap_ratio(ctext, (kept.get("description") or "").strip())
-            > overlap_threshold
+            _overlap_ratio(ctext, (kept.get("description") or "").strip()) > overlap_threshold
             for kept in step3
         )
         if not is_dup:

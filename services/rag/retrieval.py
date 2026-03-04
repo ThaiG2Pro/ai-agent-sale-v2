@@ -91,9 +91,7 @@ async def hybrid_search_rrf(
         logfire.warn("FTS search timed out (complex query)")
         fts_rows = []
     except Exception as exc:
-        logfire.warn(
-            "FTS search failed, falling back to vector-only: {err}", err=str(exc)
-        )
+        logfire.warn("FTS search failed, falling back to vector-only: {err}", err=str(exc))
         fts_rows = []
 
     # ── RRF merge ─────────────────────────────────────────────────────────────

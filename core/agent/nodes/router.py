@@ -32,9 +32,7 @@ async def router_node(state: AgentState) -> Command:
         messages=[{"role": "user", "content": state["user_message"]}],
         response_format=IntentClassification,
     )
-    classification = IntentClassification.model_validate_json(
-        result.choices[0].message.content
-    )
+    classification = IntentClassification.model_validate_json(result.choices[0].message.content)
     next_node = _get_next_node(classification.primary_intent)
     return Command(
         goto=next_node,
@@ -60,8 +58,7 @@ def _get_next_node(primary_intent: IntentEnum) -> str:
 
     if primary_intent in escalation_intents:
         return "escalation_node"
-    elif primary_intent in answer_intents:
+    if primary_intent in answer_intents:
         return "answer_node"
-    else:
-        # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY, unknown
-        return "retrieval_node"
+    # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY, unknown
+    return "retrieval_node"

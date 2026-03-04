@@ -32,9 +32,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("session_id", sa.UUID(), nullable=False),
         sa.Column("signal_type", sa.String(length=50), nullable=False),
-        sa.Column(
-            "signal_value", postgresql.JSONB(astext_type=sa.Text()), nullable=False
-        ),
+        sa.Column("signal_value", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("confidence", sa.Float(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(

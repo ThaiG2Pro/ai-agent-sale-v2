@@ -20,9 +20,7 @@ async def test_router_node_info_query():
     Verify Command.goto == "retrieval_node" and state update.
     """
     # Create initial state
-    initial_state = make_initial_state(
-        "Giá sản phẩm X là bao nhiêu?", "test-session-001"
-    )
+    initial_state = make_initial_state("Giá sản phẩm X là bao nhiêu?", "test-session-001")
 
     # Mock litellm.acompletion
     with patch("litellm.acompletion") as mock_completion:

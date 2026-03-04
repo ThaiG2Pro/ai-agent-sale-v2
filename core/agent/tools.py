@@ -75,9 +75,7 @@ class RAGSearchOutput(BaseModel):
             declined=rag_result.get("declined", False),
             citations=[CitationItem(**c) for c in citations_with_text],
             similarity_score=rag_result.get("best_similarity", 0.0),
-            confidence_score=rag_result.get(
-                "best_similarity", 0.0
-            ),  # Phase 4: same as similarity
+            confidence_score=rag_result.get("best_similarity", 0.0),  # Phase 4: same as similarity
             model_used=rag_result.get("model_used", ""),
             chunks_used=rag_result.get("chunks_after_compression", 0),
         )

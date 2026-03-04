@@ -185,9 +185,7 @@ async def test_confidence_guard_declines_low_similarity(db_session: AsyncSession
 
 
 @pytest.mark.asyncio
-async def test_compression_to_empty_triggers_decline(
-    db_session: AsyncSession, monkeypatch
-):
+async def test_compression_to_empty_triggers_decline(db_session: AsyncSession, monkeypatch):
     """Ensures that when compression yields no chunks, the pipeline declines.
     Approach: mock hybrid_search_rrf to return empty list.
     """

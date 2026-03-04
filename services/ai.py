@@ -26,13 +26,9 @@ class NormalizedQuery(BaseModel):
     """
 
     canonical: str = Field(
-        description=(
-            "The cleaned, canonical form of the user query in its original language."
-        )
+        description=("The cleaned, canonical form of the user query in its original language.")
     )
-    detected_language: str = Field(
-        description="Detected language code, e.g. 'vi' or 'en'."
-    )
+    detected_language: str = Field(description="Detected language code, e.g. 'vi' or 'en'.")
     intent: str = Field(
         description=(
             "Primary intent: INFO_QUERY | PRICING | COMPARISON | "
@@ -40,9 +36,7 @@ class NormalizedQuery(BaseModel):
         )
     )
     extracted_keywords: list[str] = Field(
-        description=(
-            "Up to 10 meaningful keywords extracted from the query for FTS enrichment."
-        )
+        description=("Up to 10 meaningful keywords extracted from the query for FTS enrichment.")
     )
     is_valid: bool = Field(
         default=True,
@@ -68,9 +62,7 @@ class KeywordExtraction(BaseModel):
         max_length=10,
         description="3-10 keywords for hybrid search (FTS + vector)",
     )
-    rationale: str = Field(
-        description="Brief explanation of why these keywords were chosen"
-    )
+    rationale: str = Field(description="Brief explanation of why these keywords were chosen")
 
 
 class ProductMetadata(BaseModel):
@@ -196,9 +188,7 @@ class AIGateway:
 
         try:
             logfire.info("AI Embedding started: {model}", model=model)
-            response = await ai_router.aembedding(
-                model=model, input=input_text, **kwargs
-            )
+            response = await ai_router.aembedding(model=model, input=input_text, **kwargs)
 
             latency = time.perf_counter() - start_time
             logfire.info(
@@ -253,9 +243,7 @@ class AIGateway:
         # ── Heuristic pre-check (zero-cost, sub-ms) ───────────────────────────
         stripped = query.strip()
         if len(stripped) < 3 or stripped.replace(" ", "").isdigit():
-            logfire.info(
-                "normalize_query: rejected by heuristic (too short / digit-only)"
-            )
+            logfire.info("normalize_query: rejected by heuristic (too short / digit-only)")
             return NormalizedQuery(
                 canonical=stripped,
                 detected_language="unknown",

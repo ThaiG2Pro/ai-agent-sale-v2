@@ -52,8 +52,7 @@ async def test_hybrid_search_rrf_returns_ranked_results(db_session):
     assert isinstance(results, list)
     assert len(results) > 0
     assert all(
-        all(k in r for k in ("chunk_id", "id", "rrf_score", "vector_score"))
-        for r in results
+        all(k in r for k in ("chunk_id", "id", "rrf_score", "vector_score")) for r in results
     )
 
     rrf_scores = [r["rrf_score"] for r in results]

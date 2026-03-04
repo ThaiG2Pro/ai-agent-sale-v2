@@ -16,9 +16,7 @@ from models.schema import Product, TextEmbedding
 from services.database import get_db
 from services.rag import ingest_product_text, search_products
 
-router = APIRouter(
-    prefix="/admin/rag", tags=["admin"], dependencies=[Depends(verify_admin_key)]
-)
+router = APIRouter(prefix="/admin/rag", tags=["admin"], dependencies=[Depends(verify_admin_key)])
 
 
 class IngestRequest(BaseModel):
@@ -53,9 +51,7 @@ class StatsResponse(BaseModel):
 
 
 @router.post("/ingest", status_code=status.HTTP_201_CREATED)
-async def admin_ingest(
-    request: IngestRequest, db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def admin_ingest(request: IngestRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     """Why this exists: Allows manual ingestion of product data via API."""
     product_id = await ingest_product_text(
         db=db,
@@ -69,9 +65,7 @@ async def admin_ingest(
 
 
 @router.post("/search")
-async def admin_search(
-    request: SearchRequest, db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def admin_search(request: SearchRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     """Why this exists: Debugging tool to test vector search results."""
     results = await search_products(db=db, query=request.query, top_k=request.top_k)
     return results

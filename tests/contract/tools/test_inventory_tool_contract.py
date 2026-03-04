@@ -165,9 +165,7 @@ class TestInventoryToolContract:
             available=False,
             error="Request timeout (429 rate limit)",
         )
-        assert (
-            "timeout" in timeout_output.error.lower() or "429" in timeout_output.error
-        )
+        assert "timeout" in timeout_output.error.lower() or "429" in timeout_output.error
 
         # Server error
         server_output = InventoryLookupOutput(

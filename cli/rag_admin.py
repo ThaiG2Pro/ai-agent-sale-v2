@@ -127,8 +127,7 @@ async def _ingest_api(
         }
         console.print(f"[cyan]📡 Calling:[/cyan] {api_url}/admin/rag/ingest...")
         console.print(
-            "[dim]  (ingest includes LLM enrichment — "
-            "may take 2-3 min with Ollama)[/dim]"
+            "[dim]  (ingest includes LLM enrichment — may take 2-3 min with Ollama)[/dim]"
         )
         result = await call_api("ingest", payload, api_url, request_timeout=300.0)
 
@@ -156,15 +155,11 @@ async def ingest(
     sku: str = typer.Option(..., help="Product SKU (unique identifier)"),
     description: str = typer.Option(..., help="Product description for embedding"),
     price: float = typer.Option(0.0, help="Product price"),
-    metadata: str | None = typer.Option(
-        None, help="JSON string of metadata for debugging RAG"
-    ),
+    metadata: str | None = typer.Option(None, help="JSON string of metadata for debugging RAG"),
     local: bool = typer.Option(
         False, "--local", help="Run directly against database (offline mode)"
     ),
-    api_url: str = typer.Option(
-        "http://localhost:8000", help="Web API URL for non-local mode"
-    ),
+    api_url: str = typer.Option("http://localhost:8000", help="Web API URL for non-local mode"),
 ):
     """Ingest a product into the RAG system.
 
@@ -189,9 +184,7 @@ async def ingest(
         if local:
             success = await _ingest_local(name, sku, description, price, meta_dict)
         else:
-            success = await _ingest_api(
-                name, sku, description, price, meta_dict, api_url
-            )
+            success = await _ingest_api(name, sku, description, price, meta_dict, api_url)
 
         sys.exit(0 if success else 1)
     except Exception as e:
@@ -203,15 +196,11 @@ async def ingest(
 @async_command
 async def search(
     query: str = typer.Argument(..., help="Search query string"),
-    top_k: int = typer.Option(
-        5, "--top-k", help="Number of results to return (default: 5)"
-    ),
+    top_k: int = typer.Option(5, "--top-k", help="Number of results to return (default: 5)"),
     local: bool = typer.Option(
         False, "--local", help="Run directly against database (offline mode)"
     ),
-    api_url: str = typer.Option(
-        "http://localhost:8000", help="Web API URL for non-local mode"
-    ),
+    api_url: str = typer.Option("http://localhost:8000", help="Web API URL for non-local mode"),
 ):
     """Search for products using semantic similarity.
 
@@ -229,10 +218,7 @@ async def search(
                 _display_search_results(results, metadata={"mode": "api"})
                 return
             except Exception as e:
-                msg = (
-                    f"✗ API Search failed: {e}\n"
-                    "💡 Hint: If server is not running, use --local"
-                )
+                msg = f"✗ API Search failed: {e}\n💡 Hint: If server is not running, use --local"
                 console.print(msg, style="bold red")
                 sys.exit(1)
 
@@ -306,9 +292,7 @@ async def query(
     local: bool = typer.Option(
         False, "--local", help="Run directly against database (offline mode)"
     ),
-    api_url: str = typer.Option(
-        "http://localhost:8000", help="Web API URL for non-local mode"
-    ),
+    api_url: str = typer.Option("http://localhost:8000", help="Web API URL for non-local mode"),
 ):
     """Ask the RAG pipeline a question using semantic search + LLM.
 
@@ -320,16 +304,10 @@ async def query(
     if not local:
         try:
             payload = {"query": question, "model": model}
-            console.print(
-                f"[cyan]📡 Calling:[/cyan] {api_url}/query (model: {model})..."
-            )
-            console.print(
-                "[dim]  (first query may take 60-120s while Ollama loads model)[/dim]"
-            )
+            console.print(f"[cyan]📡 Calling:[/cyan] {api_url}/query (model: {model})...")
+            console.print("[dim]  (first query may take 60-120s while Ollama loads model)[/dim]")
             async with httpx.AsyncClient(timeout=180.0) as client:
-                response = await client.post(
-                    f"{api_url.rstrip('/')}/query", json=payload
-                )
+                response = await client.post(f"{api_url.rstrip('/')}/query", json=payload)
                 response.raise_for_status()
                 result = response.json()
 
@@ -340,9 +318,7 @@ async def query(
 
             console.print(f"[red]✗ API Query failed: {type(e).__name__}: {e}[/red]")
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
-            console.print(
-                "[yellow]💡 Hint: If server is not running, use --local[/yellow]"
-            )
+            console.print("[yellow]💡 Hint: If server is not running, use --local[/yellow]")
             sys.exit(1)
 
     # Local Query
@@ -377,9 +353,7 @@ def _display_rag_result(result, metadata: dict | None = None):
     # Display citations if available
     citations = result.get("citations", [])
     if citations:
-        citations_table = Table(
-            title="📚 Citations", show_header=True, header_style="bold cyan"
-        )
+        citations_table = Table(title="📚 Citations", show_header=True, header_style="bold cyan")
         citations_table.add_column("SKU", style="dim")
         citations_table.add_column("Product Name", style="cyan")
         citations_table.add_column("Product ID", style="dim")
@@ -435,9 +409,7 @@ async def stats(
     local: bool = typer.Option(
         False, "--local", help="Run directly against database (offline mode)"
     ),
-    api_url: str = typer.Option(
-        "http://localhost:8000", help="Web API URL for non-local mode"
-    ),
+    api_url: str = typer.Option("http://localhost:8000", help="Web API URL for non-local mode"),
 ):
     """Display RAG system statistics and embeddings metadata.
 
@@ -455,10 +427,7 @@ async def stats(
                 _display_stats(stats_data, metadata={"mode": "api"})
                 return
             except Exception as e:
-                msg = (
-                    f"✗ API Stats failed: {e}\n"
-                    "💡 Hint: If server is not running, use --local"
-                )
+                msg = f"✗ API Stats failed: {e}\n💡 Hint: If server is not running, use --local"
                 console.print(msg, style="bold red")
                 sys.exit(1)
 
@@ -518,17 +487,13 @@ def _display_stats(stats_data: dict, metadata: dict | None = None):
 
     # Print embedding models table separately
     if stats_data.get("embedding_models"):
-        models_table = Table(
-            title="Embedding Models", show_header=True, header_style="bold cyan"
-        )
+        models_table = Table(title="Embedding Models", show_header=True, header_style="bold cyan")
         models_table.add_column("Model Name")
         models_table.add_column("Version")
         models_table.add_column("Count", style="green")
 
         for model in stats_data["embedding_models"]:
-            models_table.add_row(
-                model["name"], model["version"] or "N/A", str(model["count"])
-            )
+            models_table.add_row(model["name"], model["version"] or "N/A", str(model["count"]))
         console.print(models_table)
 
 

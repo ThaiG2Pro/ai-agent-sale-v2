@@ -97,15 +97,10 @@ async def evaluate_item(
     # 1a. Keyword presence in answer
     matched = [kw for kw in expected_keywords if kw.lower() in answer_lower]
     keyword_score = len(matched) / len(expected_keywords) if expected_keywords else 1.0
-    tier1_pass = (
-        not rag_result.declined and keyword_score > 0 and len(rag_result.citations) > 0
-    )
+    tier1_pass = not rag_result.declined and keyword_score > 0 and len(rag_result.citations) > 0
 
     print(f"  Category  : {rag_result.query_category} (TopK={rag_result.top_k_used})")
-    print(
-        f"  Similarity: {rag_result.best_similarity:.4f}"
-        f" | Declined: {rag_result.declined}"
-    )
+    print(f"  Similarity: {rag_result.best_similarity:.4f} | Declined: {rag_result.declined}")
     print(
         f"  Tier 1    : {'✓ PASS' if tier1_pass else '✗ FAIL'} "
         f"(kw {len(matched)}/{len(expected_keywords)}, "
@@ -170,9 +165,7 @@ async def main(skip_tier2: bool = False, verbose: bool = False) -> None:
     results: list[dict[str, Any]] = []
     async with AsyncSessionLocal() as db:
         for item in dataset:
-            result = await evaluate_item(
-                db, item, skip_tier2=skip_tier2, verbose=verbose
-            )
+            result = await evaluate_item(db, item, skip_tier2=skip_tier2, verbose=verbose)
             results.append(result)
 
     # ── Aggregate metrics ─────────────────────────────────────────────────────
@@ -202,10 +195,7 @@ async def main(skip_tier2: bool = False, verbose: bool = False) -> None:
     print("  EVALUATION COMPLETE")
     print(f"{'═' * 60}")
     print(f"  Cases          : {len(results)}")
-    print(
-        f"  Tier 1 Pass    : {tier1_passes}/{len(results)}"
-        f" ({summary['tier1_pass_rate']:.0%})"
-    )
+    print(f"  Tier 1 Pass    : {tier1_passes}/{len(results)} ({summary['tier1_pass_rate']:.0%})")
     print(f"  Avg Keyword    : {avg_keyword:.2%}")
     print(f"  Avg Similarity : {avg_similarity:.4f}")
     print(f"  Declined       : {declined_count}")

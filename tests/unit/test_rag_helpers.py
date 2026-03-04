@@ -58,10 +58,7 @@ class TestClassifyQuery:
     # Ambiguous queries (>15 words, no action verb, no product name)
     def test_ambiguous_open_ended(self):
         # >15 words, Vietnamese generic vocabulary (no action verb, no product name)
-        q = (
-            "hãy cho tôi biết tất cả những sản phẩm mà"
-            " công ty bạn đang kinh doanh hiện tại"
-        )
+        q = "hãy cho tôi biết tất cả những sản phẩm mà công ty bạn đang kinh doanh hiện tại"
         assert classify_query(q) == "ambiguous"
 
     def test_ambiguous_english_no_signals(self):
@@ -218,9 +215,7 @@ class TestCompressContext:
     def test_low_score_chunks_removed(self):
         chunks = [
             _make_chunk("Good chunk", vector_score=0.8),
-            _make_chunk(
-                "Low confidence chunk", vector_score=0.1
-            ),  # below 0.25 threshold
+            _make_chunk("Low confidence chunk", vector_score=0.1),  # below 0.25 threshold
         ]
         result = compress_context(chunks)
         assert len(result) == 1
@@ -242,9 +237,7 @@ class TestCompressContext:
         near = "Widget Pro là sản phẩm cao cấp với nhiều tính năng vượt trội tuyệt vời."
         chunks = [
             _make_chunk(base, rrf_score=0.01, sku="LOW"),
-            _make_chunk(
-                near, rrf_score=0.05, sku="HIGH"
-            ),  # higher score, processed first
+            _make_chunk(near, rrf_score=0.05, sku="HIGH"),  # higher score, processed first
         ]
         result = compress_context(chunks)
         assert len(result) == 1
@@ -285,9 +278,7 @@ class TestCompressContext:
         """Validates all three compression steps fire in sequence."""
         chunks = [
             _make_chunk("Exact duplicate", vector_score=0.8, rrf_score=0.03, sku="A"),
-            _make_chunk(
-                "Exact duplicate", vector_score=0.8, rrf_score=0.01, sku="B"
-            ),  # exact dup
+            _make_chunk("Exact duplicate", vector_score=0.8, rrf_score=0.01, sku="B"),  # exact dup
             _make_chunk(
                 "Low score chunk", vector_score=0.2, rrf_score=0.02, sku="C"
             ),  # score filter
@@ -310,9 +301,7 @@ class TestCompressContext:
         assert "B" not in skus, "Second exact dup should be removed"
         assert "C" not in skus, "Low-score chunk should be removed"
         # D or E, but not both (near-dup removal)
-        assert not ("D" in skus and "E" in skus), (
-            "Near-dup pair should have only one kept"
-        )
+        assert not ("D" in skus and "E" in skus), "Near-dup pair should have only one kept"
 
 
 # ═══════════════════════════════════════════════════════════

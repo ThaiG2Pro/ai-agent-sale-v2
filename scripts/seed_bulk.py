@@ -74,9 +74,7 @@ def _load_product_categories() -> list[dict[str, Any]]:
     Looks for `scripts/product_categories.json` in the repo root.
     Falls back to minimal defaults if file not found.
     """
-    config_path = (
-        Path(__file__).resolve().parents[1] / "scripts" / "product_categories.json"
-    )
+    config_path = Path(__file__).resolve().parents[1] / "scripts" / "product_categories.json"
 
     if config_path.exists():
         try:
@@ -136,9 +134,7 @@ class ProductSeedItem(BaseModel):
         max_length=50,
         description="Unique product identifier, e.g. ELEC-PHONE-001",
     )
-    name: str = Field(
-        ..., min_length=5, max_length=255, description="Product name in Vietnamese"
-    )
+    name: str = Field(..., min_length=5, max_length=255, description="Product name in Vietnamese")
     description: str = Field(
         ...,
         min_length=30,
@@ -178,9 +174,7 @@ class ProductBatch(BaseModel):
 
 
 # TypeAdapter for O(1) bulk validate + serialize — avoids looping Pydantic models
-PRODUCT_LIST_ADAPTER: TypeAdapter[list[ProductSeedItem]] = TypeAdapter(
-    list[ProductSeedItem]
-)
+PRODUCT_LIST_ADAPTER: TypeAdapter[list[ProductSeedItem]] = TypeAdapter(list[ProductSeedItem])
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -314,10 +308,7 @@ async def drop_hnsw_index() -> None:
         async with engine.connect() as conn:
             await conn.execution_options(isolation_level="AUTOCOMMIT")
             await conn.execute(
-                text(
-                    "DROP INDEX CONCURRENTLY IF EXISTS "
-                    f"{SCHEMA}.idx_text_embeddings_embedding"
-                )
+                text(f"DROP INDEX CONCURRENTLY IF EXISTS {SCHEMA}.idx_text_embeddings_embedding")
             )
             logfire.info("HNSW index dropped (or did not exist).")
 
@@ -491,9 +482,7 @@ async def bulk_insert_products(
                 )
             except Exception as exc:
                 await session.rollback()
-                logfire.error(
-                    "Bulk insert products failed, rolled back: {err}", err=str(exc)
-                )
+                logfire.error("Bulk insert products failed, rolled back: {err}", err=str(exc))
                 raise
 
         # After insert: SELECT all the SKUs we care about to obtain their DB IDs
@@ -534,16 +523,10 @@ async def embed_texts_batched(
         List of embedding vectors (same order as input texts).
     """
     sem = asyncio.Semaphore(max_concurrent)
-    batches = [
-        texts[i : i + embed_batch_size] for i in range(0, len(texts), embed_batch_size)
-    ]
-    all_vectors: list[list[float]] = [
-        [] for _ in range(len(texts))
-    ]  # pre-allocate order-safe
+    batches = [texts[i : i + embed_batch_size] for i in range(0, len(texts), embed_batch_size)]
+    all_vectors: list[list[float]] = [[] for _ in range(len(texts))]  # pre-allocate order-safe
 
-    async def _embed_batch(
-        batch_idx: int, batch: list[str]
-    ) -> tuple[int, list[list[float]]]:
+    async def _embed_batch(batch_idx: int, batch: list[str]) -> tuple[int, list[list[float]]]:
         async with sem:
             with logfire.span(
                 "embed.batch",
@@ -733,9 +716,7 @@ async def run_seed(
 
                 if dry_run:
                     # In dry-run, create stub data without calling LLM
-                    stubs = _generate_stub_batch(
-                        current_batch_size, cat_config, len(all_products)
-                    )
+                    stubs = _generate_stub_batch(current_batch_size, cat_config, len(all_products))
                     all_products.extend(stubs)
                 else:
                     batch = await generate_product_batch(
@@ -758,9 +739,7 @@ async def run_seed(
 
                 progress.advance(gen_task)
 
-        console.print(
-            f"[green]✓ Generated {len(all_products):,} unique products.[/green]"
-        )
+        console.print(f"[green]✓ Generated {len(all_products):,} unique products.[/green]")
 
         if not all_products:
             console.print("[red]✗ No products generated. Aborting.[/red]")
@@ -781,9 +760,7 @@ async def run_seed(
             return
 
         # ── Step 4: Bulk insert products ──────────────────────────────────
-        console.print(
-            f"\n[yellow]► Ingesting {len(validated_products):,} products...[/yellow]"
-        )
+        console.print(f"\n[yellow]► Ingesting {len(validated_products):,} products...[/yellow]")
         total_ingested, total_keywords = await ingest_products_via_unified_path(
             validated_products,
             use_bulk=True,  # Use optimized bulk path for large datasets
@@ -799,9 +776,7 @@ async def run_seed(
 
         # ── Step 5: Recreate HNSW index ───────────────────────────────────
         if not skip_hnsw:
-            console.print(
-                "\n[yellow]► Recreating HNSW index (CONCURRENTLY)...[/yellow]"
-            )
+            console.print("\n[yellow]► Recreating HNSW index (CONCURRENTLY)...[/yellow]")
             await recreate_hnsw_index()
             console.print("[green]✓ HNSW index recreated.[/green]")
 
@@ -847,9 +822,7 @@ def _generate_stub_batch(
 
 
 def _print_sample(products: list[ProductSeedItem]) -> None:
-    table = Table(
-        title="Sample Generated Products", show_header=True, header_style="bold cyan"
-    )
+    table = Table(title="Sample Generated Products", show_header=True, header_style="bold cyan")
     table.add_column("SKU", style="yellow", max_width=20)
     table.add_column("Name", max_width=35)
     table.add_column("Price (VND)", justify="right")

@@ -53,8 +53,7 @@ async def extract_keywords_structured(
         {
             "role": "user",
             "content": (
-                f"Product: {product_name}\n\n"
-                f"Description:\n{text[:500]}"  # Limit to 500 chars
+                f"Product: {product_name}\n\nDescription:\n{text[:500]}"  # Limit to 500 chars
             ),
         },
     ]
@@ -138,8 +137,7 @@ async def enrich_metadata_async(
         content = response.choices[0].message.content
         enriched = ProductMetadata.model_validate_json(content)
         logfire.info(
-            "Metadata enriched: specs_count={sc}, keywords={kc}, "
-            "category={cat}, latency={l:.3f}s",
+            "Metadata enriched: specs_count={sc}, keywords={kc}, category={cat}, latency={l:.3f}s",
             sc=len(enriched.technical_specs),
             kc=len(enriched.keywords),
             cat=enriched.category,
@@ -149,8 +147,7 @@ async def enrich_metadata_async(
     except Exception as exc:
         latency = time.perf_counter() - start_time
         logfire.warn(
-            "Metadata enrichment failed: {err} ({latency:.3f}s), "
-            "using minimal fallback",
+            "Metadata enrichment failed: {err} ({latency:.3f}s), using minimal fallback",
             err=str(exc),
             latency=latency,
         )
@@ -256,9 +253,7 @@ async def ingest_product_text(
     logfire.info("Generating embedding: {sku}", sku=sku)
     price_line = f"Giá: {price:,.0f} VND" if price else ""
     embed_text = f"{name}\n{price_line}\n{description}".strip()
-    embeddings_result = await AIGateway.embed(
-        input_text=embed_text, model="economy-embedding"
-    )
+    embeddings_result = await AIGateway.embed(input_text=embed_text, model="economy-embedding")
     vector = embeddings_result[0]
 
     # 3. Enrich metadata — after embed so Ollama only loads one model at a time
@@ -266,9 +261,7 @@ async def ingest_product_text(
     enriched_metadata = await enrich_metadata_async(description, name, sku)
 
     # 4. Validate metadata against original text (Critic pattern)
-    is_metadata_valid = await validate_metadata_vs_source(
-        description, enriched_metadata
-    )
+    is_metadata_valid = await validate_metadata_vs_source(description, enriched_metadata)
 
     if is_metadata_valid:
         product.metadata_ = enriched_metadata.model_dump()

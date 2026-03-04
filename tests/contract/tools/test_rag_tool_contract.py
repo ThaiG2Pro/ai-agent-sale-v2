@@ -54,9 +54,7 @@ class TestRAGToolContract:
 
         # Invalid query: too long
         with pytest.raises(ValidationError):
-            RAGSearchInput(
-                query="x" * 2001, session_id="550e8400-e29b-41d4-a716-446655440000"
-            )
+            RAGSearchInput(query="x" * 2001, session_id="550e8400-e29b-41d4-a716-446655440000")
 
         # Invalid session_id: wrong format
         with pytest.raises(ValidationError):

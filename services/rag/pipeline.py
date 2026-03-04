@@ -202,9 +202,7 @@ async def answer_with_rag(
     #      large gap → clear winner, small gap → ambiguous (may need reranking)
     vec_scores = sorted((c["vector_score"] for c in retrieved), reverse=True)
     best_similarity = vec_scores[0] if vec_scores else 0.0
-    similarity_gap = (
-        vec_scores[0] - vec_scores[1] if len(vec_scores) >= 2 else best_similarity
-    )
+    similarity_gap = vec_scores[0] - vec_scores[1] if len(vec_scores) >= 2 else best_similarity
     chunks_before = len(retrieved)
     logfire.info(
         "Retrieved {n} chunks, best_similarity={s:.4f}, similarity_gap={g:.4f}",

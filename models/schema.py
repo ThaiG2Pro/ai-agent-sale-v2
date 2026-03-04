@@ -30,12 +30,8 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid7
-    )
-    sku: Mapped[str] = mapped_column(
-        String(50), unique=True, index=True, nullable=False
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    sku: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0.00)
@@ -66,9 +62,7 @@ class TextEmbedding(Base):
         {"schema": SCHEMA},
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid7
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     source_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.products.id"), nullable=False
     )
@@ -90,12 +84,8 @@ class ConversationSession(Base):
     __tablename__ = "conversation_sessions"
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid7
-    )
-    external_id: Mapped[str] = mapped_column(
-        String(100), unique=True, index=True, nullable=False
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    external_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
@@ -113,17 +103,13 @@ class ConversationMessage(Base):
     __tablename__ = "conversation_messages"
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid7
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(f"{SCHEMA}.conversation_sessions.id"),
         nullable=False,
     )
-    role: Mapped[str] = mapped_column(
-        String(20), nullable=False
-    )  # user, assistant, system
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user, assistant, system
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(nullable=True)
     model_name: Mapped[str] = mapped_column(String(100), nullable=True)
@@ -171,9 +157,7 @@ class SalesSignal(Base):
     __tablename__ = "sales_signals"
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid7
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(f"{SCHEMA}.conversation_sessions.id"),
@@ -195,9 +179,7 @@ class ModelTrace(Base):
     __tablename__ = "model_traces"
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid7
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
     message_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(f"{SCHEMA}.conversation_messages.id"),

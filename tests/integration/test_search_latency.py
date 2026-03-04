@@ -20,9 +20,7 @@ from models.schema import SCHEMA, Product, TextEmbedding
 async def benchmark_db():
     """Provides a clean database for benchmarking."""
     engine = create_async_engine(settings.database_url, future=True)
-    session_factory = async_sessionmaker(
-        bind=engine, class_=AsyncSession, expire_on_commit=False
-    )
+    session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
     async with session_factory() as session:
         yield session
@@ -94,8 +92,7 @@ async def test_search_latency_10k(benchmark_db: AsyncSession):
 
     # Warm up
     search_sql = (
-        f"SELECT source_id FROM {SCHEMA}.text_embeddings "
-        "ORDER BY embedding <=> :v LIMIT 5"
+        f"SELECT source_id FROM {SCHEMA}.text_embeddings ORDER BY embedding <=> :v LIMIT 5"
     )
     await benchmark_db.execute(text(search_sql), {"v": str(query_vector)})
 
