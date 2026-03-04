@@ -9,9 +9,33 @@
 
 This feature builds the **orchestration layer** on top of the infrastructure (Week 1) and RAG pipeline (Week 2). It transforms the system from a simple retrieval pipeline into a **controllable, state-driven AI sales agent** using LangGraph as the execution core.
 
+**Constitution Alignment**: This spec extends the **SME Pro 2026 Constitution** (project root). Key articles enforced in Week 3:
+- **Article I**: Core business logic in `core/agent/`; CLI exemption for debug scripts.
+- **Article II**: LangGraph explicitly permitted for orchestration.
+- **Article III**: TDD-first; contract tests written before implementation.
+- **Article IV**: Integration-first testing; graph topology documented in data-model.md.
+- **Article V**: No blocking I/O in event loop.
+- **Article IX**: Citations grounded with `source_text`.
+- **Article X**: Recursion limit 5 turns.
+- **Article XII**: Cost-aware routing; escalate only when necessary.
+
+> Refer to Constitution (root) for full text. This spec does NOT duplicate — it extends Constitution with Week 3 functional requirements (FR-001–FR-010).
+
+**Week progression**:  
 Week 1 delivered: async FastAPI, PostgreSQL/pgvector, LiteLLM+Ollama, semantic cache, structured logging.  
 Week 2 delivered: hybrid retrieval, adaptive TopK, context compression, confidence threshold, citation metadata.  
 Week 3 delivers: typed agent state, intent routing, model escalation, per-node streaming, tool contract tests.
+
+---
+
+## Clarifications
+
+### Session 2026-03-01
+- Q: Format for the `citations` field in the `AgentState`? → A: List of `Citation` Pydantic models (containing `product_id`, `chunk_id`, `source_text`).
+- Q: Handling of multi-intent detection (e.g., INFO + COMPLAINT)? → A: Priority-based coverage; higher-risk intents (COMPLAINT/NEGOTIATION) dictate model tier.
+- Q: Per-node streaming event format? → A: Each node emits a structured snapshot containing `node_name` and `state_snapshot` upon completion.
+- Q: Handling of premium model unavailability during escalation? → A: Graceful fallback to economy model with `escalation_failure` flag logged in `model_trace`.
+- Q: Model mapping in local development (0 VND goal)? → A: Both tiers map to local Ollama; distinguish by model parameters (e.g., qwen2.5-3b vs qwen2.5-7b).
 
 ---
 
@@ -55,7 +79,7 @@ When retrieval confidence is below 0.7, the agent does not attempt to answer. In
 
 **Why this priority**: Prevents hallucination from reaching customers. This is a safety gate that must exist before Week 4's HITL layer can be meaningful.
 
-**Independent Test**: Submit a query with no relevant product data in the DB and verify the response is the safe fallback string and no model escalation occurs.
+**Independent Test**: Submit a query with no relevant product data in the DB (similarity < 0.45, triggers Layer 1 decline) and verify the response is the safe fallback string and no model escalation occurs. **Note**: FR-007 INFO_QUERY escalation only applies to the *borderline* range (0.45 ≤ similarity < 0.7); a similarity below Layer 1 threshold (< 0.45) causes an immediate decline before any escalation logic runs.
 
 **Acceptance Scenarios**:
 
@@ -96,11 +120,11 @@ Before any tool (inventory lookup, order status) is wired into the agent, a cont
 
 ### Edge Cases
 
-- What happens when intent classification returns an unknown/unsupported intent type?
-- How does the agent handle a timeout from a retrieval tool mid-graph?
-- What if the premium model is unavailable (offline/API error) during escalation?
-- What if `model_trace` write fails — does the agent still return a response?
-- How does the graph behave when the same message triggers both `COMPLAINT` and `INFO_QUERY` signals?
+- What happens when intent classification returns an unknown/unsupported intent type? (Default to `INFO_QUERY`).
+- How does the agent handle a timeout from a retrieval tool mid-graph? Set `state["error"] = "RETRIEVAL_TIMEOUT"`, set `state["declined"] = True`, return `DECLINE_MESSAGE` as response — the same DECLINE_MESSAGE used for low-confidence guards. The `model_trace` MUST still be written with `guard_decision="REJECTED"` and `error="RETRIEVAL_TIMEOUT"` in `metadata_`.
+- What if the premium model is unavailable? (Gracefully fallback to economy model; set `escalation_failure` flag).
+- What if `model_trace` write fails — does the agent still return a response? (Yes, log error to stderr and continue).
+- How does the graph behave when the same message triggers both `COMPLAINT` and `INFO_QUERY` signals? (Priority logic applies: `COMPLAINT` wins).
 
 ---
 
@@ -108,21 +132,33 @@ Before any tool (inventory lookup, order status) is wired into the agent, a cont
 
 ### Functional Requirements
 
-- **FR-001**: The agent state MUST be a pure serializable `TypedDict` containing at minimum: `session_id`, `user_message`, `intent`, `similarity_score`, `rerank_score`, `model_used`, `escalation_flag`, `response`, `citations`, and `conversation_history`.
+- **FR-001**: The agent state MUST be a pure serializable `TypedDict` containing at minimum: `session_id`, `user_message`, `intent` (primary intent str), `secondary_intents` (list[str], default=[]), `intent_confidence` (float), `retrieved_chunks` (list[dict]), `similarity_score` (float), `rerank_score` (float | None), `confidence_score` (float), `model_used` (str | None), `escalation_flag` (bool), `escalation_failure` (bool), `escalation_reason` (str | None, enum value), `response` (str | None), `citations` (list), and `messages: Annotated[list, add_messages]` (full conversation history with LangGraph ID-based dedup reducer). Note: `messages` is the canonical field name for conversation history — `conversation_history` is NOT a separate field.
 - **FR-002**: All graph nodes MUST be implemented as async functions; no synchronous blocking calls are permitted except local ML utilities (e.g., cross-encoder reranker) offloaded to a thread executor.
 - **FR-003**: All tool input and output schemas MUST be defined as Pydantic models; no `dict` or `str` returns are acceptable from tools.
 - **FR-004**: The compiled graph MUST export a Mermaid execution diagram as a static artifact (file or stdout) to document the agent's control flow.
-- **FR-005**: The router node MUST classify intent into at least four categories: `INFO_QUERY`, `COMPLAINT`, `NEGOTIATION`, `SMALLTALK`; classification MUST use the economy LiteLLM model with a Pydantic-structured output.
-- **FR-006**: The agent MUST support per-node streaming, emitting a structured event (node name, partial state) at each graph step.
-- **FR-007**: The model escalation node MUST apply intent-first logic: if intent is `COMPLAINT` or `NEGOTIATION`, escalate to premium model unconditionally; otherwise escalate only if `similarity_score < 0.7`.
-- **FR-008**: The confidence scoring node MUST store `similarity_score`, `rerank_score`, `model_used`, and `escalation_flag` in both the agent state and the `model_trace` DB table after each run.
+- **FR-005**: The router node MUST classify intent into at least **seven** categories: `INFO_QUERY`, `PRICING`, `COMPARISON`, `COMPLAINT`, `NEGOTIATION`, `SMALLTALK`, `AVAILABILITY`; classification MUST support multi-intent detection and use the economy LiteLLM model with a Pydantic-structured output. (See T012 for `IntentEnum` definition.)
+- **FR-006**: The agent MUST support per-node streaming, emitting a structured event (`NodeStreamEvent`) containing `node_name`, `state_snapshot`, and `timestamp` (ISO 8601) upon each node's completion. `state_snapshot` is a **delta** — the dict returned by the node (only changed fields), NOT a full `AgentState` copy; this keeps webhook payload size proportional to what each node actually modifies. The `NodeStreamEvent` schema (fields: `node_name: str`, `state_snapshot: dict`, `timestamp: str`) is **schema-frozen until at least Week 6**; the Telegram webhook integration (Week 6) will add a transport wrapper layer around `NodeStreamEvent` rather than modifying its fields. `astream_agent(message, session_id, db, checkpointer)` parameter names are stable through Week 5; new optional keyword-only parameters MAY be added in Week 5/6 but existing positional parameters MUST NOT change.
+- **FR-007**: The model escalation node MUST apply intent-first priority logic with the following full escalation matrix for all 7 intents:
+  | Intent | Escalation Rule |
+  |---|---|
+  | `COMPLAINT`, `NEGOTIATION` | **Always premium** — unconditional, bypasses retrieval entirely |
+  | `INFO_QUERY` | **Premium if borderline** — only when `0.45 ≤ similarity_score < 0.7` (passed Layer 1, but borderline for Layer 2); `confidence_node` MUST conditionally route to `escalation_node` before `answer_node` in this case |
+  | `PRICING`, `COMPARISON`, `AVAILABILITY` | **Economy always** — RAG path but no score-based escalation |
+  | `SMALLTALK` | **Economy always** — no retrieval, no escalation |
+
+  If the premium model is unavailable, the system MUST fallback to the economy model, set `escalation_failure: bool = True` in `AgentState`, and record `escalation_failure` in `model_trace.metadata_`. **Environment note**: the `escalation_failure` fallback logic is environment-neutral — LiteLLM handles HTTP 429/500 from a real API and an unavailable Ollama model identically via its retry/fallback chain. No environment-specific retry_policy is required at the agent layer; configure retry counts in `LITELLM_CONFIG` per environment if needed.
+- **FR-008**: The answer node MUST write `model_trace` after **every** execution path (both accepted AND declined) — this is the **universal trace point**. Store `similarity_score`, `rerank_score`, `model_used`, `escalation_flag`, `escalation_failure`, and all escalation metadata in `metadata_` JSONB. Trace write failure MUST NOT block response (fail-safe: catch exception and log to stderr).
 - **FR-009**: Contract tests MUST exist for every registered tool before the tool's implementation is complete; tests validate input schema, output schema, and error behavior.
-- **FR-010**: If `similarity_score < 0.7` and intent is `INFO_QUERY`, the agent MUST return a safe fallback message and MUST NOT invoke the LLM.
+- **FR-010**: **Final confidence guard** (applies AFTER escalation and LLM answer generation): If the fused `confidence_score < 0.70` (Layer 2 guard threshold, uses fused score = `(1-0.7)·similarity + 0.7·rerank` = `0.3·similarity + 0.7·rerank` when rerank is available, or just `similarity` if no rerank), the agent MUST check: if answer was generated and confidence is still low, prepend a disclaimer or return DECLINE_MESSAGE. **Score terminology clarification**: 
+  - `similarity_score` (raw cosine, pre-rerank) — used by FR-007 to decide escalation routing (Layer 1 at 0.45, borderline at < 0.7)
+  - `confidence_score` (fused post-rerank) — used by FR-010 final check (Layer 2 at 0.70) to ensure answer quality
+  - **For INFO_QUERY borderline escalation (FR-007 + FR-010 interaction)**: Escalation_node is called if similarity < 0.7; answer_node invokes premium model and computes final fused confidence_score; if final score is STILL < 0.70 after premium answer, apply disclaimer or return DECLINE_MESSAGE.
 
 ### Key Entities
 
 - **AgentState**: The canonical TypedDict representing a single agent run's full lifecycle state; immutable between nodes except via explicit state updates.
-- **IntentClassification**: Pydantic model output of the router node; contains `intent` enum, `confidence`, and `raw_classification`.
+- **Citation**: Pydantic model representing a grounded source; contains `product_id`, `chunk_id`, and `source_text`.
+- **IntentClassification**: Pydantic model output of the router node; contains `primary_intent` (IntentEnum), `secondary_intents` (list[IntentEnum]), `confidence` (float 0.0–1.0), and `reasoning` (str) — not `raw_classification`.
 - **ToolContract**: Pydantic input/output schema pair that each registered tool must implement; used by contract tests as the source of truth.
 - **ModelTrace**: DB record written after each agent run; stores model used, escalation reason, scores, latency, and token count for cost analysis.
 - **EscalationDecision**: Pydantic model capturing the escalation node's output: `escalate` (bool), `reason` (enum: `intent_escalation` | `low_confidence`), `selected_model`.
@@ -148,6 +184,7 @@ Before any tool (inventory lookup, order status) is wired into the agent, a cont
 - Week 1 and Week 2 deliverables are complete and available: async DB session, LiteLLM proxy configured for both Ollama (local) and API models, hybrid search returning results with confidence scores and citation metadata.
 - The `model_trace` table from Week 1's DB schema is available for writing escalation records.
 - Intent classification runs on the economy model (Ollama local in dev, cheapest API model in staging); premium model is configurable via environment variable — not hardcoded.
+- In local development (0 VND goal), both economy and premium tiers MUST map to local Ollama instances (e.g., distinguishing by parameter count or quantization level) to ensure full offline functionality.
 - "Premium model" and "economy model" refer to LiteLLM model aliases defined in config, not specific vendor models.
 - Streaming is delivered over the same in-process interface used for development/testing; Telegram webhook streaming integration is deferred to Week 6.
 - The `SMALLTALK` intent routes directly to the economy model and bypasses RAG retrieval entirely (chitchat does not need product context).
@@ -156,8 +193,8 @@ Before any tool (inventory lookup, order status) is wired into the agent, a cont
 
 ## Out of Scope
 
-- Telegram webhook integration (Week 6)
-- Human-in-the-loop pause/resume (Week 4)
+- Telegram webhook integration (Week 6) — Week 6 will add a Telegram transport wrapper around `NodeStreamEvent`; `NodeStreamEvent` itself will not change. The wrapper will map `chat_id`/`message_id` for Telegram's edit-message-in-place streaming pattern. SSE (Server-Sent Events) is the Web/FastAPI streaming standard; Telegram uses Webhook POST, not SSE.
+- Human-in-the-loop pause/resume (Week 4) — `interrupt_before=["answer_node"]` is the planned Week 4 target for HITL on Critical Actions (checkout, order confirmation). `escalation_node` is NOT the interrupt target; it is a pure-Python routing node with no side effects, so interrupting before it provides no user-visible control point. Week 3 prepares the checkpointer injection point; Week 4 adds the interrupt specification.
 - Persistent conversation memory across restarts (Week 5)
 - Load testing or rate limiting (Week 7)
 - Any frontend or admin UI
