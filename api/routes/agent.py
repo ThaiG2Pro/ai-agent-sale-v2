@@ -9,17 +9,15 @@ What it does:
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from core.agent.graph import astream_agent, build_graph
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 from core.agent.state import make_initial_state
 from services.database import get_db
 
