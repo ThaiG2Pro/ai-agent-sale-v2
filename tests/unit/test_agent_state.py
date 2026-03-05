@@ -89,6 +89,9 @@ def test_agent_state_fields_complete():
         "response",
         "declined",
         "error",
+        "cached_answer",
+        "canonical_query",
+        "query_vector",
     }
     actual_fields = set(AgentState.__annotations__.keys())
     assert required_fields == actual_fields, (

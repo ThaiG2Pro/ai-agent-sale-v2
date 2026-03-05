@@ -57,28 +57,43 @@ def _make_answer_response(text: str = "Test answer"):
     return response
 
 
-def _make_rag_output(similarity_score: float, declined: bool):
-    """Build a mock RAGSearchOutput."""
-    from core.agent.tools import RAGSearchOutput
+def _make_retrieval_result(
+    similarity_score: float, declined: bool, cached_answer: str | None = None
+):
+    """Build a mock RetrievalResult for patching search_and_retrieve."""
+    from services.rag.pipeline import RetrievalResult
 
-    return RAGSearchOutput(
-        answer="some answer",
-        citations=[],
-        similarity_score=similarity_score,
-        confidence_score=similarity_score,
-        rerank_score=None,
-        chunks_used=1,
-        model_used="economy-chat",
+    return RetrievalResult(
+        cached_answer=cached_answer,
+        cached_citations=[],
         declined=declined,
+        citations=[],
+        chunks=[],
+        best_similarity=similarity_score,
+        similarity_gap=0.0,
+        canonical_query="test query",
+        query_vector=[0.1] * 10,
+        query_category="INFO_QUERY",
+        top_k_used=5,
     )
 
 
-def _mock_rag_tool(similarity_score: float, declined: bool):
-    """Build mock rag tool that returns given output."""
-    rag_output = _make_rag_output(similarity_score, declined)
+def _mock_search_and_retrieve(
+    similarity_score: float, declined: bool, cached_answer: str | None = None
+):
+    """Build mock for make_retrieval_tool that returns given RetrievalResult.
+
+    Returns a factory (db) -> @tool mock with .ainvoke(), matching make_retrieval_tool signature.
+    Patch target: core.agent.nodes.retrieval.make_retrieval_tool
+    """
+    result = _make_retrieval_result(similarity_score, declined, cached_answer)
     mock_tool = MagicMock()
-    mock_tool.ainvoke = AsyncMock(return_value=rag_output)
-    return mock_tool
+    mock_tool.ainvoke = AsyncMock(return_value=result)
+
+    def mock_factory(db):
+        return mock_tool
+
+    return mock_factory
 
 
 # ---------------------------------------------------------------------------
@@ -153,19 +168,20 @@ async def test_complaint_escalation_flow(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_low_confidence_fallback(monkeypatch):
-    """T077+T079: similarity=0.50 → Layer 2 fires, DECLINE_MESSAGE under 200ms.
+    """T077+T079: COMPARISON similarity=0.50 → Layer 2 fires, DECLINE_MESSAGE under 200ms.
 
-    LLM call order: 1=router (INFO_QUERY). Answer LLM must NOT be called (declined path)
+    Uses COMPARISON intent (not INFO_QUERY) since INFO_QUERY borderline now escalates.
+    LLM call order: 1=router (COMPARISON). Answer LLM must NOT be called (declined path).
     """
     monkeypatch.setattr("core.agent.nodes.escalation.settings.PREMIUM_MODEL", "premium-chat")
 
     mock_llm = AsyncMock(
         side_effect=[
-            _make_router_response("INFO_QUERY"),
+            _make_router_response("COMPARISON"),
             # answer_node should NOT be called → if it is, we'll get StopIteration
         ],
     )
-    mock_tool = _mock_rag_tool(similarity_score=0.50, declined=False)
+    mock_retrieval = _mock_search_and_retrieve(similarity_score=0.50, declined=False)
 
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-low-conf"}}
@@ -173,7 +189,7 @@ async def test_low_confidence_fallback(monkeypatch):
 
     start = time.perf_counter()
     with patch("services.ai.ai_router.acompletion", mock_llm):
-        with patch("core.agent.nodes.retrieval.make_rag_tool", return_value=mock_tool):
+        with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):
             result = await graph.ainvoke(state, config)
     elapsed = time.perf_counter() - start
 
@@ -196,14 +212,16 @@ async def test_layer1_declined_propagation(monkeypatch):
             # answer_node must NOT be called
         ],
     )
-    mock_tool = _mock_rag_tool(similarity_score=0.40, declined=True)  # Layer 1 fires
+    mock_retrieval = _mock_search_and_retrieve(
+        similarity_score=0.40, declined=True
+    )  # Layer 1 fires
 
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-layer1"}}
     state = make_initial_state("Random unknown query", "test-layer1")
 
     with patch("services.ai.ai_router.acompletion", mock_llm):
-        with patch("core.agent.nodes.retrieval.make_rag_tool", return_value=mock_tool):
+        with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):
             result = await graph.ainvoke(state, config)
 
     assert result["response"] == DECLINE_MESSAGE
@@ -227,11 +245,11 @@ async def test_streaming_emits_events(monkeypatch):
             _make_answer_response("Found relevant products."),
         ],
     )
-    mock_tool = _mock_rag_tool(similarity_score=0.85, declined=False)
+    mock_retrieval = _mock_search_and_retrieve(similarity_score=0.85, declined=False)
 
     events = []
     with patch("services.ai.ai_router.acompletion", mock_llm):
-        with patch("core.agent.nodes.retrieval.make_rag_tool", return_value=mock_tool):
+        with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):
             async for event in astream_agent(
                 "Còn hàng không?",
                 "stream-test-1",
@@ -285,11 +303,11 @@ async def test_streaming_execution_replay(monkeypatch):
             _make_answer_response("Product details here."),
         ],
     )
-    mock_tool = _mock_rag_tool(similarity_score=0.85, declined=False)
+    mock_retrieval = _mock_search_and_retrieve(similarity_score=0.85, declined=False)
 
     events = []
     with patch("services.ai.ai_router.acompletion", mock_llm):
-        with patch("core.agent.nodes.retrieval.make_rag_tool", return_value=mock_tool):
+        with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):
             async for event in astream_agent(
                 "Giá sản phẩm X?",
                 "stream-test-3",

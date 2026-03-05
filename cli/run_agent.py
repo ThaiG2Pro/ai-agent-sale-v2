@@ -23,14 +23,23 @@ from core.agent.state import make_initial_state
 from core.logging import setup_logging
 
 
-async def main(message: str, stream: bool = False, session: str = "debug-session"):
+async def main(
+    message: str, stream: bool = False, session: str = "debug-session", api: bool = False
+):
     """Run agent with user message (T053, T082).
 
     Args:
         message: User query
         stream: Whether to stream per-node events (T082)
         session: Session ID for checkpointer
+        api: Whether to call via HTTP API instead of direct invocation
     """
+    # API mode: call via HTTP
+    if api:
+        await _call_api(message, stream, session)
+        return
+
+    # Direct mode: invoke graph in-process
     from services.database import AsyncSessionLocal
 
     async with AsyncSessionLocal() as db:
@@ -90,6 +99,93 @@ async def main(message: str, stream: bool = False, session: str = "debug-session
             sys.exit(1)
 
 
+async def _call_api(message: str, stream: bool = False, session: str = "debug-session"):
+    """Call the agent via HTTP API (new Week 3 endpoint).
+
+    Args:
+        message: User query
+        stream: Whether to use streaming SSE endpoint
+        session: Session ID
+    """
+    import httpx
+
+    api_base = "http://localhost:8000"
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            if stream:
+                # Stream mode: GET /agent/stream
+                print(f"\n[STREAM via API] Processing: {message!r}")
+                print("-" * 60)
+                async with client.stream(
+                    "POST",
+                    f"{api_base}/agent/stream",
+                    json={"message": message, "session_id": session},
+                ) as response:
+                    if response.status_code != 200:
+                        print(f"[ERROR] API returned {response.status_code}")
+                        sys.exit(1)
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            event_json = line[6:]  # Strip "data: " prefix
+                            event = json.loads(event_json)
+                            summary = json.dumps(event.get("state_snapshot", {}), default=str)[
+                                :120
+                            ]
+                            print(f"[{event.get('node_name')}] {summary}")
+                print("-" * 60)
+            else:
+                # Non-stream mode: POST /agent/query
+                response = await client.post(
+                    f"{api_base}/agent/query",
+                    json={"message": message, "session_id": session},
+                )
+                if response.status_code != 200:
+                    print(f"[ERROR] API returned {response.status_code}: {response.text}")
+                    sys.exit(1)
+
+                result = response.json()
+                print("\n" + "=" * 60)
+                print("AGENT OUTPUT (via API)")
+                print("=" * 60)
+                intent_info = result["intent"]
+                model_trace = result["model_trace"]
+                print(f"Intent:         {intent_info['primary_intent']}")
+                print(f"Confidence:     {intent_info['confidence']:.2%}")
+                print(f"Declined:       {result['declined']}")
+                print(f"Model Used:     {model_trace['selected_model']}")
+                print(f"Escalation:     {model_trace['escalation_flag']}")
+                print(f"Similarity:     {model_trace['similarity_score']:.3f}")
+                print(f"Execution Path: {result['execution_path']}")
+                print(f"Latency:        {result['elapsed_ms']:.1f}ms")
+                print(f"\nResponse:\n{result['answer']}")
+
+                if result.get("citations"):
+                    print("\nCitations:")
+                    for i, citation in enumerate(result["citations"], 1):
+                        print(f"  {i}. {citation.get('name')} ({citation.get('sku')})")
+
+                print("=" * 60)
+
+        except httpx.ConnectError:
+            print(
+                "[ERROR] Could not connect to API at http://localhost:8000",
+                file=sys.stderr,
+            )
+            print(
+                "       Start the API with: uv run python -m uvicorn api.main:app --reload",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        except Exception as e:
+            print(f"\n[ERROR] API call failed: {e}", file=sys.stderr)
+            if "--debug" in sys.argv:
+                import traceback
+
+                traceback.print_exc()
+            sys.exit(1)
+
+
 if __name__ == "__main__":
     import uuid
 
@@ -101,8 +197,13 @@ if __name__ == "__main__":
         default=str(uuid.uuid4()),
         help="Session ID (UUID). Defaults to a new UUID.",
     )
+    parser.add_argument(
+        "--api",
+        action="store_true",
+        help="Call via HTTP API instead of direct invocation",
+    )
     parser.add_argument("--debug", action="store_true", help="Print full tracebacks")
     args = parser.parse_args()
 
     setup_logging()  # OTEL → Phoenix + instrumentors (same as API)
-    asyncio.run(main(args.message, stream=args.stream, session=args.session))
+    asyncio.run(main(args.message, stream=args.stream, session=args.session, api=args.api))

@@ -15,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from services.rag.pipeline import RetrievalResult
+
 
 class RAGSearchInput(BaseModel):
     """Input schema for RAG search tool."""
@@ -24,6 +26,22 @@ class RAGSearchInput(BaseModel):
     model: str = Field(default="economy-chat", pattern=r"^[a-z0-9\-]+$")
 
     model_config = ConfigDict(strict=True)
+
+
+class RetrievalInput(BaseModel):
+    """Input schema for retrieval tool (no LLM generation).
+
+    Intent is injected from router_node — avoids a redundant normalize_query LLM call
+    that was causing intent=OTHER mismatch and wasting ~1-2s latency.
+    """
+
+    query: str = Field(min_length=1, max_length=2000, description="User's product search query")
+    intent: str | None = Field(
+        default=None,
+        description="Pre-classified intent from router_node (e.g. PRICING, INFO_QUERY)",
+    )
+
+    model_config = ConfigDict(strict=False)  # allow intent=None
 
 
 class CitationItem(BaseModel):
@@ -148,6 +166,37 @@ def make_rag_tool(db: AsyncSession):
         return RAGSearchOutput.from_rag_result(result)
 
     return rag_search
+
+
+def make_retrieval_tool(db):
+    """Factory for retrieval tool (no LLM) with DB session closure.
+
+    Wraps search_and_retrieve() — pipeline steps 1-11 only (no LLM generation).
+    Returns a @tool so LLM can decide when to call it (or node can invoke directly).
+
+    Returns:
+        LangChain @tool: retrieve(input: RetrievalInput) -> RetrievalResult
+    """
+    from services.rag.pipeline import search_and_retrieve
+
+    @tool(args_schema=RetrievalInput)
+    async def retrieve(query: str, intent: str | None = None) -> RetrievalResult:
+        """Search product knowledge base and return chunks without LLM generation.
+
+        Use this to retrieve relevant product information, citations, and
+        similarity scores before generating an answer.
+
+        Args:
+            query: User's product search query
+            intent: Pre-classified intent from router_node (avoids redundant LLM call)
+
+        Returns:
+            RetrievalResult with chunks, citations, similarity scores, and
+            optional cached_answer if L1/L2 cache hit.
+        """
+        return await search_and_retrieve(db, query, intent=intent)
+
+    return retrieve
 
 
 @tool

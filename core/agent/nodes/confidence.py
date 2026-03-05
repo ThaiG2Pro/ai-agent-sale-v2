@@ -64,7 +64,17 @@ async def confidence_node(state: AgentState) -> dict:
 
     # Apply Layer 2 threshold
     confidence_threshold = settings.AGENT_CONFIDENCE_THRESHOLD  # 0.70
+    intent = state.get("intent", None)
     is_declined = fused < confidence_threshold
+
+    # FR-007: INFO_QUERY, PRICING, AVAILABILITY borderline (0.45 ≤ sim < 0.70) must NOT
+    # be declined here. _route_after_confidence will route them to escalation_node.
+    # - INFO_QUERY borderline → premium model (complex question, borderline context)
+    # - PRICING / AVAILABILITY borderline → economy model (answer with retrieved chunks)
+    # Only COMPARISON borderline is declined at Layer 2 (needs high-quality comparison).
+    _borderline_answer_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY"}
+    if intent in _borderline_answer_intents and is_declined:
+        is_declined = False  # escalation_node decides model, answer_node generates
 
     return {
         "confidence_score": fused,
@@ -76,20 +86,26 @@ def _route_after_confidence(state: AgentState) -> str:
     """Conditional edge from confidence_node (T047b).
 
     Routes to answer_node or escalation_node based on:
-    - INFO_QUERY borderline (0.45 ≤ sim < 0.7) → escalation_node
+    - INFO_QUERY borderline (0.45 ≤ sim < 0.7, not Layer 1 declined) → escalation_node
     - Otherwise → answer_node (either accepted or declined)
 
     Enables FR-007 escalation for borderline INFO_QUERY cases.
+    Note: confidence_node does NOT set declined=True for INFO_QUERY borderline,
+    so we check similarity directly here.
     """
     intent = state.get("intent", None)
     similarity = state.get("similarity_score", 0.0)
-    already_declined = state.get("declined", False)
+    layer1_declined = state.get("declined", False)  # True only if Layer 1 fired
     confidence_threshold = settings.AGENT_CONFIDENCE_THRESHOLD
 
-    # Priority 1: INFO_QUERY borderline escalation
-    # Only escalate if: (1) intent is INFO_QUERY, (2) not already declined by Layer 1,
-    # (3) similarity is borderline (below Layer 2 threshold)
-    if intent == "INFO_QUERY" and not already_declined and similarity < confidence_threshold:
+    # INFO_QUERY, PRICING, AVAILABILITY borderline: Layer 1 didn't fire but below
+    # Layer 2 threshold → route to escalation_node (which selects premium vs economy)
+    _borderline_route_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY"}
+    if (
+        intent in _borderline_route_intents
+        and not layer1_declined
+        and similarity < confidence_threshold
+    ):
         return "escalation_node"
 
     # Default: route to answer_node (handles both accepted and declined paths)

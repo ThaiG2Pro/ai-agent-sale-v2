@@ -28,7 +28,8 @@ async def escalation_node(state: AgentState) -> dict:
 
     Pure Python — zero LLM call. Intent-first logic:
     - COMPLAINT / NEGOTIATION (primary or secondary) → premium model.
-    - INFO_QUERY routed here (borderline confidence from confidence_node) → premium.
+    - INFO_QUERY borderline (confidence 0.45-0.70) → premium model.
+    - PRICING / AVAILABILITY borderline → economy model (answer with retrieved chunks).
     - Anything else → no escalation, economy-chat retained.
     - T064: if premium model is unavailable, fall back to economy-chat and
     set escalation_failure=True.
@@ -52,10 +53,20 @@ async def escalation_node(state: AgentState) -> dict:
         should_escalate = True
         reason = EscalationReasonEnum.INTENT_ESCALATION
 
-    # Score-based escalation: INFO_QUERY borderline (routed here by confidence_node)
+    # Score-based escalation:
+    # - INFO_QUERY borderline → premium model (complex borderline info query)
+    # - PRICING / AVAILABILITY borderline → economy model (answer with retrieved chunks)
     elif intent == IntentEnum.INFO_QUERY:
         should_escalate = True
         reason = EscalationReasonEnum.LOW_CONFIDENCE
+    elif intent in (IntentEnum.PRICING, IntentEnum.AVAILABILITY):
+        # Borderline confidence but chunks found — answer with economy model (no escalation)
+        return {
+            "escalation_flag": False,
+            "escalation_reason": EscalationReasonEnum.NONE,
+            "model_used": "economy-chat",
+            "escalation_failure": False,
+        }
 
     if not should_escalate:
         return {

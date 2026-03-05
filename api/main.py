@@ -16,7 +16,7 @@ from api.middleware import (
     global_exception_handler,
     http_exception_handler,
 )
-from api.routes import admin, health, query
+from api.routes import admin, agent, health, query
 from core.logging import instrument_fastapi, instrument_sqlalchemy, setup_logging
 from services.database import engine
 
@@ -83,10 +83,11 @@ app.add_middleware(TimingMiddleware)
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 
-# Register Routes (T023)
+# Register Routes (T023 Week 2, new Week 3 agent routes)
 app.include_router(health.router)
 app.include_router(admin.router)
 app.include_router(query.router)
+app.include_router(agent.router)
 
 
 @app.get("/")

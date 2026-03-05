@@ -37,6 +37,251 @@ class RAGResult(BaseModel):
     chunks_after_compression: int
 
 
+class RetrievalResult(BaseModel):
+    """Result from search_and_retrieve() — retrieval only, no LLM generation.
+
+    Why: Separates retrieval from answer generation so that:
+    - Declined queries (Layer 1/2) never waste an LLM call
+    - Cache hits return pre-generated answer without LLM
+    - Escalated queries use the correct (premium) model for answer generation
+    """
+
+    cached_answer: str | None  # Pre-generated answer if L1/L2 cache hit
+    cached_citations: list[dict[str, Any]]  # Citations from cache hit (empty if no hit)
+    declined: bool  # True if Layer 1 guard fired (sim < CONFIDENCE_THRESHOLD)
+    citations: list[dict[str, Any]]  # [{product_id, chunk_id, sku, name, source_text}]
+    chunks: list[dict[str, Any]]  # Compressed chunks for answer generation in answer_node
+    best_similarity: float
+    similarity_gap: float = 0.0
+    canonical_query: str  # Normalized query for L1 cache write
+    query_vector: list[float]  # Embedded vector for L2 cache write
+    query_category: str
+    top_k_used: int
+
+
+async def search_and_retrieve(db, query: str, intent: str | None = None) -> RetrievalResult:
+    """Retrieval-only pipeline: classify → normalize → cache → embed → search → compress.
+
+    Does NOT call LLM for answer generation. Returns RetrievalResult with:
+    - cached_answer: if L1/L2 cache hit (answer_node returns this directly)
+    - chunks + citations: for answer generation in answer_node
+    - declined=True: if Layer 1 guard fired (sim < 0.45)
+    - canonical_query + query_vector: for cache write in answer_node
+
+    Why separated from answer_with_rag: confidence_node may decline after retrieval.
+    Calling LLM in retrieval_node wastes tokens for declined queries and doubles
+    cost for accepted queries (answer_node also calls LLM).
+    """
+    logfire.info("RAG pipeline started: {q}", q=query[:80])
+
+    query_category = classify_query(query)
+    top_k = compute_adaptive_topk(query)
+
+    # Normalize query (best-effort) — skip if intent is pre-classified
+    canonical_query = query
+    fts_query_text = query
+
+    if intent is None:
+        # If intent not provided, run full normalization (includes LLM call)
+        try:
+            normalized = await AIGateway.normalize_query(query)
+            canonical_query = normalized.canonical
+            if normalized.extracted_keywords:
+                fts_query_text = " ".join(normalized.extracted_keywords)
+            logfire.info(
+                "Query normalized: lang={lang}, intent={intent}, is_valid={v}",
+                lang=normalized.detected_language,
+                intent=normalized.intent,
+                v=normalized.is_valid,
+            )
+            if not normalized.is_valid:
+                logfire.info("Query rejected by is_valid guard (spam/gibberish)")
+                return RetrievalResult(
+                    cached_answer=None,
+                    cached_citations=[],
+                    declined=True,
+                    citations=[],
+                    chunks=[],
+                    best_similarity=0.0,
+                    similarity_gap=0.0,
+                    canonical_query=canonical_query,
+                    query_vector=[],
+                    query_category=query_category,
+                    top_k_used=top_k,
+                )
+            top_k = compute_adaptive_topk(query, intent=normalized.intent)
+            logfire.info(
+                "TopK adjusted by intent: intent={i}, top_k={k}",
+                i=normalized.intent,
+                k=top_k,
+            )
+        except Exception as exc:
+            logfire.warn("normalize_query failed, using raw query: {err}", err=str(exc))
+    else:
+        # Intent pre-classified from router_node — skip expensive LLM call
+        top_k = compute_adaptive_topk(query, intent=intent)
+        logfire.info(
+            "TopK adjusted by pre-classified intent: intent={i}, top_k={k}",
+            i=intent,
+            k=top_k,
+        )
+
+    # L1 cache check
+    try:
+        l1_hit = await get_l1_cache(db, canonical_query)
+        if l1_hit is not None:
+            logfire.info("L1 cache hit for query")
+            return RetrievalResult(
+                cached_answer=l1_hit["response"],
+                cached_citations=l1_hit.get("citations", []),
+                declined=False,
+                citations=l1_hit.get("citations", []),
+                chunks=[],
+                best_similarity=1.0,
+                similarity_gap=0.0,
+                canonical_query=canonical_query,
+                query_vector=[],  # no vector needed for L1 hit (already cached)
+                query_category=query_category,
+                top_k_used=top_k,
+            )
+        else:
+            logfire.info(
+                "L1 cache miss: query_hash={hash}",
+                hash=__import__("hashlib")
+                .sha256(canonical_query.strip().lower().encode())
+                .hexdigest()[:8],
+            )
+    except Exception as exc:
+        logfire.warn("L1 cache lookup failed: {err}", err=str(exc))
+
+    # Embed query
+    try:
+        embeddings = await AIGateway.embed(input_text=query, model="economy-embedding")
+        query_vector = embeddings[0]
+    except Exception as exc:
+        logfire.error("Embedding service unavailable: {err}", err=str(exc))
+        return RetrievalResult(
+            cached_answer=None,
+            cached_citations=[],
+            declined=True,
+            citations=[],
+            chunks=[],
+            best_similarity=0.0,
+            similarity_gap=0.0,
+            canonical_query=canonical_query,
+            query_vector=[],
+            query_category=query_category,
+            top_k_used=top_k,
+        )
+
+    # L2 cache check
+    try:
+        l2_hit = await get_l2_cache(db, query_vector, threshold=0.95)
+        if l2_hit is not None:
+            logfire.info(
+                "L2 cache hit for query: similarity={sim:.4f}", sim=l2_hit.get("similarity", 1.0)
+            )
+            return RetrievalResult(
+                cached_answer=l2_hit["response"],
+                cached_citations=l2_hit.get("citations", []),
+                declined=False,
+                citations=l2_hit.get("citations", []),
+                chunks=[],
+                best_similarity=1.0,
+                similarity_gap=0.0,
+                canonical_query=canonical_query,
+                query_vector=query_vector,
+                query_category=query_category,
+                top_k_used=top_k,
+            )
+        else:
+            logfire.info("L2 cache miss: no semantic match above 0.95 threshold")
+    except Exception as exc:
+        logfire.warn("L2 cache lookup failed: {err}", err=str(exc))
+
+    # FTS truncation
+    fts_words = fts_query_text.split()
+    if len(fts_words) > 500:
+        fts_query_text = " ".join(fts_words[:500])
+
+    # Hybrid retrieval
+    retrieved = await hybrid_search_rrf(db, query_vector, fts_query_text, top_k)
+
+    # Similarity scores
+    vec_scores = sorted((c["vector_score"] for c in retrieved), reverse=True)
+    best_similarity = vec_scores[0] if vec_scores else 0.0
+    similarity_gap = vec_scores[0] - vec_scores[1] if len(vec_scores) >= 2 else best_similarity
+    chunks_before = len(retrieved)
+    logfire.info(
+        "Retrieved {n} chunks, best_similarity={s:.4f}, similarity_gap={g:.4f}",
+        n=chunks_before,
+        s=best_similarity,
+        g=similarity_gap,
+    )
+
+    # Context compression
+    compressed = compress_context(retrieved, best_similarity=best_similarity)
+    chunks_after = len(compressed)
+    token_reduction = (1 - chunks_after / chunks_before) * 100 if chunks_before else 0
+    logfire.info(
+        "Compression: {b}->{a} chunks ({r:.0f}%% reduction)",
+        b=chunks_before,
+        a=chunks_after,
+        r=token_reduction,
+    )
+
+    # Layer 1 guard (FR-013)
+    if best_similarity < CONFIDENCE_THRESHOLD or chunks_after == 0:
+        logfire.info(
+            "Layer 1 guard fired: best_sim={s:.4f}, chunks_after={n}",
+            s=best_similarity,
+            n=chunks_after,
+        )
+        return RetrievalResult(
+            cached_answer=None,
+            cached_citations=[],
+            declined=True,
+            citations=[],
+            chunks=[],
+            best_similarity=best_similarity,
+            similarity_gap=similarity_gap,
+            canonical_query=canonical_query,
+            query_vector=query_vector,
+            query_category=query_category,
+            top_k_used=top_k,
+        )
+
+    # Build citations from compressed chunks
+    citations: list[dict[str, Any]] = []
+    for chunk in compressed:
+        price = chunk.get("price")
+        price_line = f"Giá: {price:,.0f} VND" if price is not None else "Giá: Liên hệ"
+        source_text = f"[{chunk['sku']}] {chunk['name']}\n{price_line}\n{chunk['description']}"
+        citations.append(
+            {
+                "product_id": chunk["id"],
+                "chunk_id": chunk["chunk_id"],
+                "sku": chunk["sku"],
+                "name": chunk["name"],
+                "source_text": source_text,
+            }
+        )
+
+    return RetrievalResult(
+        cached_answer=None,
+        cached_citations=[],
+        declined=False,
+        citations=citations,
+        chunks=compressed,
+        best_similarity=best_similarity,
+        similarity_gap=similarity_gap,
+        canonical_query=canonical_query,
+        query_vector=query_vector,
+        query_category=query_category,
+        top_k_used=top_k,
+    )
+
+
 async def answer_with_rag(
     db,
     query: str,

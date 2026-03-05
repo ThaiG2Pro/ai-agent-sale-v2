@@ -82,12 +82,12 @@ async def test_premium_model_unavailable_fallback(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_simple_pricing_no_escalation(monkeypatch):
-    """T071b: PRICING with high confidence → no escalation (Article XII cost guard)."""
+    """T071b: PRICING → no premium escalation (uses economy-chat, Article XII cost guard)."""
     monkeypatch.setattr("core.agent.nodes.escalation.settings.PREMIUM_MODEL", "premium-chat")
     state = _state("PRICING", similarity_score=0.95)
     result = await escalation_node(state)
     assert result["escalation_flag"] is False
-    assert result["model_used"] is None
+    assert result["model_used"] == "economy-chat"  # Answer with retrieved chunks, no premium
     assert result["escalation_reason"] == EscalationReasonEnum.NONE
 
 

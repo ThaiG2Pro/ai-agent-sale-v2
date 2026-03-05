@@ -3,9 +3,13 @@
 Why: Universal trace point — all graph paths (accepted AND declined) route here
 to ensure tracing happens (FR-008).
 
-What: If declined, returns DECLINE_MESSAGE without LLM call.
-Otherwise, builds prompt with citations context and calls LLM for response.
-Writes model trace at end regardless of outcome.
+What:
+- Cache hit path: returns cached_answer directly (no LLM call)
+- Declined path: returns DECLINE_MESSAGE (no LLM call)
+- Accepted path: builds context from retrieved_chunks, calls LLM, writes cache
+
+Cache write happens here (not in retrieval_node) because we only write
+the final answer after the correct model (economy or premium) has generated it.
 """
 
 from __future__ import annotations
@@ -32,12 +36,37 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     Universal trace point: writes model_traces regardless of accept/decline (FR-008).
     DB session injected via config["configurable"]["db"].
 
+    Paths:
+    1. Cache hit (cached_answer set) → return cached answer, no LLM call
+    2. Declined (Layer 1 or Layer 2) → return DECLINE_MESSAGE, no LLM call
+    3. Accepted → LLM call with retrieved_chunks context, then write to cache
+
     Returns:
         State update dict with response, model_used
     """
     db = (config.get("configurable") or {}).get("db")
 
-    # Path 1: Declined (Layer 1 or Layer 2 guard) → return without LLM
+    # Path 1: Cache hit — use pre-generated answer, skip LLM entirely
+    cached_answer = state.get("cached_answer")
+    if cached_answer and not state.get("declined", False):
+        await _write_model_trace(
+            state,
+            db=db,
+            metadata_={
+                "guard_decision": "CACHE_HIT",
+                "escalation_reason": state.get("escalation_reason"),
+                "escalation_failure": state.get("escalation_failure", False),
+                "escalation_flag": state.get("escalation_flag", False),
+                "declined": False,
+                "intended_model": "cache",
+            },
+        )
+        return {
+            "response": cached_answer,
+            "model_used": "cache",
+        }
+
+    # Path 2: Declined (Layer 1 or Layer 2 guard) → return without LLM
     if state.get("declined", False):
         await _write_model_trace(
             state,
@@ -55,7 +84,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             "model_used": None,
         }
 
-    # Path 2: Accepted → call LLM with citations context
+    # Path 3: Accepted → call LLM with citations context
     model = state.get("model_used") or "economy-chat"
 
     # Build context from retrieved chunks (use all chunks, not just first)
@@ -90,6 +119,10 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         response = f"Lỗi khi tạo phản hồi: {e!s}"
         model = None
 
+    # Write to cache after successful generation (best-effort)
+    if response and db and state.get("canonical_query") and state.get("query_vector"):
+        await _write_cache(state, response, db)
+
     # Universal trace write (FR-008)
     metadata_ = {
         "guard_decision": "ACCEPTED",
@@ -105,6 +138,31 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         "response": response,
         "model_used": model,
     }
+
+
+async def _write_cache(state: AgentState, response: str, db: AsyncSession) -> None:
+    """Write answer to semantic cache (L1+L2) after successful LLM generation."""
+    try:
+        from core.config import settings
+        from services.semantic_cache import set_cache
+
+        citations_for_cache = []
+        for c in state.get("citations") or []:
+            if hasattr(c, "model_dump"):
+                citations_for_cache.append(c.model_dump())
+            elif isinstance(c, dict):
+                citations_for_cache.append(c)
+
+        await set_cache(
+            db=db,
+            query=state["canonical_query"],
+            response=response,
+            embedding=state["query_vector"],
+            model_name=settings.EMBED_MODEL,
+            citations=citations_for_cache,
+        )
+    except Exception as exc:
+        print(f"[CACHE_WRITE_FAIL] {exc}", file=sys.stderr)
 
 
 async def _write_model_trace(

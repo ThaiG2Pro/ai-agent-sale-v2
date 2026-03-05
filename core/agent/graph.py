@@ -69,11 +69,30 @@ def build_graph(checkpointer=None):
     # START → router_node (router returns Command with goto)
     builder.add_edge(START, "router_node")
 
+    # Route from router_node based on intent (T045 logic)
+    # Explicit mapping helps Mermaid diagram rendering
+    builder.add_conditional_edges(
+        "router_node",
+        lambda state: state.get("next_node", "retrieval_node"),  # Placeholder for diagram
+        {
+            "retrieval_node": "retrieval_node",
+            "escalation_node": "escalation_node",
+            "answer_node": "answer_node",
+        },
+    )
+
     # retrieval_node → confidence_node
     builder.add_edge("retrieval_node", "confidence_node")
 
     # confidence_node → escalation_node OR answer_node (conditional, T051)
-    builder.add_conditional_edges("confidence_node", _route_after_confidence)
+    builder.add_conditional_edges(
+        "confidence_node",
+        _route_after_confidence,
+        {
+            "escalation_node": "escalation_node",
+            "answer_node": "answer_node",
+        },
+    )
 
     # escalation_node → answer_node
     builder.add_edge("escalation_node", "answer_node")

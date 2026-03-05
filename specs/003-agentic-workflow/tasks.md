@@ -514,37 +514,37 @@
 
 **Independent Test**: `uv run pytest tests/contract/ -v` — ALL 11 contract tests **PASS**.
 
-- [ ] T086 [P] [US5] Make `test_rag_tool_valid_response` pass (T028) — verify `make_rag_tool(db)` correctly bridges `RAGResult` → `RAGSearchOutput` via `from_rag_result`. Fix any field mapping issues. Run single test to confirm green. **Keywords**: TDD Green phase, `from_rag_result`, field mapping
+- [X] T086 [P] [US5] Make `test_rag_tool_valid_response` pass (T028) — verify `make_rag_tool(db)` correctly bridges `RAGResult` → `RAGSearchOutput` via `from_rag_result`. Fix any field mapping issues. Run single test to confirm green. **Keywords**: TDD Green phase, `from_rag_result`, field mapping
 
-- [ ] T087 [P] [US5] Make `test_rag_tool_layer1_guard_declined` pass (T029) — verify `declined=True` propagation from `answer_with_rag` result, LLM call count = 0 assertion. **Keywords**: Layer 1 propagation, `respx.calls`, call count zero
+- [X] T087 [P] [US5] Make `test_rag_tool_layer1_guard_declined` pass (T029) — verify `declined=True` propagation from `answer_with_rag` result, LLM call count = 0 assertion. **Keywords**: Layer 1 propagation, `respx.calls`, call count zero
 
-- [ ] T088 [P] [US5] Make error/timeout scenarios green (T030-T032) — verify `RAGSearchOutput` is always returned (never raises). Check LiteLLM error handling in `make_rag_tool`. **Keywords**: graceful degradation, exception wrapping, `try/except`
+- [X] T088 [P] [US5] Make error/timeout scenarios green (T030-T032) — verify `RAGSearchOutput` is always returned (never raises). Check LiteLLM error handling in `make_rag_tool`. **Keywords**: graceful degradation, exception wrapping, `try/except`
 
-- [ ] T089 [P] [US5] Make inventory contract tests green (T035-T039) — stub `inventory_lookup` always returns mock data, but tests mock the external call. Verify stub returns valid `InventoryLookupOutput` schema. **Keywords**: stub contract, schema validation, Week 3 mock data
+- [X] T089 [P] [US5] Make inventory contract tests green (T035-T039) — stub `inventory_lookup` always returns mock data, but tests mock the external call. Verify stub returns valid `InventoryLookupOutput` schema. **Keywords**: stub contract, schema validation, Week 3 mock data
 
-- [ ] T090 [US5] Run `uv run pytest tests/contract/ -v` — confirm ALL 11 contract tests PASS. Screenshot or save output. **Keywords**: TDD Green phase complete, contract test validation
+- [X] T090 [US5] Run `uv run pytest tests/contract/ -v` — confirm ALL 11 contract tests PASS. Screenshot or save output. **Keywords**: TDD Green phase complete, contract test validation
 
-- [ ] T091 [P] Create `docs/adr/002-langgraph-orchestration.md` — document: Context (Week 2 linear pipeline → Week 3 branching needed), Decision (LangGraph, Article II exemption), Consequences (50ms compile, Week 4 interrupt-ready), Alternatives (manual while loop rejected). **Keywords**: ADR, LangGraph rationale, Article II, `interrupt_before`
+- [X] T091 [P] Create `docs/adr/002-langgraph-orchestration.md` — document: Context (Week 2 linear pipeline → Week 3 branching needed), Decision (LangGraph, Article II exemption), Consequences (50ms compile, Week 4 interrupt-ready), Alternatives (manual while loop rejected). **Keywords**: ADR, LangGraph rationale, Article II, `interrupt_before`
 
-- [ ] T092 [P] Run `uv run python -c "from core.agent.graph import export_mermaid_to_file; export_mermaid_to_file('docs/week3/agent-graph.mmd')"` to generate Mermaid diagram. Verify file exists and contains all 5 node names. **Keywords**: `draw_mermaid()`, FR-004, artifact generation
+- [X] T092 [P] Run `uv run python -c "from core.agent.graph import export_mermaid_to_file; export_mermaid_to_file('docs/week3/agent-graph.mmd')"` to generate Mermaid diagram. Verify file exists and contains all 5 node names. **Keywords**: `draw_mermaid()`, FR-004, artifact generation
 
-- [ ] T093 [P] Run ruff linter on all new agent files: `uv run ruff check core/agent/ cli/run_agent.py tests/contract/ tests/unit/ --select ALL --ignore ANN,D`. Fix any violations (no blocking I/O, no global state, no direct SDK imports). **Keywords**: `ruff check`, ASYNC rules, Article V compliance
+- [X] T093 [P] Run ruff linter on all new agent files: `uv run ruff check core/agent/ cli/run_agent.py tests/contract/ tests/unit/ --select ALL --ignore ANN,D`. Fix any violations (no blocking I/O, no global state, no direct SDK imports). **Keywords**: `ruff check`, ASYNC rules, Article V compliance
 
-- [ ] T094 [P] Constitution validation — run commands from `quickstart.md`:
+- [X] T094 [P] Constitution validation — run commands from `quickstart.md`:
   1. `grep -rn "re\.\(match\|search\|findall\)" core/agent/ && echo VIOLATION || echo CLEAN`
   2. `grep -rn "^import openai\|^from openai\|^import anthropic" core/agent/ && echo VIOLATION || echo CLEAN`
   3. `uv run ruff check core/agent/ --select ASYNC`
   All must report CLEAN. **Keywords**: SC-007, no regex, no direct SDK, Article V
 
-- [ ] T095 Run full test suite: `uv run pytest tests/ -v --tb=short -q`. Note: integration tests require DB + Ollama. For CI without Ollama: `uv run pytest tests/unit/ tests/contract/ -v`. All unit + contract must pass. **Keywords**: full suite, regression check, CI baseline
+- [X] T095 Run full test suite: `uv run pytest tests/ -v --tb=short -q`. Note: integration tests require DB + Ollama. For CI without Ollama: `uv run pytest tests/unit/ tests/contract/ -v`. All unit + contract must pass. **Keywords**: full suite, regression check, CI baseline
 
-- [ ] T096 [P] Add `pytest.ini` or `pyproject.toml` `[tool.pytest.ini_options]` section for `asyncio_mode = "auto"` if not already set. Run `uv run pytest --co -q tests/contract/` to confirm test collection works without warnings. **Keywords**: `asyncio_mode = "auto"`, `pytest-asyncio`, no `@pytest.mark.asyncio` boilerplate needed
+- [X] T096 [P] Add `pytest.ini` or `pyproject.toml` `[tool.pytest.ini_options]` section for `asyncio_mode = "auto"` if not already set. Run `uv run pytest --co -q tests/contract/` to confirm test collection works without warnings. **Keywords**: `asyncio_mode = "auto"`, `pytest-asyncio`, no `@pytest.mark.asyncio` boilerplate needed
 
-- [ ] T097 [P] Create `tests/integration/test_agent_flow.py` module docstring and add `pytestmark = pytest.mark.integration` to mark all tests as integration tier. Add to `conftest.py` at root: `--ignore-glob=tests/integration` for fast CI mode. **Keywords**: pytest markers, `pytest.mark.integration`, CI tiers
+- [X] T097 [P] Create `tests/integration/test_agent_flow.py` module docstring and add `pytestmark = pytest.mark.integration` to mark all tests as integration tier. Add to `conftest.py` at root: `--ignore-glob=tests/integration` for fast CI mode. **Keywords**: pytest markers, `pytest.mark.integration`, CI tiers
 
-- [ ] T098 [P] Verify `cli/run_agent.py` is executable: `chmod +x cli/run_agent.py`. Run help: `uv run python cli/run_agent.py --help`. Confirm `--stream` and `--session` flags shown. **Keywords**: CLI usability, Article I, debug script
+- [X] T098 [P] Verify `cli/run_agent.py` is executable: `chmod +x cli/run_agent.py`. Run help: `uv run python cli/run_agent.py --help`. Confirm `--stream` and `--session` flags shown. **Keywords**: CLI usability, Article I, debug script
 
-- [ ] T099 Final smoke test: Run `uv run python cli/run_agent.py "Giá sản phẩm X là bao nhiêu?"` (requires Ollama + DB). If offline only: run `uv run pytest tests/unit/ tests/contract/ -v` and confirm all 100% pass. **Keywords**: end-to-end smoke, SC-001 verification
+- [X] T099 Final smoke test: Run `uv run python cli/run_agent.py "Giá sản phẩm X là bao nhiêu?"` (requires Ollama + DB). If offline only: run `uv run pytest tests/unit/ tests/contract/ -v` and confirm all 100% pass. **Keywords**: end-to-end smoke, SC-001 verification
 
 - [ ] T102 [P] Export Mermaid diagram to `docs/week3/agent-graph.mmd` as a committed static artifact (FR-004). Call `export_mermaid_to_file("docs/week3/agent-graph.mmd")` from `core/agent/graph.py`. Run once and commit the output. **Boilerplate**:
   ```bash

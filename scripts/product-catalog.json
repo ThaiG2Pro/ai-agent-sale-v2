@@ -345,12 +345,167 @@
         "bảo_hành": "10 năm"
       }
     }
+  ,
+    {
+      "sku": "PHONE-SM-002",
+      "name": "Samsung Galaxy A55 128GB",
+      "category": "Điện thoại",
+      "subcategory": "Smartphone tầm trung",
+      "price": 6990000,
+      "currency": "VND",
+      "description": "Smartphone tầm trung với màn hình Super AMOLED 6.6 inch, chip Exynos/G95, RAM 8GB, pin 5000mAh, camera 64MP, sạc nhanh 45W.",
+      "intent": "B2C",
+      "specifications": {
+        "kích_thước_màn_hình": "6.6 inch Super AMOLED",
+        "bộ_xử_lý": "Exynos G95",
+        "ram": "8GB",
+        "lưu_trữ": "128GB",
+        "camera": "64MP chính + 12MP siêu rộng",
+        "dung_lượng_pin": "5000mAh",
+        "sạc_nhanh": "45W"
+      }
+    },
+    {
+      "sku": "PHONE-PO-001",
+      "name": "POCO F6 256GB",
+      "category": "Điện thoại",
+      "subcategory": "Smartphone gaming",
+      "price": 8490000,
+      "currency": "VND",
+      "description": "Điện thoại hiệu năng cao cho game với chip Snapdragon 8s Gen 3, màn hình 120Hz, RAM 12GB, tản nhiệt vapor chamber, pin 5000mAh.",
+      "intent": "B2C",
+      "specifications": {
+        "bộ_xử_lý": "Snapdragon 8s Gen 3",
+        "ram": "12GB",
+        "lưu_trữ": "256GB",
+        "màn_hình": "120Hz AMOLED",
+        "dung_lượng_pin": "5000mAh",
+        "tản_nhiệt": "Vapor chamber"
+      }
+    },
+    {
+      "sku": "LAPTOP-ACER-001",
+      "name": "Acer Swift 14 OLED i7 16GB",
+      "category": "Laptop",
+      "subcategory": "Ultrabook",
+      "price": 21990000,
+      "currency": "VND",
+      "description": "Ultrabook mỏng nhẹ với màn hình 14 inch OLED, Intel Core i7, 16GB RAM, 512GB SSD, pin 12 giờ, thân nhôm cao cấp.",
+      "intent": "B2C",
+      "specifications": {
+        "kích_thước_màn_hình": "14 inch OLED",
+        "bộ_xử_lý": "Intel Core i7",
+        "ram": "16GB",
+        "lưu_trữ": "512GB SSD",
+        "trọng_lượng": "1.1 kg",
+        "thời_lượng_pin": "12 giờ"
+      }
+    },
+    {
+      "sku": "LAPTOP-HP-001",
+      "name": "HP Envy 14 Ryzen 7 16GB",
+      "category": "Laptop",
+      "subcategory": "Laptop sáng tạo",
+      "price": 25990000,
+      "currency": "VND",
+      "description": "Laptop dành cho sáng tạo nội dung với CPU Ryzen 7, 16GB RAM, GPU rời nhẹ, màn hình 14 inch 100% sRGB, SSD 1TB.",
+      "intent": "B2C",
+      "specifications": {
+        "bộ_xử_lý": "AMD Ryzen 7",
+        "ram": "16GB",
+        "lưu_trữ": "1TB SSD",
+        "card_đồ_họa": "GPU rời nhẹ",
+        "màn_hình": "14 inch 100% sRGB"
+      }
+    },
+    {
+      "sku": "LAPTOP-ROG-001",
+      "name": "ASUS ROG Strix G16 RTX 4070",
+      "category": "Laptop",
+      "subcategory": "Gaming",
+      "price": 44990000,
+      "currency": "VND",
+      "description": "Laptop gaming 16 inch với GPU NVIDIA RTX 4070, CPU Intel Core i9, màn 240Hz, RAM 32GB, SSD 1TB, hệ thống tản nhiệt nâng cao.",
+      "intent": "B2C",
+      "specifications": {
+        "màn_hình": "16 inch 240Hz",
+        "bộ_xử_lý": "Intel Core i9",
+        "ram": "32GB",
+        "lưu_trữ": "1TB SSD",
+        "card_đồ_họa": "NVIDIA RTX 4070",
+        "tản_nhiệt": "Hệ thống nâng cao"
+      }
+    },
+    {
+      "sku": "HEADPHONE-APPLE-001",
+      "name": "Apple AirPods Pro (2nd Gen)",
+      "category": "Phụ kiện",
+      "subcategory": "Tai nghe true wireless",
+      "price": 4990000,
+      "currency": "VND",
+      "description": "Tai nghe không dây True Wireless với khử ồn chủ động, Spatial Audio, thời lượng pin cải thiện và hộp sạc MagSafe.",
+      "intent": "B2C",
+      "specifications": {
+        "khử_tiếng_ồn": "ANC",
+        "âm_thanh": "Spatial Audio",
+        "thời_lượng_pin": "6 giờ ( ANC on )",
+        "kết_nối": "Bluetooth",
+        "hộp_sạc": "MagSafe"
+      }
+    },
+    {
+      "sku": "EARBUDS-SM-002",
+      "name": "Samsung Galaxy Buds2 Pro",
+      "category": "Phụ kiện",
+      "subcategory": "Tai nghe true wireless",
+      "price": 2990000,
+      "currency": "VND",
+      "description": "Tai nghe in-ear nhỏ gọn, ANC, âm thanh Hi-Res, chống nước IPX7, kết nối nhiều thiết bị.",
+      "intent": "B2C",
+      "specifications": {
+        "khử_tiếng_ồn": "ANC",
+        "kháng_nước": "IPX7",
+        "thời_lượng_pin": "5 giờ",
+        "kết_nối": "Bluetooth"
+      }
+    },
+    {
+      "sku": "CASE-PHONE-001",
+      "name": "Ốp lưng Silicone cho điện thoại (universal)",
+      "category": "Phụ kiện",
+      "subcategory": "Ốp lưng",
+      "price": 199000,
+      "currency": "VND",
+      "description": "Ốp lưng silicone mềm mại, chống trượt, bảo vệ cạnh và mặt lưng cho nhiều mẫu smartphone phổ thông.",
+      "intent": "B2C",
+      "specifications": {
+        "chất_liệu": "Silicone mềm",
+        "tính_năng": "Chống trượt, chống va đập",
+        "tương_thích": "Nhiều mẫu điện thoại phổ thông"
+      }
+    },
+    {
+      "sku": "CHARGER-GAN-65W-001",
+      "name": "65W GaN USB-C Charger",
+      "category": "Phụ kiện",
+      "subcategory": "Sạc nhanh",
+      "price": 599000,
+      "currency": "VND",
+      "description": "Adapter sạc GaN nhỏ gọn công suất 65W, hỗ trợ PD và PPS, tương thích laptop mỏng và điện thoại sạc nhanh.",
+      "intent": "B2C",
+      "specifications": {
+        "công_suất": "65W",
+        "chuẩn": "USB Power Delivery, PPS",
+        "kết_nối": "USB-C",
+        "chất_liệu": "GaN"
+      }
+    }
   ],
   "metadata": {
     "version": "1.0",
     "created_at": "2024-12-01",
     "category_focus": "Sản phẩm công nghệ (Điện thoại, Laptop, Phụ kiện)",
-    "total_products": 19,
+    "total_products": 31,
     "currency": "VND",
     "language": "Vietnamese",
     "notes": "Catalog mẫu sản phẩm cho phát triển và kiểm tra. Tất cả giá cả là minh họa."

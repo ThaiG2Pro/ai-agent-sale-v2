@@ -109,6 +109,10 @@ class AgentState(TypedDict):
     response: str | None
     declined: bool
     error: str | None
+    # Retrieval pipeline fields (set by retrieval_node, used by answer_node)
+    cached_answer: str | None  # Pre-generated answer from L1/L2 cache hit (skip LLM)
+    canonical_query: str | None  # Normalized query text for cache write
+    query_vector: list | None  # Embedded query vector for L2 cache write
 
 
 class NodeStreamEvent(BaseModel):
@@ -148,4 +152,7 @@ def make_initial_state(user_message: str, session_id: str) -> AgentState:
         "response": None,
         "declined": False,  # explicit False (SC-001)
         "error": None,
+        "cached_answer": None,
+        "canonical_query": None,
+        "query_vector": None,
     }
