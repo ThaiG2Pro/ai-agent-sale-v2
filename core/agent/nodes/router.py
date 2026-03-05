@@ -10,15 +10,10 @@ answer_node.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from langgraph.types import Command
 
-from core.agent.state import IntentClassification, IntentEnum
+from core.agent.state import AgentState, IntentClassification, IntentEnum
 from services.ai import AIGateway
-
-if TYPE_CHECKING:
-    from core.agent.state import AgentState
 
 
 async def router_node(state: AgentState) -> Command:
@@ -77,4 +72,32 @@ def _get_next_node(classification: IntentClassification) -> str:
     if classification.primary_intent == IntentEnum.SMALLTALK:
         return "answer_node"
     # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY, unknown
+    return "retrieval_node"
+
+
+def _route_after_router(state: AgentState) -> str:
+    """Conditional edge after router_node (T045b, T051).
+
+    Routes based on state intent that was set by router_node.
+    This function is used for Mermaid diagram rendering to show the
+    conditional paths from router_node, while the actual routing execution
+    uses Command(goto=...) returned by router_node.
+
+    Returns:
+        One of: "retrieval_node", "escalation_node", "answer_node"
+    """
+    intent_str = state.get("intent", "unknown")
+    secondary_intents = state.get("secondary_intents", [])
+
+    # FR-007: escalate if ANY intent (primary OR secondary) is COMPLAINT/NEGOTIATION
+    if intent_str in ("COMPLAINT", "NEGOTIATION"):
+        return "escalation_node"
+    if any(si in ("COMPLAINT", "NEGOTIATION") for si in secondary_intents):
+        return "escalation_node"
+
+    # SMALLTALK primary intent → answer_node (no retrieval needed, save cost)
+    if intent_str == "SMALLTALK":
+        return "answer_node"
+
+    # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY → retrieval_node
     return "retrieval_node"

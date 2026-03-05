@@ -20,7 +20,7 @@ from core.agent.nodes.answer import answer_node
 from core.agent.nodes.confidence import _route_after_confidence, confidence_node
 from core.agent.nodes.escalation import escalation_node
 from core.agent.nodes.retrieval import retrieval_node
-from core.agent.nodes.router import router_node
+from core.agent.nodes.router import _route_after_router, router_node
 from core.agent.state import AgentState, NodeStreamEvent
 
 # All registered node names — used to filter streaming events (T081)
@@ -69,11 +69,11 @@ def build_graph(checkpointer=None):
     # START → router_node (router returns Command with goto)
     builder.add_edge(START, "router_node")
 
-    # Route from router_node based on intent (T045 logic)
-    # Explicit mapping helps Mermaid diagram rendering
+    # router_node returns Command(goto=...) which handles routing
+    # For diagram rendering, add conditional edges that mirror the routing logic
     builder.add_conditional_edges(
         "router_node",
-        lambda state: state.get("next_node", "retrieval_node"),  # Placeholder for diagram
+        _route_after_router,
         {
             "retrieval_node": "retrieval_node",
             "escalation_node": "escalation_node",
@@ -101,7 +101,7 @@ def build_graph(checkpointer=None):
     builder.add_edge("answer_node", END)
 
     # Compile with recursion limit
-    return builder.compile(checkpointer=checkpointer)
+    return builder.compile(checkpointer=checkpointer, name="agent-orchestration")
 
 
 def get_mermaid_diagram() -> str:
