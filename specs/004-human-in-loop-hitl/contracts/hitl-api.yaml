@@ -1,0 +1,338 @@
+openapi: "3.1.0"
+info:
+  title: HITL Review API
+  description: |
+    Human-in-the-Loop (HITL) review and state inspection endpoints.
+    All endpoints require X-Admin-Key authentication.
+    POST /review is idempotent (X-Idempotency-Key required).
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+
+security:
+  - AdminKeyAuth: []
+
+paths:
+  /hitl/session/{session_id}/state:
+    get:
+      summary: Get current paused state for admin review
+      description: |
+        Retrieves the StateSnapshot from LangGraph AsyncPostgresSaver for the given session.
+        Returns the current state values, the next node to execute, pause reason, and
+        HITLMetadata (escalation_count, version for optimistic locking).
+        Technique: graph.aget_state(config) → StateSnapshot (techniques-reference §2)
+      operationId: get_paused_state
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: LangGraph thread_id (equals conversation session_id)
+      responses:
+        "200":
+          description: Current paused state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PausedStateResponse"
+        "404":
+          description: Session not found or not paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid X-Admin-Key
+
+  /hitl/review:
+    post:
+      summary: Submit admin decision on a paused session
+      description: |
+        Idempotent endpoint to approve, reject, or request edit on a paused session.
+        Uses optimistic locking (expected_version must match current InterruptedSession.version).
+        On approval: calls graph.update_state() then Command(resume=payload).
+        On rejection: routes to customer_support_node.
+        On request_edit: updates state only (no resume until explicit approve).
+        Technique: Pattern B (update_state + Command(resume)) from techniques-reference §4
+      operationId: submit_review
+      parameters:
+        - name: X-Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: |
+            Unique key per approval action. If same key received twice,
+            returns 200 OK with cached result (prevents double-click duplicates).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewRequest"
+      responses:
+        "200":
+          description: Decision accepted and processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewResponse"
+          headers:
+            X-Idempotency-Status:
+              schema:
+                type: string
+                enum: [new, hit]
+              description: "new = first processing; hit = cached replay"
+        "409":
+          description: Version conflict (stale expected_version — concurrent approval won)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictResponse"
+        "422":
+          description: Pydantic validation failed (invalid state_edits schema)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+        "401":
+          description: Missing or invalid X-Admin-Key
+
+  /hitl/session/{session_id}/queue:
+    get:
+      summary: List queued customer messages for a paused session
+      description: |
+        Returns unprocessed QueuedMessages for the session in received_at ASC order.
+        Allows admin to see what customer sent during pause before approving.
+      operationId: get_queued_messages
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of queued messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueuedMessagesResponse"
+        "404":
+          description: Session not found
+
+  /hitl/support-queue:
+    get:
+      summary: List escalated sessions pending human support
+      description: |
+        Returns SupportQueue entries with status=pending, ordered by created_at ASC.
+        Week 6 dashboard will use this endpoint. Week 4 provides read-only access.
+      operationId: list_support_queue
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, assigned, resolved, closed]
+            default: pending
+      responses:
+        "200":
+          description: List of escalated sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportQueueResponse"
+
+components:
+  securitySchemes:
+    AdminKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+
+  schemas:
+    PausedStateResponse:
+      type: object
+      required: [session_id, pause_reason, next_node, state_values, hitl_metadata]
+      properties:
+        session_id:
+          type: string
+        pause_reason:
+          type: string
+          enum: [order_approval, low_confidence, cost_limit, refund_approval]
+        next_node:
+          type: string
+          description: LangGraph StateSnapshot.next[0]
+        state_values:
+          type: object
+          description: |
+            Key state fields for admin review. Includes: user_message, intent,
+            retrieved_chunks (summarized), confidence_score, similarity_score,
+            estimated_token_cost, hitl_escalation_count.
+          additionalProperties: true
+        hitl_metadata:
+          $ref: "#/components/schemas/HITLMetadataView"
+        queued_messages_count:
+          type: integer
+          description: Number of customer messages queued during this pause
+
+    HITLMetadataView:
+      type: object
+      required: [pause_id, paused_at, status, version, escalation_count]
+      properties:
+        pause_id:
+          type: string
+          format: uuid
+        paused_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [paused, approved, rejected, escalated, abandoned]
+        version:
+          type: integer
+          description: Current optimistic lock version (send this as expected_version)
+        escalation_count:
+          type: integer
+          minimum: 0
+          maximum: 2
+        admin_id:
+          type: string
+          nullable: true
+
+    ReviewRequest:
+      type: object
+      required: [session_id, pause_id, action, expected_version, admin_user_id]
+      properties:
+        session_id:
+          type: string
+        pause_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [approve, reject, request_edit]
+        expected_version:
+          type: integer
+          description: Must match current InterruptedSession.version (optimistic locking)
+        admin_user_id:
+          type: string
+        reason_or_comment:
+          type: string
+          nullable: true
+          description: Required if action=reject; optional for approve
+        state_edits:
+          type: object
+          nullable: true
+          description: |
+            Required if action=request_edit. Key-value pairs of fields to update.
+            Example: {"price": 1100000, "quantity": 2}
+            All values validated against downstream node's Pydantic schema before acceptance.
+          additionalProperties: true
+
+    ReviewResponse:
+      type: object
+      required: [session_id, action, status]
+      properties:
+        session_id:
+          type: string
+        action:
+          type: string
+          enum: [approve, reject, request_edit]
+        status:
+          type: string
+          enum: [resumed, rejected, edit_applied, escalated]
+        message:
+          type: string
+          description: Human-readable outcome description
+        new_version:
+          type: integer
+          description: Updated version after successful approval
+
+    ConflictResponse:
+      type: object
+      required: [error, expected_version, current_version]
+      properties:
+        error:
+          type: string
+          example: "This order was already approved by another admin."
+        expected_version:
+          type: integer
+        current_version:
+          type: integer
+
+    QueuedMessagesResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              message_id:
+                type: string
+                format: uuid
+              message_text:
+                type: string
+              received_at:
+                type: string
+                format: date-time
+              processed:
+                type: boolean
+
+    SupportQueueResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              queue_id:
+                type: string
+                format: uuid
+              session_id:
+                type: string
+              reason:
+                type: string
+                enum: [timeout_60min, rejected_order, max_hitl_exceeded]
+              created_at:
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum: [pending, assigned, resolved, closed]
+              context_snapshot:
+                type: object
+                additionalProperties: true
+        total:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    ValidationErrorResponse:
+      type: object
+      required: [error, details]
+      properties:
+        error:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
