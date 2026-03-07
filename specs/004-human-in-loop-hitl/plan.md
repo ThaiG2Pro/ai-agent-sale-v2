@@ -1,56 +1,68 @@
 # Implementation Plan: Human-in-the-Loop (HITL) Control System
 
-**Branch**: `004-human-in-loop-hitl` | **Date**: 2026-03-06 | **Spec**: [spec.md](./spec.md)  
-**Input**: Feature specification from `/specs/004-human-in-loop-hitl/spec.md`
+**Branch**: `004-human-in-loop-hitl` | **Spec**: [`specs/004-human-in-loop-hitl/spec.md`](./spec.md)  
+**Input**: Feature specification v5 (FR-001–033, SC-001–035, 10 edge case fixes)
 
 ---
 
 ## Summary
 
-Embed a **Human-in-the-Loop (HITL) control layer** directly inside the existing LangGraph sales agent to intercept sensitive, revenue-affecting operations before they execute. The system uses **`interrupt()`** (dynamic, node-level breakpoints) combined with `AsyncPostgresSaver` (single source of truth for state) and an idempotent `/review` API endpoint with optimistic locking. Three escalation paths are handled: manual order approval, confidence guards (< 0.7), and cost guards (> 8000 tokens). Customer messages queued during pause are consumed first on resume via a post-approval node. Rejections route through a `customer_support_node` for empathetic messaging instead of abrupt termination.
+Extend the Week 3 LangGraph sales agent with a **5-layer HITL control system** that pauses the
+graph at `hitl_guard_node` using LangGraph's `interrupt()` mechanism whenever an order
+requires admin approval, confidence is too low, or cost exceeds threshold.  Admin reviews the
+pause via a REST `/review` endpoint, optionally applying state edits, then issues
+`Command(resume=payload)` to continue the graph through `queue_consumer_node`.
 
-**Technical approach (from `docs/week4/techniques-reference.md`)**:
-- **Technique 1** (HITL & Transaction Safety): `interrupt()` + `AsyncPostgresSaver` + `Command(resume=value)`
-- **Technique 2** (Transparent State Inspection): `graph.aget_state(config)` + `StateSnapshot`
-- **Technique 3** (Idempotent Review Gateway): `Idempotency-Key` header + `update_state(config, values)` + optimistic locking
-- **Technique 4** (State Override): `graph.update_state(..., as_node="hitl_review_node")` + Pattern B (atomic update + resume)
-- **Technique 5** (Confidence Guard): RRF fusion formula + threshold 0.7
-- **Technique 6** (Cost Guard): `litellm.token_counter()` + circuit-breaker interrupt
-- **Technique 8** (Confidence Scoring): Fusion formula `(1-α)·similarity + α·rerank`, α=0.7
-- **Technique 9** (Tool Contract Testing): `pytest-asyncio` + `respx.mock` + `SecretStr`
+`queue_consumer_node` is the central integration point: it processes the customer message queue
+accumulated during the pause, classifies intent in batch (cheap model), and routes to
+`state_freshness_validator_node` (CONFIRM), `cancellation_node` (CANCEL), or re-pauses for
+MODIFY_ORDER.  A background `asyncio` task handles 30-min notification and 60-min
+SupportQueue escalation.  All 10 identified edge cases are handled via dedicated guard logic
+(see `research.md` → Decisions 3–9 and `spec.md` §Edge Cases).
+
+**Key architectural decision**: `interrupt()` inside `hitl_guard_node` (dynamic breakpoint),
+NOT `interrupt_before` (static).  Reason: resumes AFTER the `interrupt()` call, enabling
+`Command(goto="queue_consumer_node")` routing, whereas `interrupt_before` would skip
+`queue_consumer_node` entirely.
 
 ---
 
 ## Technical Context
 
 **Language/Version**: Python 3.13+  
-**Primary Dependencies**: LangGraph ≥ 0.3, FastAPI (async), SQLAlchemy 2.0 (async), asyncpg, LiteLLM, Pydantic v2, langgraph-checkpoint-postgres  
-**Storage**: PostgreSQL 17 + pgvector 0.8 (schema: `agent_v1`). LangGraph checkpointer tables: `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`. New HITL tables: `hitl_metadata`, `review_actions`, `confidence_scores`, `queued_messages`, `support_queue`.  
-**Testing**: pytest + pytest-asyncio; respx for HTTP mocks; deterministic TDD for API/DB layer; Gold Dataset eval for agent workflows  
-**Target Platform**: Linux server (Docker Compose, python:3.13-slim-bookworm)  
-**Project Type**: Single web project (existing monorepo: `api/`, `core/`, `services/`, `models/`)  
-**Performance Goals**: `/review` endpoint < 200ms p95; state inspection < 10ms (connection pool); auto-reply queuing < 2s  
-**Constraints**: No Redis (lean SME); PostgreSQL only; async-only I/O; max 2 HITL pauses per order; 90-day message retention  
-**Scale/Scope**: SME-scale (hundreds of concurrent sessions); single admin or small team approval workflow
+**Primary Dependencies**: LangGraph ≥ 0.3, `langgraph-checkpoint-postgres` (AsyncPostgresSaver),
+`psycopg[binary]` ≥ 3.1.9 (psycopg3 — separate from existing `asyncpg`),
+FastAPI (async), LiteLLM (economy model for queue classification), SQLAlchemy 2.0 async  
+**Storage**: PostgreSQL 17 + pgvector 0.8+ (schema `agent_v1`); 5 HITL application tables
++ 4 LangGraph checkpointer tables (auto-created by `AsyncPostgresSaver.setup()`)  
+**Testing**: pytest + pytest-asyncio; existing 130 tests as baseline  
+**Target Platform**: Linux server, Docker Compose  
+**Performance Goals**: `/review` endpoint p95 < 200 ms; `queue_consumer_node` batch
+classification < 500 ms (economy model, ≤ 5 queued messages)  
+**Constraints**: No Redis, no Celery, no blocking event-loop calls; single PostgreSQL database;
+`JsonPlusSerializer(pickle_fallback=False)` mandatory (CVE-2026-27794)  
+**Scale/Scope**: SME — single admin reviewer, < 100 concurrent paused sessions
 
 ---
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+*All 12 articles checked. No violations.*
 
-| Article | Requirement | Status | Notes |
-|---------|-------------|--------|-------|
-| Art. I (Modular Core) | HITL logic in `core/agent/nodes/` and `services/hitl.py`; API layer in `api/routes/hitl.py` | ✅ PASS | No business logic in route handlers |
-| Art. II (Anti-Abstraction) | Use LangGraph `interrupt()` + `update_state()` directly; no custom HITL engine | ✅ PASS | Framework features used natively (exemption for LangGraph orchestration) |
-| Art. III (TDD) | Deterministic: API endpoints, DB writes, optimistic locking → TDD. Non-deterministic: confidence guard routing, post-approval node responses → Gold Dataset eval | ✅ PASS | Follows lean tiered evaluation |
-| Art. V (Async) | All DB ops via `AsyncSession`; checkpointer via `AsyncPostgresSaver`; no blocking reranker in event loop | ✅ PASS | Runs in existing async FastAPI server |
-| Art. VI (Type Safety) | `AgentState` extended with HITL fields (TypedDict); all API boundaries via Pydantic v2 models | ✅ PASS | Strict Pydantic validation on `/review` |
-| Art. VIII (Critical Actions) | Order placement, refund, pricing → guarded by `interrupt()` before execution | ✅ PASS | Core requirement of this feature |
-| Art. XI (Docs) | Docstrings with "Why this exists" in all new nodes, services, models | ✅ PASS | Must add to all new files |
-| Art. XII (Cost Efficiency) | Cost guard implemented; test cases assert cheap model used for simple queries | ✅ PASS | `litellm.token_counter()` circuit breaker |
-
-**Constitution Check Result: ✅ ALL GATES PASS** — proceed to Phase 0 research.
+| Article | Rule | Status |
+|---------|------|--------|
+| I — Single Source of Truth | PostgreSQL only; no Redis, no in-memory state | ✅ `AsyncPostgresSaver` → PostgreSQL |
+| II — LangGraph Mandatory | Orchestration via LangGraph StateGraph | ✅ HITL nodes integrated into existing graph |
+| III — No Over-Engineering | No K8s, no Celery, no microservices | ✅ `asyncio` task for timeout, Docker Compose only |
+| IV — Local-First / Zero-Cost | Must work fully offline with Ollama | ✅ Queue classification uses economy/local model |
+| V — Strict Async | No blocking I/O in event loop | ✅ `asyncpg` + `psycopg[async]`; timeout loop is async; `anyio.to_thread` if needed |
+| VI — Pydantic Boundaries | All LLM outputs and API payloads via Pydantic models | ✅ `ReviewAction`, `ApprovalPayload`, queue intent output |
+| VII — Stateless Runtime | Runtime reads state from PostgresSaver; no in-process state | ✅ `AsyncPostgresSaver` is sole state store |
+| VIII — Human Circuit Breaker | Irreversible actions must have HITL gate | ✅ This feature IS the Article VIII implementation |
+| IX — RAG Grounding | Citations required for info responses | ✅ Unchanged from Week 3 |
+| X — Economy Model Default | Use cheap model unless escalation warranted | ✅ Queue classification uses economy tier |
+| XI — Observability | Structured logging + OpenTelemetry traces | ✅ HITL events traced; `SensitiveLogFilter` on admin endpoints |
+| XII — No Hardcoded Secrets | All secrets via env vars | ✅ `ADMIN_API_KEY`, `DATABASE_URL` from `.env` |
 
 ---
 
@@ -61,58 +73,93 @@ Embed a **Human-in-the-Loop (HITL) control layer** directly inside the existing 
 ```text
 specs/004-human-in-loop-hitl/
 ├── plan.md              ← This file
-├── research.md          ← Phase 0 output
-├── data-model.md        ← Phase 1 output
-├── quickstart.md        ← Phase 1 output
+├── spec.md              ← Authoritative spec (FR-001–033, SC-001–035)
+├── research.md          ← 9 implementation decisions resolved
+├── data-model.md        ← DB schema + AgentState extension + state transitions
+├── quickstart.md        ← Dev setup commands
 ├── contracts/
-│   └── hitl-api.yaml    ← Phase 1 output (OpenAPI)
-└── tasks.md             ← Phase 2 output (/speckit.tasks — NOT created here)
+│   └── hitl-api.yaml    ← OpenAPI spec for /state and /review endpoints
+└── tasks.md             ← 73 granular tasks across 21 phases
 ```
 
-### Source Code (repository root)
+### Source Code (additions to existing single-project layout)
 
 ```text
-core/
-└── agent/
-    ├── state.py                        ← Extend AgentState with HITL fields
-    └── nodes/
-        ├── hitl_guard.py               ← NEW: confidence + cost guard, triggers interrupt()
-        ├── post_approval.py            ← NEW: consume QueuedMessages, inject synthetic messages
-        └── customer_support.py         ← NEW: empathetic rejection response → __end__
+# New graph nodes
+core/agent/nodes/
+├── hitl_guard.py            # confidence + cost guard; calls interrupt() on threshold breach
+├── queue_consumer.py        # orphan tool scan + batch intent classify + routing
+├── state_freshness.py       # re-query inventory/price freshness (stale data guard)
+├── order_execution.py       # actual order placement (post-freshness-check)
+├── cancellation.py          # customer CANCEL path
+└── customer_support.py      # rejection / escalation messaging
 
-services/
-└── hitl.py                             ← NEW: HITLService (pause, resume, review, timeout)
+# State extension
+core/agent/
+├── state.py                 # ADD: HITLReasonEnum, hitl_* fields, order_info
+└── graph.py                 # ADD: AsyncPostgresSaver setup, 6 new nodes, updated edges
 
-api/
-└── routes/
-    └── hitl.py                         ← NEW: /review, /session/{id}/state endpoints
+# Checkpointer factory
+core/agent/
+└── checkpointer.py          # AsyncPostgresSaver + AsyncConnectionPool + JsonPlusSerializer
 
-models/
-└── schema.py                           ← Extend: add HITLMetadata, ReviewAction, QueuedMessage, SupportQueue
+# HITL service layer
+services/hitl/
+├── __init__.py
+├── service.py               # HITLService: gateway check, resume, timeout scheduler
+├── schemas.py               # Pydantic: ReviewAction, ApprovalPayload, QueuedMessageBatch
+└── timeout_scheduler.py     # asyncio background task: 30-min warn, 60-min escalate
 
-migrations/
-└── versions/
-    └── XXXX_add_hitl_tables.py         ← NEW: Alembic migration
+# Admin API route
+api/routes/
+└── hitl.py                  # GET /hitl/session/{session_id}/state
+                             # POST /hitl/review
+                             # X-Admin-Key + X-Idempotency-Key guards
 
-tests/
-├── unit/
-│   ├── test_hitl_guard.py              ← NEW: confidence/cost threshold logic
-│   ├── test_post_approval_node.py      ← NEW: queue consumption, synthetic message placement
-│   └── test_hitl_service.py            ← NEW: optimistic locking, timeout logic
-├── contract/
-│   └── test_hitl_api.py               ← NEW: /review endpoint contract tests
-└── integration/
-    └── test_hitl_flow.py              ← NEW: end-to-end pause → approve → resume flow
+# DB models
+models/schema.py             # ADD: HITLMetadata, ReviewAction, QueuedMessage, SupportQueue,
+                             #      InterruptedSession ORM models
+
+# Alembic migration
+migrations/versions/
+└── XXXX_add_hitl_tables.py  # Creates 5 agent_v1 tables (HITLMetadata, ReviewAction,
+                             #   QueuedMessage, SupportQueue, InterruptedSession)
+                             # AsyncPostgresSaver creates its own 4 tables via setup()
+
+# Tests (new)
+tests/unit/
+├── test_hitl_guard_node.py       # interrupt() fires, resume routing, overflow guard
+├── test_queue_consumer_node.py     # orphan tool close, CANCEL override, MODIFY_ORDER re-pause
+├── test_state_freshness_node.py    # stale price detection, out-of-stock routing
+├── test_hitl_service.py            # gateway, idempotency, optimistic lock, no-auto-resume
+└── test_hitl_schemas.py            # Pydantic validation for ReviewAction payload
+
+tests/integration/
+└── test_hitl_flow.py               # end-to-end: pause → approve → queue_consumer → execute
+                                    #             pause → reject → customer_support
+                                    #             CANCEL during pause overrides admin approval
+
+tests/contract/
+└── test_hitl_api.py                # FastAPI TestClient: /state, /review, idempotency header, 409
+
+# Existing files modified
+core/agent/state.py          # extend AgentState TypedDict with 8 HITL fields
+core/agent/graph.py          # add AsyncPostgresSaver, 6 nodes, new edges
+api/main.py                  # mount hitl router; add AsyncPostgresSaver lifespan startup
+models/schema.py             # add 5 ORM models
+core/config.py               # add 7 HITL settings + DATABASE_URL_PSYCOPG computed field
 ```
-
-**Structure Decision**: Extends existing single-project monorepo. HITL logic in `core/` (business logic), `services/` (DB operations), `api/routes/` (HTTP boundary). Follows existing pattern established in Weeks 2–3.
 
 ---
 
 ## Complexity Tracking
 
-> No constitution violations. No extra projects, no repository patterns. LangGraph orchestration already exempted by Article II.
+> No constitution violations. No exceptions required.
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|--------------------------------------|
-| None | — | — |
+| Layer | Simplest valid approach | Selected approach | Difference |
+|-------|------------------------|-------------------|------------|
+| Timeout scheduler | APScheduler (3rd party) | `asyncio.create_task` loop in FastAPI lifespan | No new dependency |
+| Idempotency store | Redis | `review_idempotency` column in `ReviewAction` table | Postgres only |
+| Checkpointer | Custom JSON table | `AsyncPostgresSaver` (LangGraph built-in, psycopg3) | Standard library |
+| State override | Direct JSON patch | `graph.update_state(as_node=...)` + `Command(resume)` | Correct audit trail |
+| Re-pause for MODIFY | Always re-pause | Compare queued modification vs current `order_info`; only re-pause if different | Prevents Double Correction (Edge Case 1) |
