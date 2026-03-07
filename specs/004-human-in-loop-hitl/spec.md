@@ -91,10 +91,11 @@ The HITL (Human-in-the-Loop) system is a **business-critical risk control mechan
        │
        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Layer 2 — LangGraph Execution (Normal Path)                │
+│  Layer 2 — LangGraph Execution (HITL Guard at Router)       │
 │                                                             │
-│  Graph runs normally until a sensitive node is reached      │
-│  interrupt_before fires → execution frozen in checkpointer  │
+│  Graph runs; when ORDER_PLACEMENT intent detected:          │
+│  hitl_guard_node calls interrupt() if confidence < 0.7      │
+│  OR cost > 8000 tokens → execution frozen in checkpointer   │
 │                                                             │
 │  On pause:                                                  │
 │  ├── Increment InterruptedSession.escalation_count          │
@@ -319,6 +320,23 @@ The AI is about to call an expensive LLM model estimated at 10,000 tokens, excee
 
 ---
 
+### User Story 7 - Failure Recovery from "Resuming" State (Priority: P1)
+
+The admin approves an order at the `/review` endpoint. The handler sets HITLMetadata.status="resuming" and calls `graph.invoke()` to run the paused graph. Due to a temporary database connection failure, the graph.invoke() raises an exception (PostgresConnectionError). The `/review` handler catches this exception, reverts HITLMetadata.status back to "paused", logs the failure, and returns HTTP 500 to the admin. The admin sees the error message "Graph execution failed — please retry" and can safely click Retry. The session is never left in a dead "approved but not running" state (ghost-approved state is prevented).
+
+**Why this priority**: Failure recovery is critical for production reliability. Without the "resuming" transient state and revert logic, a network hiccup could permanently break the workflow (admin approval stuck, session unusable, requires manual database intervention).
+
+**Independent Test**: Mock graph.invoke() to raise an exception, call POST /review with action="approve", verify HITLMetadata.status reverts to "paused" and HTTP 500 is returned to admin.
+
+**Acceptance Scenarios**:
+
+1. **Given** admin calls POST /review with action="approve", **When** the /review handler sets HITLMetadata.status="resuming" before calling graph.invoke(), **Then** this state change is persisted immediately (no batching)
+2. **Given** graph.invoke() raises an exception (e.g., database connection lost), **When** the /review handler catches the exception, **Then** it immediately reverts HITLMetadata.status back to "paused" and returns HTTP 500 with error detail to the admin
+3. **Given** status is reverted to "paused" after failed invoke, **When** the admin retries by clicking Retry or calling POST /review again with the same payload, **Then** no conflict occurs (idempotency applies; second approval with same reasoning is safe)
+4. **Given** a failed graph invocation is logged, **When** support team reviews logs, **Then** they can see the exact exception, timestamp, session_id, admin_user_id, and the number of retry attempts
+
+---
+
 ### Edge Cases
 
 - **Concurrent approval attempts (double-click due to lag)**: The InterruptedSession `version` field enforces optimistic locking. The first approval increments version and succeeds; the second with a stale version is rejected: "This order was already approved by [admin_user_id]." The error message includes the approver's identity.
@@ -327,7 +345,7 @@ The AI is about to call an expensive LLM model estimated at 10,000 tokens, excee
 - **Admin edits state with invalid data**: Full Pydantic validation at `/review` endpoint (type AND required field presence). Error returned immediately; state unchanged. Semantic validation (price > 0) deferred to graph resumption — if invalid, graph pauses again with the semantic error for admin to fix.
 - **Zombie sessions (abandoned without review)**: After 24 hours with no admin action post-escalation, HITLMetadata status set to "abandoned". SupportQueue record remains for manual resolution. No auto-approval ever occurs.
 - **Customer sends messages after escalation (status="escalated")**: Gateway treats "escalated" same as "paused" — messages are queued with auto-reply. No special casing needed.
-- **Cascading HITL (multiple sensitive nodes in sequence)**: escalation_count increments on each pause and is **never reset**, tracking the order's lifetime pause count. On the 3rd trigger, the graph checks escalation_count ≥ 3 before firing interrupt_before; if true, it bypasses the pause and forces the rejection path directly.
+- **Cascading HITL (multiple sensitive nodes in sequence)**: escalation_count increments on each pause and is **never reset**, tracking the order's lifetime pause count. On the 3rd trigger, the system checks escalation_count ≥ 3 before calling interrupt() in `hitl_guard_node`; if true, it bypasses the interrupt and forces the rejection path directly to `customer_support_node`
 - **Missing confidence score**: Treated as 0.0; system escalates conservatively to HITL with pause_reason="low_confidence".
 - **Double Correction — Admin applies queued change manually, queue_consumer_node re-applies it**: Admin sees a queued "change to size L" message in GET /state and manually applies it via state_edits before approving. On resume, queue_consumer_node loads the queued message. It first checks: is this message in `acknowledged_message_ids[]`? If yes, skip re-routing (mark processed, treat as CONFIRM). Separately: does the current state already reflect the requested change? If yes, treat as CONFIRM. Both checks prevent double correction.
 - **Dangling Tool Call — CANCEL routing leaves orphaned tool call in history**: queue_consumer_node always runs the orphaned tool call scan (Step 1) before any routing decision. This is unconditional — it runs even if there are no queued messages to process. LLM API contracts are never violated.
@@ -347,7 +365,7 @@ The AI is about to call an expensive LLM model estimated at 10,000 tokens, excee
 
 ### Functional Requirements
 
-- **FR-001**: LangGraph MUST use `interrupt_before=["order_node", "checkout_node", "refund_node", "pricing_node"]` to pause execution before sensitive nodes
+- **FR-001**: LangGraph MUST use dynamic `interrupt()` mechanism inside `hitl_guard_node` (NOT static `interrupt_before`) to pause execution at a single dynamic checkpoint. Reason: `interrupt_before` is static and prevents routing to `queue_consumer_node` on resume (graph would skip the queued message processing logic). `interrupt()` allows `Command(goto="queue_consumer_node")` routing, enabling proper message consumption and intent classification before downstream nodes execute. `hitl_guard_node` is triggered when confidence < 0.7, cost > 8000 tokens, or order requires approval
 - **FR-002**: `GET /graph/{session_id}/state` MUST return the current graph state (from PostgresSaver), the next node name, HITLMetadata, and all unprocessed QueuedMessages for the session. Admin must see queued messages before making a review decision.
 - **FR-003**: `POST /review` MUST support three actions: "approve", "reject", "request_edit". All actions MUST be idempotent (safe to call multiple times with same payload).
 - **FR-004**: Admin MUST be able to edit specific fields in the paused state via `request_edit`; changes MUST pass full Pydantic schema validation (required field presence + type checking); changes MUST be persisted; session MUST remain paused after edit until explicit "approve" action.
@@ -455,7 +473,7 @@ The AI is about to call an expensive LLM model estimated at 10,000 tokens, excee
 - **SC-007**: Concurrent approval attempts MUST be handled via optimistic locking; exactly one approval succeeds, others fail with a conflict error
 - **SC-008**: Paused sessions MUST remain paused unless explicitly resumed, rejected, or escalated; zero spontaneous resumptions
 - **SC-009**: Rejection reason MUST be available to the AI for customer-facing responses; customer receives a clear, personalized explanation
-- **SC-010**: HITLMetadata.status MUST always reflect the true session state ("active" | "paused" | "approved" | "rejected" | "escalated" | "abandoned"); the Gateway relies on this field exclusively
+- **SC-010**: HITLMetadata.status MUST always reflect the true session state ("active" | "paused" | "resuming" | "approved" | "rejected" | "escalated" | "abandoned"); the Gateway relies on this field exclusively. "resuming" is a transient status (set immediately before graph.invoke() on approve path; reverts to "paused" if invoke fails)
 - **SC-011**: When graph is paused, customer MUST receive auto-reply within 2 seconds; queued messages MUST be processed completely and in order after admin decision; zero message loss
 - **SC-012**: Admin state edits MUST be validated for type AND required field presence at endpoint level before acceptance; validation errors returned immediately without state modification
 - **SC-013**: 100% of resumed graphs after admin edits MUST have synthetic system messages appended to conversation_history before `queue_consumer_node` runs; LLM always sees admin corrections

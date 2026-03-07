@@ -442,7 +442,7 @@
 
 - [ ] T079 Export updated Mermaid graph diagram: `uv run python -c "from core.agent.graph import export_mermaid_to_file; export_mermaid_to_file('docs/week4/agent-graph.mmd')"`. Verify all 11 nodes appear: router, retrieval, confidence, **hitl_guard** (new), queue_consumer, state_freshness, order_execution, cancellation, customer_support, answer, END. Commit to `docs/week4/agent-graph.mmd`. **Keywords**: Mermaid export, graph documentation, 11 nodes, node naming
 
-- [ ] T080 Write `docs/week4/week4.md` (create if absent) with: 6 new node descriptions, HITL flow summary, new `AgentState` fields, new API endpoints, migration notes. Include section on **structured synthetic messages** (Article VI) and **adaptive guard thresholds** (vs static interrupt_before). This is the developer reference for future weeks. **Keywords**: developer documentation, week4.md, handoff doc, Article VI compliance
+- [ ] T080 Write `docs/week4/week4.md` (create if absent) with: 6 new node descriptions, HITL flow summary, new `AgentState` fields, new API endpoints, migration notes. Include section on **structured synthetic messages** (Article VI) and **dynamic interrupt() guards** (adaptive logic that checks confidence < 0.7 and cost > 8000 tokens before escalating to HITL). Explain why dynamic `interrupt()` inside `hitl_guard_node` is preferred over static `interrupt_before` (routing flexibility to `queue_consumer_node`). This is the developer reference for future weeks. **Keywords**: developer documentation, week4.md, handoff doc, Article VI compliance, dynamic interrupt rationale
 
 ---
 
