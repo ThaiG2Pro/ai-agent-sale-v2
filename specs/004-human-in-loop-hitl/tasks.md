@@ -203,17 +203,6 @@
   ```
   Add all 6 to `GRAPH_NODES`. **Keywords**: import, GRAPH_NODES set update
 
-- [ ] T022 Update `core/agent/graph.py` — add imports for all 6 new nodes and add them to `GRAPH_NODES` set:
-  ```python
-  from core.agent.nodes.hitl_guard import hitl_guard_node
-  from core.agent.nodes.queue_consumer import queue_consumer_node
-  from core.agent.nodes.state_freshness import state_freshness_validator_node
-  from core.agent.nodes.order_execution import order_execution_node
-  from core.agent.nodes.cancellation import cancellation_node
-  from core.agent.nodes.customer_support import customer_support_node
-  ```
-  Add all 6 to `GRAPH_NODES`. **Keywords**: import, GRAPH_NODES set update
-
 - [ ] T023 Register all 6 new nodes in `build_graph()` with `builder.add_node(...)`. Then add edges:
   - `confidence_node` conditional → `hitl_guard_node`, `answer_node` (if high confidence, skip guard)
   - `hitl_guard_node` conditional → `answer_node` (OK), interrupts on low confidence/cost
@@ -280,7 +269,7 @@
 **Purpose**: Actual order placement — deduct stock, record order.  
 **Prerequisite**: T035–T037.
 
-- [ ] T038 Implement order placement: within a single DB transaction — (1) decrement `products.stock_quantity` by `order_info["quantity"]` (with `WHERE stock_quantity >= quantity` guard to prevent negative stock), (2) insert an order record into `agent_v1.orders` table (stub table — use `JSONB` log in `ConversationSession.metadata_` if orders table doesn't exist yet). Return `Command(goto="answer_node", update={"response": confirmation_message, "order_info": {**order_info, "status": "confirmed"}})`. **Keywords**: DB transaction, stock decrement, order record, confirmation message
+- [ ] T038 Implement order placement: within a single DB transaction — (1) decrement `products.stock_quantity` by `order_info["quantity"]` (with `WHERE stock_quantity >= quantity` guard to prevent negative stock), (2) insert an order record into `agent_v1.orders` table (created by T081; use structure: id, session_id, customer_id, order_info, status, created_at). Return `Command(goto="answer_node", update={"response": confirmation_message, "order_info": {**order_info, "status": "confirmed"}})`. **Keywords**: DB transaction, stock decrement, order record, confirmation message, T081 orders table
 
 ---
 
@@ -311,14 +300,15 @@
 
 - [ ] T043 Implement `HITLService.enqueue_message(session_id: str, message_text: str, db) -> None`: insert `QueuedMessage` row with `processed=False`. This is called by the Paused Session Gateway when a new customer message arrives for a paused session. **Keywords**: `QueuedMessage` insert, async DB, gateway integration
 
-- [ ] T044 Implement `HITLService.process_approve(payload: ReviewActionCreate, db, graph, config) -> dict`: (1) Check idempotency: `SELECT action_id FROM review_actions WHERE idempotency_key = X` → if found return cached `{"status": "hit", "action_id": existing_id}`. (2) Optimistic lock: `UPDATE interrupted_sessions SET version = version+1 WHERE session_id = X AND version = expected_version` → if 0 rows updated raise `409 Conflict`. (3) Insert `ReviewAction` row. (4) If `state_edits` exist: call `graph.update_state(config, state_edits, as_node="hitl_review_node")` first. (5) Resume: `await graph.ainvoke(Command(resume=ApprovalPayload(...).model_dump()), config=config)`. (6) Update `HITLMetadata.status = "approved"`. **Keywords**: idempotency_key, optimistic lock, `update_state`, `as_node`, `ainvoke(Command(resume=...))`, Pattern B
+- [ ] T044 Implement `HITLService.process_approve(payload: ReviewActionCreate, db, graph, config) -> dict` with **FR-031 resuming state failure recovery**: (1) Check idempotency: `SELECT action_id FROM review_actions WHERE idempotency_key = X` → if found return cached `{"status": "hit", "action_id": existing_id}`. (2) Optimistic lock: `UPDATE interrupted_sessions SET version = version+1 WHERE session_id = X AND version = expected_version` → if 0 rows updated raise `409 Conflict`. (3) Insert `ReviewAction` row. (4) If `state_edits` exist: call `graph.update_state(config, state_edits, as_node="hitl_review_node")` first. (5) **Set status="resuming"** immediately before invoking graph: `UPDATE hitl_metadata SET status = "resuming" WHERE pause_id = X`. (6) **Resume with exception handling**: `try: await graph.ainvoke(Command(resume=ApprovalPayload(...).model_dump()), config=config) except Exception as e: UPDATE hitl_metadata SET status = "paused"; log error; raise 500`. (7) On success: `UPDATE HITLMetadata.status = "approved"`. **Keywords**: idempotency_key, optimistic lock, resuming state, exception catch/revert, FR-031, Pattern B, failure recovery
 
 - [ ] T045 Implement `HITLService.process_reject(payload: ReviewActionCreate, db, graph, config) -> dict`: same idempotency + optimistic lock as T044. Then: insert `ReviewAction`, resume with `action="reject"`, update `HITLMetadata.status = "rejected"`. **Keywords**: reject path, same lock pattern
 
-- [ ] T046 Implement `HITLService.process_request_edit()` with **structured synthetic message** (Article VI compliance) AND **downstream schema validation** (FR-024 edge case fix): Pattern B: (1) **Validate edits against downstream schema**: for each field in `state_edits`, check if it matches the schema expected by the node that will consume it (e.g., if editing `order_info.size`, verify size ∈ allowed sizes per product; if editing `price_override`, verify it's numeric and within ±10% of catalog). Use `HITLMetadata.pending_node` to determine the consumer node and load its schema from ORM model. Return `422` if validation fails. (2) For each valid field, build a structured dict:
+- [ ] T046 Implement `HITLService.process_request_edit()` with **structured synthetic message** (Article VI compliance) AND **downstream schema validation** (FR-024 edge case fix): Pattern B: (1) **Validate edits against downstream schema**: for each field in `state_edits`, check if it matches the schema expected by the node that will consume it (e.g., if editing `order_info.size`, verify size ∈ allowed sizes per product; if editing `price_override`, verify it's numeric and within ±10% of catalog). Use `HITLMetadata.pending_node` to determine the consumer node and load its schema from ORM model. Return `422` if validation fails. (2) For each valid field, build a structured dict **with pause_id** for message replacement (FR-028):
   ```python
   synthetic = {
       "type": "admin_override",
+      "pause_id": str(hitl_metadata.pause_id),  # For FR-028 message replacement
       "field": field_name,
       "old_value": current_state[field],
       "new_value": new_value,
@@ -327,7 +317,7 @@
       "reason": payload.reason_or_comment or ""
   }
   ```
-  (3) Find customer's **last HumanMessage** in messages list (temporal order). (4) Insert synthetic message immediately **after** customer's last message (not at tail). (5) Call `graph.update_state(config, {...}, as_node="hitl_review_node")` with the synthetic message. (6) Insert `ReviewAction` with `action="request_edit"`. Return `{"status": "edited", "action_id": ...}` — do NOT resume yet (admin must call approve separately). **Keywords**: Pattern B, structured dict, downstream schema validation, message insertion position (after customer), no auto-resume, Article VI compliance, Double Correction fix, schema mismatch prevention
+  (3) Find customer's **last HumanMessage** in messages list (temporal order). (4) Insert synthetic message immediately **after** customer's last message (not at tail). (5) Call `graph.update_state(config, {...}, as_node="hitl_review_node")` with the synthetic message. (6) Insert `ReviewAction` with `action="request_edit"` and `acknowledged_message_ids` populated. Return `{"status": "edited", "action_id": ...}` — do NOT resume yet (admin must call approve separately). **Keywords**: Pattern B, structured dict, pause_id for message replacement, downstream schema validation, message insertion position (after customer), no auto-resume, Article VI compliance, Double Correction fix, schema mismatch prevention, acknowledged_message_ids
 
 ---
 
@@ -353,7 +343,7 @@
 
 - [ ] T051 Implement `POST /hitl/review` endpoint in `api/routes/hitl.py`: extract `X-Idempotency-Key` header (`idempotency_key: str = Header(..., alias="X-Idempotency-Key")`). Parse body as `ReviewActionCreate`. Route to correct `HITLService` method based on `payload.action`. Return structured response with `action_id` and `status`. **Keywords**: `Header`, `alias`, `ReviewActionCreate`, action routing, `X-Idempotency-Key`
 
-- [ ] T052 Add explicit HTTP error handling in `hitl.py`: (1) **Terminal status gate** (FR-033, SC-035): before processing any action (approve/reject/edit), query `InterruptedSession.status` — if status ∈ ["approved", "rejected", "abandoned", "escalated"], return `HTTPException(409, {"error": "Session already resolved", "status": session.status})`. (2) Catch `409` (optimistic lock from update_state) → `HTTPException(409, "Version conflict — reload and retry")`. (3) Catch `404` (session not paused) → `HTTPException(404, "No active HITL pause for session")`. (4) Catch Pydantic `ValidationError` → `HTTPException(422, detail=str(e))`. **Keywords**: `HTTPException`, error codes, 409/404/422, terminal status, session lock
+- [ ] T052 Add explicit HTTP error handling in `hitl.py` POST /review handler: (1) **Terminal status gate** (FR-033, SC-035): before processing any action (approve/reject/edit), query `HITLMetadata.status` — if status ∈ ["approved", "rejected", "abandoned", "escalated"], return `HTTPException(409, {"error": "Session already resolved", "status": session.status, "assigned_to": hitl_metadata.admin_id})` (FR-027 requires assigned_to in 409 response). (2) Catch `409` (optimistic lock from update_state) → `HTTPException(409, "Version conflict — reload and retry")`. (3) Catch `404` (session not paused) → `HTTPException(404, "No active HITL pause for session")`. (4) Catch Pydantic `ValidationError` → `HTTPException(422, detail=str(e))`. **Keywords**: `HTTPException`, error codes, 409/404/422, terminal status, session lock, assigned_to field, HITLMetadata (not InterruptedSession)
 
 ---
 
@@ -419,16 +409,40 @@
 
 ---
 
+## Phase 20: Background Tasks & Data Maintenance
+
+**Purpose**: Implement nightly maintenance and async services not covered in previous phases.  
+**Prerequisite**: T005–T012 (DB schema complete), T042–T049 (services defined).
+
+- [ ] T070 Create `services/hitl/archive_scheduler.py`. Implement `async def run_nightly_archive(db_session_factory, batch_size=1000)`: query `queued_messages WHERE processed=True AND received_at < NOW() - INTERVAL '90 days' AND archived=False` in batches. Update each batch `SET archived=True`. Log: `{"event": "nightly_archive", "count": batch_size, "timestamp": NOW()}`. This runs once per 24 hours via FastAPI lifespan. **Keywords**: nightly job, QueuedMessage retention, archived flag, FR-021, 90-day policy
+
+- [ ] T071 Create `services/hitl/telegram_service.py`. Implement `async def send_telegram_message(chat_id: str, message_text: str) → bool`: wrapper around Telegram Bot API. Inject `settings.TELEGRAM_BOT_TOKEN` (from env). Return True on success, False on failure. Handle rate-limit 429 with exponential backoff. **Keywords**: Telegram service, Bot API, settings injection, send_telegram_message function
+
+- [ ] T072 Implement `compressed_context` transformation in `services/hitl/cost_guard.py` (used by T026 confidence/cost guards): extract last 5 messages from conversation history + current user intent + product name. Tokenize and estimate cost using `num_tokens ≈ len(text) / 4`. Document the heuristic. **Keywords**: compressed context, token estimation, cost guard input, T026 dependency
+
+- [ ] T073 Add Telegram service dependency to FastAPI lifespan: inject `TelegramService` into timeout_scheduler and support_queue routes. Verify service is available before starting scheduler loop. **Keywords**: lifespan integration, dependency injection, Telegram availability check
+
+---
+
 ## Phase 20.5: Latency & Performance Verification
 
 **Purpose**: Verify Article V strict async compliance and performance goals.  
-**Prerequisite**: T051–T057 (all endpoints complete).
+**Prerequisite**: T051–T057 (all endpoints complete), T070–T073 (background tasks).
 
 - [ ] T074 Create `tests/performance/test_hitl_latency.py`. Implement **endpoint latency test**: invoke `POST /hitl/review` with valid payload 10 times and measure response time. Assert p95 < 200ms (spec requirement). Use `pytest-benchmark` or simple `time.time()` measurement. **Keywords**: p95 latency, 200ms target, performance regression gate
 
 - [ ] T075 Create latency test for **queue_consumer_node batch classification**: mock LiteLLM completion, measure time from node entry to exit with 5 queued messages. Assert < 500ms (spec requirement). Use `asyncio.get_event_loop().time()` for precise timing. **Keywords**: queue classification latency, 500ms target, async timing
 
-- [ ] T076 Add **async safety check** to ruff: run `uv run ruff check --select ASYNC .` after T071. Verify no blocking calls in `hitl.py`, `hitl_guard.py`, `queue_consumer.py`, `timeout_scheduler.py`. Article V compliance gate. **Keywords**: `ASYNC` linter rule, no blocking I/O, event loop safety
+- [ ] T076 Add **async safety check** to ruff: run `uv run ruff check --select ASYNC .` after all tasks complete. Verify no blocking calls in `hitl.py`, `hitl_guard.py`, `queue_consumer.py`, `timeout_scheduler.py`, `archive_scheduler.py`. Article V compliance gate. **Keywords**: `ASYNC` linter rule, no blocking I/O, event loop safety
+
+---
+
+## Phase 20.75: Article I (SSOT) & orders Table Validation
+
+**Purpose**: Ensure orders stub table is testable per Article I (core logic testable).  
+**Prerequisite**: T005–T012 (all ORM models complete).
+
+- [ ] T081 Create minimal `agent_v1.orders` stub table for testing (used by T038 order execution tests): (1) Define ORM model in `models/schema.py`: `id (UUID)`, `session_id (str)`, `customer_id (str)`, `order_info (JSONB)`, `status (enum)`, `created_at (datetime)`. (2) Add Alembic migration to create table with indexes on `(session_id, created_at)`. (3) Verify no duplication of `escalation_count`, `admin_id`, or `status` with HITLMetadata (Article I SSOT). This table is NOT in hitl_metadata — it's the business entity that HITL guards protect. **Keywords**: orders table, Article I SSOT, testability, stub table, no duplication
 
 ---
 
@@ -467,8 +481,10 @@ T053–T057 require T018, T050–T052
 T058–T064 (unit) require Phase 8–16 stubs + implementations
 T065–T067 (integration) require all nodes complete
 T068–T069 (contract) require T050–T057
-T074–T076 (performance) require T057, T034, T071
-T077–T080 (final) require all above
+T070–T073 (background tasks) require T005–T012, T042–T049
+T074–T076 (performance) require T057, T034, T070–T071
+T081 (orders table) requires T005–T012
+T077–T080 (final) require T070–T081
 ```
 
 ---

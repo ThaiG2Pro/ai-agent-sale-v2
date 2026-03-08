@@ -15,6 +15,7 @@ class HITLReasonEnum(StrEnum):
     LOW_CONFIDENCE   = "low_confidence"
     COST_LIMIT       = "cost_limit"
     REFUND_APPROVAL  = "refund_approval"
+    STALE_PRICE      = "stale_price"
 
 class AgentState(TypedDict):
     # ... existing fields ...
@@ -89,6 +90,7 @@ class ReviewAction(Base):
     admin_user_id: Mapped[str]
     expected_version: Mapped[int]    # Optimistic lock version sent by client
     idempotency_key: Mapped[str]     # X-Idempotency-Key header value (unique constraint)
+    acknowledged_message_ids: Mapped[list[uuid.UUID]]  # QueuedMessage IDs admin has addressed via state_edits (prevents Double Correction)
 ```
 
 **Indexes**: `session_id`, `pause_id`, `idempotency_key` (UNIQUE — for idempotent replay).
@@ -97,12 +99,13 @@ class ReviewAction(Base):
 - `action` must be one of: `approve`, `reject`, `request_edit`
 - `state_edits` required if `action == "request_edit"`
 - `expected_version` must match current `InterruptedSession.version` (conflict check before insert)
+- `acknowledged_message_ids` is empty list `[]` if no messages acknowledged; populated if admin used state_edits to address queued messages
 
 ---
 
 ## 4. QueuedMessage (New Table)
 
-**Purpose**: Customer messages received while graph is paused. Consumed by `post_approval_node` on resume.
+**Purpose**: Customer messages received while graph is paused. Consumed by `queue_consumer_node` on resume.
 
 ```python
 class QueuedMessage(Base):
@@ -113,14 +116,14 @@ class QueuedMessage(Base):
     session_id: Mapped[str]
     message_text: Mapped[str]
     received_at: Mapped[datetime]    # UTC; ORDER BY this for sequential processing
-    processed: Mapped[bool]          # False → True when post_approval_node consumes
+    processed: Mapped[bool]          # False → True when queue_consumer_node consumes
     archived: Mapped[bool]           # False → True after 90-day retention window
 ```
 
 **Indexes**: `(session_id, processed, received_at)` — composite for efficient queue drain.
 
 **Retention Policy**:
-- Mark `processed = true` immediately when consumed by `post_approval_node` (batch update)
+- Mark `processed = true` immediately when consumed by `queue_consumer_node` (batch update)
 - Nightly job: `UPDATE queued_messages SET archived = true WHERE processed = true AND received_at < NOW() - INTERVAL '90 days'`
 - Archived rows are read-only; never hard-deleted
 
@@ -152,7 +155,7 @@ class SupportQueue(Base):
 
 ## 6. InterruptedSession (New Table)
 
-**Purpose**: Tracks active pauses for optimistic locking. One row per session; updated on each pause/resume cycle.
+**Purpose**: Tracks active pauses for optimistic locking. One row per session; updated on each pause/resume cycle. **WARNING: Do NOT store `status` here** — `status` is in `HITLMetadata` only. This table tracks escalation_count and version only.
 
 ```python
 class InterruptedSession(Base):
@@ -163,12 +166,13 @@ class InterruptedSession(Base):
     next_node: Mapped[str]            # Node name where interrupt() was called
     reason: Mapped[str]               # HITLReasonEnum
     timestamp: Mapped[datetime]       # When current pause started
-    admin_id: Mapped[str | None]      # Who is reviewing (nullable until assigned)
     version: Mapped[int]              # Optimistic lock; incremented on every approval
     escalation_count: Mapped[int]     # 0–2; from AgentState.hitl_escalation_count
 ```
 
 **Indexes**: Primary key on `session_id`.
+
+**CRITICAL**: `admin_id` is stored in `HITLMetadata.admin_id`, NOT here. `status` is stored in `HITLMetadata.status`, NOT here. This prevents duplication and synchronization drift per Article I (SSOT).
 
 **Optimistic Locking Protocol**:
 1. Client reads `version` via `GET /session/{id}/state`
