@@ -127,6 +127,7 @@ class AgentState(TypedDict):
     hitl_rejection_reason: str | None
     hitl_escalation_count: int
     hitl_approved: bool
+    hitl_freshness_valid: bool
     estimated_token_cost: int
     order_info: dict | None
     # Retrieval pipeline fields (set by retrieval_node, used by answer_node)
@@ -178,6 +179,7 @@ def make_initial_state(user_message: str, session_id: str) -> AgentState:
         "hitl_rejection_reason": None,
         "hitl_escalation_count": 0,
         "hitl_approved": False,
+        "hitl_freshness_valid": False,
         "estimated_token_cost": 0,
         "order_info": None,
         "cached_answer": None,

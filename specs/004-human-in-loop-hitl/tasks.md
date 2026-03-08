@@ -259,11 +259,11 @@
 **Purpose**: Re-verify inventory and price against DB before executing the order (stale data guard).  
 **Prerequisite**: T009, T029, T034.
 
-- [ ] T035 Query `products` table for `state["order_info"]["product_id"]`: fetch current `stock_quantity` and `price`. If `stock_quantity <= 0` → return `Command(goto="customer_support_node", update={"hitl_rejection_reason": "out_of_stock"})`. **Keywords**: async SELECT, stock check, FR-027
+- [X] T035 Query `products` table for `state["order_info"]["product_id"]`: fetch current `stock_quantity` and `price`. If `stock_quantity <= 0` → return `Command(goto="customer_support_node", update={"hitl_rejection_reason": "out_of_stock"})`. **Keywords**: async SELECT, stock check, FR-027
 
-- [ ] T036 Compute price delta: `delta = abs(current_price - approved_price) / approved_price`. If `delta >= settings.HITL_PRICE_DELTA_THRESHOLD` (default 0.05 = 5%): update `state["order_info"]["approved_price"]` to `current_price` so admin sees the new price, then return `Command(goto="hitl_guard_node", update={"hitl_triggered": False, "hitl_pause_id": None, "hitl_reason": HITLReasonEnum.STALE_PRICE})`. Note: stale_price re-pause does NOT increment `escalation_count` (spec Edge Case 3). **Keywords**: price delta, `HITL_PRICE_DELTA_THRESHOLD`, stale_price re-pause, no escalation_count increment
+- [X] T036 Compute price delta: `delta = abs(current_price - approved_price) / approved_price`. If `delta >= settings.HITL_PRICE_DELTA_THRESHOLD` (default 0.05 = 5%): update `state["order_info"]["approved_price"]` to `current_price` so admin sees the new price, then return `Command(goto="hitl_guard_node", update={"hitl_triggered": False, "hitl_pause_id": None, "hitl_reason": HITLReasonEnum.STALE_PRICE})`. Note: stale_price re-pause does NOT increment `escalation_count` (spec Edge Case 3). **Keywords**: price delta, `HITL_PRICE_DELTA_THRESHOLD`, stale_price re-pause, no escalation_count increment
 
-- [ ] T037 Implement freshness-ok path: if stock > 0 and delta < threshold → return `Command(goto="order_execution_node", update={"hitl_freshness_valid": True})`. Also add `hitl_freshness_valid: bool` field to `AgentState` and `make_initial_state()` (default `False`). **Keywords**: freshness-ok routing, state field addition
+- [X] T037 Implement freshness-ok path: if stock > 0 and delta < threshold → return `Command(goto="order_execution_node", update={"hitl_freshness_valid": True})`. Also add `hitl_freshness_valid: bool` field to `AgentState` and `make_initial_state()` (default `False`). **Keywords**: freshness-ok routing, state field addition
 
 ---
 

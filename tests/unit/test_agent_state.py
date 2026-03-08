@@ -96,6 +96,7 @@ def test_agent_state_fields_complete():
         "hitl_rejection_reason",
         "hitl_escalation_count",
         "hitl_approved",
+        "hitl_freshness_valid",
         "estimated_token_cost",
         "order_info",
         "cached_answer",
