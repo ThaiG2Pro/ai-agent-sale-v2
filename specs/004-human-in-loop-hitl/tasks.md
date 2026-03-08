@@ -272,7 +272,7 @@
 **Purpose**: Actual order placement — deduct stock, record order.  
 **Prerequisite**: T035–T037.
 
-- [ ] T038 Implement order placement: within a single DB transaction — (1) decrement `products.stock_quantity` by `order_info["quantity"]` (with `WHERE stock_quantity >= quantity` guard to prevent negative stock), (2) insert an order record into `agent_v1.orders` table (created by T081; use structure: id, session_id, customer_id, order_info, status, created_at). Return `Command(goto="answer_node", update={"response": confirmation_message, "order_info": {**order_info, "status": "confirmed"}})`. **Keywords**: DB transaction, stock decrement, order record, confirmation message, T081 orders table. **Note**: Does NOT use session metadata_; orders are persisted to dedicated table for auditability and Phase 2/3 SME scaling.
+- [X] T038 Implement order placement: within a single DB transaction — (1) decrement `products.stock_quantity` by `order_info["quantity"]` (with `WHERE stock_quantity >= quantity` guard to prevent negative stock), (2) insert an order record into `agent_v1.orders` table (created by T081; use structure: id, session_id, customer_id, order_info, status, created_at). Return `Command(goto="answer_node", update={"response": confirmation_message, "order_info": {**order_info, "status": "confirmed"}})`. **Keywords**: DB transaction, stock decrement, order record, confirmation message, T081 orders table. **Note**: Does NOT use session metadata_; orders are persisted to dedicated table for auditability and Phase 2/3 SME scaling.
 
 ---
 
