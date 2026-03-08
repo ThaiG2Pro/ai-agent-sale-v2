@@ -25,18 +25,19 @@ class AgentState(TypedDict):
     hitl_reason: str | None        # HITLReasonEnum value
     hitl_pause_id: str | None      # UUID of HITLMetadata.pause_id
     hitl_rejection_reason: str | None   # Admin's rejection message
-    hitl_escalation_count: int     # 0–2; max 2 pauses per order
+    hitl_escalation_count: int     # 0–1 allowed (max 2 pauses); ≥2 triggers force rejection
     hitl_approved: bool            # True after admin approval
     estimated_token_cost: int      # Tokens estimated before LLM call
 ```
 
 **State Transitions**:
 ```
-initial → hitl_triggered=False, hitl_pause_id=None
+initial → hitl_escalation_count=0, hitl_triggered=False, hitl_pause_id=None
   → guard fires → hitl_triggered=True, pause_id=UUID
   → admin approves → hitl_approved=True, hitl_triggered=False
   → admin rejects → hitl_rejection_reason=str, route to customer_support_node
-  → escalation_count=3 → forced rejection or SupportQueue escalation
+  → queue_consumer_node re-pause (MODIFY_ORDER) → hitl_escalation_count++ (check if ≥2 before interrupt)
+  → hitl_escalation_count ≥ 2 → bypass interrupt, force rejection or SupportQueue escalation (FR-032)
 ```
 
 ---

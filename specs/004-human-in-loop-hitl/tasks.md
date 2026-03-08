@@ -54,9 +54,11 @@
 
 - [ ] T012 Apply migration against local DB: `uv run alembic upgrade head`. Verify with `docker compose exec postgres psql -U agent_user -d agent_db -c "\dt agent_v1.*"` — all 5 new tables should appear alongside existing ones. Run `uv run pytest tests/ -x -q` to confirm all 130 existing tests still pass. **Keywords**: smoke test, regression check
 
+- [ ] T081 Create `agent_v1.orders` stub ORM model in `models/schema.py` for order execution (used by T038). Fields: `id: Mapped[uuid.UUID]` (PK uuid7), `session_id: Mapped[str]` (indexed), `customer_id: Mapped[str]` (indexed), `order_info: Mapped[dict]` (JSONB), `status: Mapped[str]` (default `"pending"`), `created_at: Mapped[datetime]` (UTC). Add composite index on `(session_id, created_at)`. Schema: `agent_v1`. **Keywords**: orders table, Article I SSOT (no duplication with HITLMetadata), testability, Phase 2 positioning (not Phase 20.75)
+
 ---
 
-## Phase 4: State & Pydantic Schemas
+## Phase 3: Data Layer — Alembic Migration (Updated)
 
 **Purpose**: Extend `AgentState` with HITL fields and define all Pydantic boundary models.  
 **Prerequisite**: T001 complete (langgraph-checkpoint-postgres installed).
@@ -235,11 +237,12 @@
 ## Phase 9: Implement `queue_consumer_node`
 
 **Purpose**: Post-resume message processing, orphan tool cleanup, intent classification, routing.  
-**Prerequisite**: T025–T028, T007 (QueuedMessage model), T016–T017 (schemas).
+**Prerequisite**: T025–T028, T007 (QueuedMessage model), T016–T017 (schemas).  
+**Critical**: All QueuedMessage state mutations MUST be wrapped in a single database transaction (FR-029). If transaction fails, all mutations revert for safe retry.
 
 - [ ] T029 Implement **orphan tool call scanner**: scan only the most recent 10–20 AIMessages (limit: 10–20 messages) to avoid performance degradation on long conversations (FR-025). Collect all `ToolCall` IDs from AIMessages in the limited window. Then collect all `ToolMessage.tool_call_id` values in the full history. For each unmatched ToolCall ID, append a synthetic `ToolMessage(tool_call_id=id, content="[cancelled: session resumed]")` to `state["messages"]`. Return updated messages. This prevents LLM API errors on orphan tool calls (spec Edge Case 2). **Keywords**: `AIMessage`, `ToolMessage`, `tool_call_id`, orphan scan, `add_messages`, performance limit, FR-025
 
-- [ ] T030 Implement **QueuedMessage drain**: query DB for `WHERE session_id = X AND processed = False ORDER BY received_at ASC` (limit 20). For each, append `HumanMessage(content=f"[Customer follow-up during review]: {msg.message_text}")` to messages. Batch-update `processed = True` in a single `UPDATE` statement. Store drained message IDs in a local list. **Keywords**: async SQLAlchemy `select`, `update().where()`, batch update, `HumanMessage`
+- [ ] T030 Implement **QueuedMessage drain with transaction boundary**: Begin atomic SQLAlchemy transaction here (not in T029–T034). Query DB for `WHERE session_id = X AND processed = False ORDER BY received_at ASC` (limit 20). For each, append `HumanMessage(content=f"[Customer follow-up during review]: {msg.message_text}")` to messages. At end of routing decision (T034), batch-update `processed = True` in single UPDATE statement within same transaction. Store drained message IDs for rollback handling. **Keywords**: async SQLAlchemy `select`, `update().where()`, transaction context, batch update, `HumanMessage`, FR-029
 
 - [ ] T031 Implement **batch intent classification** with threshold: call `LiteLLM` economy model with `response_format=QueuedMessageBatch` to classify each message intent (`CONFIRM/CANCEL/MODIFY_ORDER/OTHER`). If classifier returns `confidence < 0.6` on the net batch intent, default conservatively to `has_confirm=True` (FOLLOW_UP path, not CANCEL or re-pause). This prevents ambiguous classification from blocking orders (FR-024, spec Edge Case). **Keywords**: `litellm.acompletion`, economy model, `response_format`, confidence threshold check (0.6), FR-024
 
@@ -437,12 +440,11 @@
 
 ---
 
-## Phase 20.75: Article I (SSOT) & orders Table Validation
+## Phase 20.75: Legacy — REMOVED
 
-**Purpose**: Ensure orders stub table is testable per Article I (core logic testable).  
-**Prerequisite**: T005–T012 (all ORM models complete).
-
-- [ ] T081 Create minimal `agent_v1.orders` stub table for testing (used by T038 order execution tests): (1) Define ORM model in `models/schema.py`: `id (UUID)`, `session_id (str)`, `customer_id (str)`, `order_info (JSONB)`, `status (enum)`, `created_at (datetime)`. (2) Add Alembic migration to create table with indexes on `(session_id, created_at)`. (3) Verify no duplication of `escalation_count`, `admin_id`, or `status` with HITLMetadata (Article I SSOT). This table is NOT in hitl_metadata — it's the business entity that HITL guards protect. **Keywords**: orders table, Article I SSOT, testability, stub table, no duplication
+**Purpose**: (LEGACY — All moved to earlier phases)  
+- T081 moved to Phase 2 (orders table definition)
+- Other tasks remain in their phases
 
 ---
 
@@ -483,8 +485,8 @@ T065–T067 (integration) require all nodes complete
 T068–T069 (contract) require T050–T057
 T070–T073 (background tasks) require T005–T012, T042–T049
 T074–T076 (performance) require T057, T034, T070–T071
-T081 (orders table) requires T005–T012
-T077–T080 (final) require T070–T081
+T077–T080 (final) require T070–T073 (T081 now in Phase 2, not a dependency for later phases)
+T081 (orders table) requires T005–T012 (moved to Phase 2; no longer blocking Phase 20.75)
 ```
 
 ---
