@@ -304,3 +304,32 @@ class HITLService:
         )
 
         return {"status": "edit_applied", "action_id": str(new_action.action_id)}
+
+    @staticmethod
+    async def escalate_to_support(session_id: str, db: AsyncSession) -> None:
+        """Escalates session to SupportQueue due to timeout (T049)."""
+        from sqlalchemy.dialects.postgresql import insert
+
+        from models.schema import SupportQueue
+
+        # 1. Update HITLMetadata status
+        await db.execute(
+            update(HITLMetadata)
+            .where(HITLMetadata.session_id == session_id, HITLMetadata.status == "paused")
+            .values(status="escalated", escalated_to_support_at=datetime.now(UTC))
+        )
+
+        # 2. Insert into SupportQueue
+        stmt = (
+            insert(SupportQueue)
+            .values(
+                session_id=session_id,
+                reason="timeout_60min",
+                created_at=datetime.now(UTC),
+                status="pending",
+                context_snapshot={"reason": "Automatic timeout after 60 minutes"},
+            )
+            .on_conflict_do_nothing(index_elements=["session_id"])
+        )
+        await db.execute(stmt)
+        await db.flush()

@@ -329,11 +329,11 @@
 **Purpose**: Background `asyncio` task running in FastAPI lifespan. Polls for timed-out sessions.  
 **Prerequisite**: T005, T008, T042.
 
-- [ ] T047 Create `services/hitl/timeout_scheduler.py`. Implement `async def run_timeout_scheduler(db_session_factory, poll_interval_seconds=60)` — an infinite async loop that sleeps `poll_interval_seconds` between runs. On each iteration: query `HITLMetadata WHERE status='paused' AND paused_at < NOW() - {warn_min} minutes AND timeout_notified_at IS NULL`. **Keywords**: `asyncio.sleep`, infinite loop, lifespan task, DB query
+- [X] T047 Create `services/hitl/timeout_scheduler.py`. Implement `async def run_timeout_scheduler(db_session_factory, poll_interval_seconds=60)` — an infinite async loop that sleeps `poll_interval_seconds` between runs. On each iteration: query `HITLMetadata WHERE status='paused' AND paused_at < NOW() - {warn_min} minutes AND timeout_notified_at IS NULL`. **Keywords**: `asyncio.sleep`, infinite loop, lifespan task, DB query
 
-- [ ] T048 Implement 30-min warn path in scheduler: for each session found in T047 query, log a structured warning (or send Telegram message via `settings.SUPPORT_CONTACT_LINK`), then `UPDATE hitl_metadata SET timeout_notified_at = NOW() WHERE pause_id = X`. Structured log: `{"event": "hitl_timeout_warn", "session_id": X, "paused_at": T}`. **Keywords**: structured logging, `timeout_notified_at`, FR-016
+- [X] T048 Implement 30-min warn path in scheduler: for each session found in T047 query, log a structured warning (or send Telegram message via `settings.SUPPORT_CONTACT_LINK`), then `UPDATE hitl_metadata SET timeout_notified_at = NOW() WHERE pause_id = X`. Structured log: `{"event": "hitl_timeout_warn", "session_id": X, "paused_at": T}`. **Keywords**: structured logging, `timeout_notified_at`, FR-016
 
-- [ ] T049 Implement 60-min escalation path in same scheduler loop: query `HITLMetadata WHERE status='paused' AND paused_at < NOW() - {escalate_min} minutes`. For each: call `HITLService.escalate_to_support(session_id, db)` which writes `SupportQueue` (ON CONFLICT DO NOTHING) and updates `HITLMetadata.status = "escalated"`. Log: `{"event": "hitl_timeout_escalate", "session_id": X}`. **Keywords**: 60-min escalation, SupportQueue, FR-016, spec Edge Case
+- [X] T049 Implement 60-min escalation path in same scheduler loop: query `HITLMetadata WHERE status='paused' AND paused_at < NOW() - {escalate_min} minutes`. For each: call `HITLService.escalate_to_support(session_id, db)` which writes `SupportQueue` (ON CONFLICT DO NOTHING) and updates `HITLMetadata.status = "escalated"`. Log: `{"event": "hitl_timeout_escalate", "session_id": X}`. **Keywords**: 60-min escalation, SupportQueue, FR-016, spec Edge Case
 
 ---
 
