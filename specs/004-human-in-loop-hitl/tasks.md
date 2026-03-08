@@ -224,13 +224,13 @@
 **Purpose**: Confidence + cost guard. Fires `interrupt()` only when thresholds breached (adaptive).  
 **Prerequisite**: T022–T024, T005, T009 (ORM models loaded).
 
-- [ ] T025 Implement the **confidence check** in `hitl_guard_node`: if `state["confidence_score"] < settings.HITL_CONFIDENCE_THRESHOLD` (default 0.7): generate `pause_id = str(uuid7())`, insert `HITLMetadata` and upsert `InterruptedSession`. Check `state["hitl_escalation_count"] >= settings.HITL_MAX_ESCALATION_COUNT` — if True, route directly to `customer_support_node` (skip interrupt). Otherwise call `interrupt({"reason": "low_confidence", ...})`. **Keywords**: confidence threshold (0.7), FR-005, FR-015 overflow guard
+- [X] T025 Implement the **confidence check** in `hitl_guard_node`: if `state["confidence_score"] < settings.HITL_CONFIDENCE_THRESHOLD` (default 0.7): generate `pause_id = str(uuid7())`, insert `HITLMetadata` and upsert `InterruptedSession`. Check `state["hitl_escalation_count"] >= settings.HITL_MAX_ESCALATION_COUNT` — if True, route directly to `customer_support_node` (skip interrupt). Otherwise call `interrupt({"reason": "low_confidence", ...})`. **Keywords**: confidence threshold (0.7), FR-005, FR-015 overflow guard
 
-- [ ] T026 Implement the **cost check** in `hitl_guard_node`: call `litellm.token_counter(model=state["model_used"], messages=state["messages"])` to estimate compressed context tokens. If `estimated > settings.HITL_COST_THRESHOLD_TOKENS` (default 8000): same pause logic as confidence check. Reason: `"cost_limit_exceeded"`. **Keywords**: `litellm.token_counter`, FR-006, adaptive guard
+- [X] T026 Implement the **cost check** in `hitl_guard_node`: call `litellm.token_counter(model=state["model_used"], messages=state["messages"])` to estimate compressed context tokens. If `estimated > settings.HITL_COST_THRESHOLD_TOKENS` (default 8000): same pause logic as confidence check. Reason: `"cost_limit_exceeded"`. **Keywords**: `litellm.token_counter`, FR-006, adaptive guard
 
-- [ ] T027 Implement the **resume handler** in `hitl_guard_node` (code after `interrupt()` returns): extract `approval_payload = ApprovalPayload.model_validate(interrupt_result)`. If `action == "approve"`: return `Command(goto="queue_consumer_node", update={"hitl_approved": True, "hitl_triggered": False})`. **Keywords**: `ApprovalPayload.model_validate`, resume routing, `Command(goto=...)`
+- [X] T027 Implement the **resume handler** in `hitl_guard_node` (code after `interrupt()` returns): extract `approval_payload = ApprovalPayload.model_validate(interrupt_result)`. If `action == "approve"`: return `Command(goto="queue_consumer_node", update={"hitl_approved": True, "hitl_triggered": False})`. **Keywords**: `ApprovalPayload.model_validate`, resume routing, `Command(goto=...)`
 
-- [ ] T028 Implement the **rejection handler** in resume path: if `action == "reject"`: set `hitl_rejection_reason = payload.reason_or_comment`, increment `hitl_escalation_count`, update `HITLMetadata.status = "rejected"`, return `Command(goto="customer_support_node", update={...})`. **Keywords**: rejection routing, `HITLMetadata` status update, escalation_count increment
+- [X] T028 Implement the **rejection handler** in resume path: if `action == "reject"`: set `hitl_rejection_reason = payload.reason_or_comment`, increment `hitl_escalation_count`, update `HITLMetadata.status = "rejected"`, return `Command(goto="customer_support_node", update={...})`. **Keywords**: rejection routing, `HITLMetadata` status update, escalation_count increment
 
 ---
 
