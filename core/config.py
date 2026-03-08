@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +51,15 @@ class Settings(BaseSettings):
     AGENT_ALPHA: float = 0.7
     # Escalation model alias (used by escalation_node for COMPLAINT/NEGOTIATION)
     PREMIUM_MODEL: str = "premium-chat"
+
+    # Week 4: HITL Configuration
+    HITL_TIMEOUT_WARN_MIN: int = Field(default=30, ge=1)
+    HITL_TIMEOUT_ESCALATE_MIN: int = Field(default=60, ge=2)
+    HITL_MAX_ESCALATION_COUNT: int = Field(default=2, ge=1, le=5)
+    HITL_PRICE_DELTA_THRESHOLD: float = Field(default=0.05, gt=0.0, le=0.5)
+    HITL_CLASSIFY_CONFIDENCE_THRESHOLD: float = Field(default=0.6, ge=0.0, le=1.0)
+    HITL_COST_THRESHOLD_TOKENS: int = Field(default=8000, ge=100)
+    SUPPORT_CONTACT_LINK: str = "https://t.me/support_bot"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -10,7 +10,7 @@ from decimal import Decimal  # noqa: TC003
 from typing import Any, ClassVar
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from uuid_utils import uuid7
@@ -197,3 +197,128 @@ class ModelTrace(Base):
     )
 
     message: Mapped[ConversationMessage] = relationship(back_populates="traces")
+
+
+# Week 4: HITL & Order Models
+
+
+class HITLMetadata(Base):
+    """Why this exists: Authoritative source for session pause status (Week 4)."""
+
+    __tablename__ = "hitl_metadata"
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
+
+    pause_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7
+    )
+    session_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    pause_reason: Mapped[str] = mapped_column(String(50), nullable=False)
+    paused_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    timeout_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    escalated_to_support_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(20), default="paused", nullable=False)
+    admin_id: Mapped[str | None] = mapped_column(String(100))
+    escalation_count: Mapped[int] = mapped_column(default=0, nullable=False)
+
+
+class ReviewAction(Base):
+    """Why this exists: Immutable audit log of every admin decision (Week 4)."""
+
+    __tablename__ = "review_actions"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        UniqueConstraint("idempotency_key", name="uq_review_actions_idempotency"),
+        {"schema": SCHEMA},
+    )
+
+    action_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7
+    )
+    session_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    pause_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    state_edits: Mapped[dict | None] = mapped_column(JSONB)
+    reason_or_comment: Mapped[str | None] = mapped_column(Text)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    admin_user_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    expected_version: Mapped[int] = mapped_column(nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class QueuedMessage(Base):
+    """Why this exists: Customer messages received while a session is not 'active' (Week 4)."""
+
+    __tablename__ = "queued_messages"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        Index("ix_queued_messages_session_proc_time", "session_id", "processed", "received_at"),
+        {"schema": SCHEMA},
+    )
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7
+    )
+    session_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    message_text: Mapped[str] = mapped_column(Text, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    processed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    archived: Mapped[bool] = mapped_column(default=False, nullable=False)
+
+
+class SupportQueue(Base):
+    """Why this exists: Escalated sessions awaiting human support agent (Week 4)."""
+
+    __tablename__ = "support_queue"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        UniqueConstraint("session_id", name="uq_support_queue_session"),
+        {"schema": SCHEMA},
+    )
+
+    queue_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid7
+    )
+    session_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    reason: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    assigned_to: Mapped[str | None] = mapped_column(String(100))
+    context_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+
+
+class InterruptedSession(Base):
+    """Why this exists: Tracks escalation state and optimistic locking per session (Week 4)."""
+
+    __tablename__ = "interrupted_sessions"
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
+
+    session_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    next_node: Mapped[str] = mapped_column(String(100), nullable=False)
+    reason: Mapped[str] = mapped_column(String(50), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    admin_id: Mapped[str | None] = mapped_column(String(100))
+    version: Mapped[int] = mapped_column(default=0, nullable=False)
+    escalation_count: Mapped[int] = mapped_column(default=0, nullable=False)
+
+
+class Order(Base):
+    """Why this exists: Business entity for confirmed orders (Week 4)."""
+
+    __tablename__ = "orders"
+    __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    session_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    customer_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    order_info: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
