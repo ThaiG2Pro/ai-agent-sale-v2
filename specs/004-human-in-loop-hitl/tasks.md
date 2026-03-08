@@ -288,9 +288,9 @@
 
 **Prerequisite**: T028, T035, T038.
 
-- [ ] T040 Implement empathetic message via LiteLLM economy model: compose message using `state["hitl_rejection_reason"]` as context. Example system prompt: `"You are a compassionate sales assistant. The customer's request could not be processed. Compose a brief, empathetic response explaining {reason} and directing them to {support_link}."`. Use `response_format=None` (plain text response). **Keywords**: LiteLLM economy model, empathetic message, `settings.SUPPORT_CONTACT_LINK`
+- [X] T040 Implement empathetic message via LiteLLM economy model: compose message using `state["hitl_rejection_reason"]` as context. Example system prompt: `"You are a compassionate sales assistant. The customer's request could not be processed. Compose a brief, empathetic response explaining {reason} and directing them to {support_link}."`. Use `response_format=None` (plain text response). **Keywords**: LiteLLM economy model, empathetic message, `settings.SUPPORT_CONTACT_LINK`
 
-- [ ] T041 Insert into `SupportQueue` table: `ON CONFLICT (session_id) DO NOTHING` (idempotent). Set `context_snapshot` to `{"order_info": state["order_info"], "rejection_reason": state["hitl_rejection_reason"], "last_messages": state["messages"][-3:]}`. Update `HITLMetadata.status = "escalated"`. Return `Command(goto=END, update={"response": empathetic_message})`. **Keywords**: `SupportQueue`, `ON CONFLICT DO NOTHING`, idempotent escalation, `END`
+- [X] T041 Insert into `SupportQueue` table: `ON CONFLICT (session_id) DO NOTHING` (idempotent). Set `context_snapshot` to `{"order_info": state["order_info"], "rejection_reason": state["hitl_rejection_reason"], "last_messages": state["messages"][-3:]}`. Update `HITLMetadata.status = "escalated"`. Return `Command(goto=END, update={"response": empathetic_message})`. **Keywords**: `SupportQueue`, `ON CONFLICT DO NOTHING`, idempotent escalation, `END`
 
 ---
 
