@@ -24,9 +24,14 @@ All NEEDS CLARIFICATION items resolved. No unknowns remain.
 
 ---
 
-## Decision 2: State Persistence — Single Source of Truth
+## Decision 2: State Persistence — Single Source of Truth & DB Driver Strategy
 
 **Decision**: **`AsyncPostgresSaver`** (LangGraph built-in) is the ONLY state store. `HITLMetadata` table stores operational metadata ONLY (reason, timestamps, admin_id, status, escalation_count).
+
+**Two DB Drivers (Intentional Co-Existence)**:
+- **asyncpg** (SQLAlchemy async ORM): Primary path for all business logic queries (retrieval, product checks, order placement). High-performance, pure-Python networking, minimal setup friction.
+- **psycopg3** (AsyncPostgresSaver checkpointer): LangGraph uses psycopg3 for checkpoint persistence (graph state, messages, thread metadata). Separate connection pool to avoid lock contention with ORM operations.
+- **Rationale**: Both connection pools are stateless; each can be scaled independently. Production rule: Use `psycopg[c]` (C extension) if native PostgreSQL client libraries are available in the deployment image. Dev/test can use `psycopg[binary]`.
 
 **Rationale**:
 - Dual persistence (custom `InterruptedSession` table with full JSON state + PostgresSaver) creates sync bugs. If admin resumes graph, PostgresSaver is updated but custom table is not — LLM reads stale state.

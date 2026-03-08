@@ -237,7 +237,7 @@
 **Purpose**: Post-resume message processing, orphan tool cleanup, intent classification, routing.  
 **Prerequisite**: T025–T028, T007 (QueuedMessage model), T016–T017 (schemas).
 
-- [ ] T029 Implement **orphan tool call scanner**: iterate `state["messages"]`, collect all `ToolCall` IDs from `AIMessage.tool_calls`. Then collect all `ToolMessage.tool_call_id` values. For each unmatched ToolCall ID, append a synthetic `ToolMessage(tool_call_id=id, content="[cancelled: session resumed]")` to `state["messages"]`. Return updated messages. This prevents LLM API errors on orphan tool calls (spec Edge Case 2). **Keywords**: `AIMessage`, `ToolMessage`, `tool_call_id`, orphan scan, `add_messages`
+- [ ] T029 Implement **orphan tool call scanner**: scan only the most recent 10–20 AIMessages (limit: 10–20 messages) to avoid performance degradation on long conversations (FR-025). Collect all `ToolCall` IDs from AIMessages in the limited window. Then collect all `ToolMessage.tool_call_id` values in the full history. For each unmatched ToolCall ID, append a synthetic `ToolMessage(tool_call_id=id, content="[cancelled: session resumed]")` to `state["messages"]`. Return updated messages. This prevents LLM API errors on orphan tool calls (spec Edge Case 2). **Keywords**: `AIMessage`, `ToolMessage`, `tool_call_id`, orphan scan, `add_messages`, performance limit, FR-025
 
 - [ ] T030 Implement **QueuedMessage drain**: query DB for `WHERE session_id = X AND processed = False ORDER BY received_at ASC` (limit 20). For each, append `HumanMessage(content=f"[Customer follow-up during review]: {msg.message_text}")` to messages. Batch-update `processed = True` in a single `UPDATE` statement. Store drained message IDs in a local list. **Keywords**: async SQLAlchemy `select`, `update().where()`, batch update, `HumanMessage`
 
@@ -269,7 +269,7 @@
 **Purpose**: Actual order placement — deduct stock, record order.  
 **Prerequisite**: T035–T037.
 
-- [ ] T038 Implement order placement: within a single DB transaction — (1) decrement `products.stock_quantity` by `order_info["quantity"]` (with `WHERE stock_quantity >= quantity` guard to prevent negative stock), (2) insert an order record into `agent_v1.orders` table (created by T081; use structure: id, session_id, customer_id, order_info, status, created_at). Return `Command(goto="answer_node", update={"response": confirmation_message, "order_info": {**order_info, "status": "confirmed"}})`. **Keywords**: DB transaction, stock decrement, order record, confirmation message, T081 orders table
+- [ ] T038 Implement order placement: within a single DB transaction — (1) decrement `products.stock_quantity` by `order_info["quantity"]` (with `WHERE stock_quantity >= quantity` guard to prevent negative stock), (2) insert an order record into `agent_v1.orders` table (created by T081; use structure: id, session_id, customer_id, order_info, status, created_at). Return `Command(goto="answer_node", update={"response": confirmation_message, "order_info": {**order_info, "status": "confirmed"}})`. **Keywords**: DB transaction, stock decrement, order record, confirmation message, T081 orders table. **Note**: Does NOT use session metadata_; orders are persisted to dedicated table for auditability and Phase 2/3 SME scaling.
 
 ---
 
