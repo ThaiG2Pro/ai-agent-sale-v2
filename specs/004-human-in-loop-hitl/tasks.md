@@ -146,7 +146,7 @@
 **Purpose**: Wrap `AsyncPostgresSaver` in a reusable factory. Isolate psycopg3 setup from the rest of the app (which uses asyncpg).  
 **Prerequisite**: T001 complete.
 
-- [ ] T018 Create `core/agent/checkpointer.py`:
+- [X] T018 Create `core/agent/checkpointer.py`:
   ```python
   """AsyncPostgresSaver factory using psycopg3 (separate from asyncpg).
   Security: JsonPlusSerializer(pickle_fallback=False) prevents CVE-2026-27794.
@@ -171,7 +171,7 @@
 **Purpose**: Create all 6 new node files with minimal pass-through stubs so the graph can be wired and imports verified before full implementation.  
 **Prerequisite**: T014 complete (AgentState has HITL fields).
 
-- [ ] T019 [P] Create `core/agent/nodes/hitl_guard.py` stub (renamed from hitl_checkpoint for clarity):
+- [X] T019 [P] Create `core/agent/nodes/hitl_guard.py` stub (renamed from hitl_checkpoint for clarity):
   ```python
   """hitl_guard_node — confidence + cost guard; calls interrupt() on threshold breach."""
   from langgraph.types import Command
@@ -183,9 +183,9 @@
   ```
   **Keywords**: node stub, confidence guard, cost guard
 
-- [ ] T020 [P] Create stubs for `core/agent/nodes/queue_consumer.py`, `core/agent/nodes/state_freshness.py`, `core/agent/nodes/order_execution.py`. Each follows the same pattern: async function returning `Command(goto="answer_node")` (temporary). **Keywords**: parallel stub creation, node pattern
+- [X] T020 [P] Create stubs for `core/agent/nodes/queue_consumer.py`, `core/agent/nodes/state_freshness.py`, `core/agent/nodes/order_execution.py`. Each follows the same pattern: async function returning `Command(goto="answer_node")` (temporary). **Keywords**: parallel stub creation, node pattern
 
-- [ ] T021 [P] Create stubs for `core/agent/nodes/cancellation.py` and `core/agent/nodes/customer_support.py`. Both return `Command(goto="answer_node")` temporarily. **Keywords**: parallel stub creation
+- [X] T021 [P] Create stubs for `core/agent/nodes/cancellation.py` and `core/agent/nodes/customer_support.py`. Both return `Command(goto="answer_node")` temporarily. **Keywords**: parallel stub creation
 
 ---
 
@@ -194,7 +194,7 @@
 **Purpose**: Register all new nodes in `graph.py`, add edges, integrate `AsyncPostgresSaver`.  
 **Prerequisite**: T018 (checkpointer), T019–T021 (stubs).
 
-- [ ] T022 Update `core/agent/graph.py` — add imports for all 6 new nodes and add them to `GRAPH_NODES` set:
+- [X] T022 Update `core/agent/graph.py` — add imports for all 6 new nodes and add them to `GRAPH_NODES` set:
   ```python
   from core.agent.nodes.hitl_guard import hitl_guard_node
   from core.agent.nodes.queue_consumer import queue_consumer_node
@@ -205,7 +205,7 @@
   ```
   Add all 6 to `GRAPH_NODES`. **Keywords**: import, GRAPH_NODES set update
 
-- [ ] T023 Register all 6 new nodes in `build_graph()` with `builder.add_node(...)`. Then add edges:
+- [X] T023 Register all 6 new nodes in `build_graph()` with `builder.add_node(...)`. Then add edges:
   - `confidence_node` conditional → `hitl_guard_node`, `answer_node` (if high confidence, skip guard)
   - `hitl_guard_node` conditional → `answer_node` (OK), interrupts on low confidence/cost
   - `queue_consumer_node` conditional edges → `state_freshness_validator_node`, `cancellation_node`, `hitl_guard_node`
@@ -215,7 +215,7 @@
   - `customer_support_node` → `END`
   **Keywords**: `add_node`, `add_conditional_edges`, `add_edge`, graph topology
 
-- [ ] T024 Update `build_graph()` signature to accept `checkpointer=None` and update `astream_agent()` to accept + pass `checkpointer`. Also add `_route_after_confidence()` function to route confidence_node output to `hitl_guard_node` when confidence < 0.7, or to `answer_node` when confidence OK. Verify graph compiles: `uv run python -c "from core.agent.graph import build_graph; g = build_graph(); print(g.get_graph().draw_mermaid())"`. **Keywords**: compile check, conditional routing, Mermaid output, regression
+- [X] T024 Update `build_graph()` signature to accept `checkpointer=None` and update `astream_agent()` to accept + pass `checkpointer`. Also add `_route_after_confidence()` function to route confidence_node output to `hitl_guard_node` when confidence < 0.7, or to `answer_node` when confidence OK. Verify graph compiles: `uv run python -c "from core.agent.graph import build_graph; g = build_graph(); print(g.get_graph().draw_mermaid())"`. **Keywords**: compile check, conditional routing, Mermaid output, regression
 
 ---
 

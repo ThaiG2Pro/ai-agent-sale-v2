@@ -83,20 +83,23 @@ async def confidence_node(state: AgentState) -> dict:
 
 
 def _route_after_confidence(state: AgentState) -> str:
-    """Conditional edge from confidence_node (T047b).
+    """Conditional edge from confidence_node (T047b/Week 4).
 
-    Routes to answer_node or escalation_node based on:
+    Routes to answer_node, escalation_node, or hitl_guard_node based on:
     - INFO_QUERY borderline (0.45 ≤ sim < 0.7, not Layer 1 declined) → escalation_node
+    - ORDER_PLACEMENT → hitl_guard_node (always pass through guard)
+    - Low confidence for other intents (< 0.7) → hitl_guard_node
     - Otherwise → answer_node (either accepted or declined)
-
-    Enables FR-007 escalation for borderline INFO_QUERY cases.
-    Note: confidence_node does NOT set declined=True for INFO_QUERY borderline,
-    so we check similarity directly here.
     """
     intent = state.get("intent", None)
     similarity = state.get("similarity_score", 0.0)
     layer1_declined = state.get("declined", False)  # True only if Layer 1 fired
     confidence_threshold = settings.AGENT_CONFIDENCE_THRESHOLD
+    confidence_score = state.get("confidence_score", similarity)
+
+    # Week 4: Always route ORDER_PLACEMENT through the HITL guard
+    if intent == "ORDER_PLACEMENT":
+        return "hitl_guard_node"
 
     # INFO_QUERY, PRICING, AVAILABILITY borderline: Layer 1 didn't fire but below
     # Layer 2 threshold → route to escalation_node (which selects premium vs economy)
@@ -107,6 +110,11 @@ def _route_after_confidence(state: AgentState) -> str:
         and similarity < confidence_threshold
     ):
         return "escalation_node"
+
+    # Week 4: If not Layer 1 declined but confidence score < threshold for other intents,
+    # route to hitl_guard_node for low_confidence guard evaluation.
+    if not layer1_declined and confidence_score < confidence_threshold:
+        return "hitl_guard_node"
 
     # Default: route to answer_node (handles both accepted and declined paths)
     return "answer_node"

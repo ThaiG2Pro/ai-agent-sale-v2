@@ -17,10 +17,16 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
 from core.agent.nodes.answer import answer_node
+from core.agent.nodes.cancellation import cancellation_node
 from core.agent.nodes.confidence import _route_after_confidence, confidence_node
+from core.agent.nodes.customer_support import customer_support_node
 from core.agent.nodes.escalation import escalation_node
+from core.agent.nodes.hitl_guard import hitl_guard_node
+from core.agent.nodes.order_execution import order_execution_node
+from core.agent.nodes.queue_consumer import queue_consumer_node
 from core.agent.nodes.retrieval import retrieval_node
 from core.agent.nodes.router import _route_after_router, router_node
+from core.agent.nodes.state_freshness import state_freshness_validator_node
 from core.agent.state import AgentState, NodeStreamEvent
 
 # All registered node names — used to filter streaming events (T081)
@@ -30,6 +36,12 @@ GRAPH_NODES = {
     "confidence_node",
     "escalation_node",
     "answer_node",
+    "hitl_guard_node",
+    "queue_consumer_node",
+    "state_freshness_validator_node",
+    "order_execution_node",
+    "cancellation_node",
+    "customer_support_node",
 }
 
 
@@ -65,6 +77,12 @@ def build_graph(checkpointer=None):
     builder.add_node("confidence_node", confidence_node)
     builder.add_node("escalation_node", escalation_node)
     builder.add_node("answer_node", answer_node)
+    builder.add_node("hitl_guard_node", hitl_guard_node)
+    builder.add_node("queue_consumer_node", queue_consumer_node)
+    builder.add_node("state_freshness_validator_node", state_freshness_validator_node)
+    builder.add_node("order_execution_node", order_execution_node)
+    builder.add_node("cancellation_node", cancellation_node)
+    builder.add_node("customer_support_node", customer_support_node)
 
     # START → router_node (router returns Command with goto)
     builder.add_edge(START, "router_node")
@@ -78,24 +96,63 @@ def build_graph(checkpointer=None):
             "retrieval_node": "retrieval_node",
             "escalation_node": "escalation_node",
             "answer_node": "answer_node",
+            "hitl_guard_node": "hitl_guard_node",
         },
     )
 
     # retrieval_node → confidence_node
     builder.add_edge("retrieval_node", "confidence_node")
 
-    # confidence_node → escalation_node OR answer_node (conditional, T051)
+    # confidence_node → escalation_node OR hitl_guard_node OR answer_node (conditional, T051)
     builder.add_conditional_edges(
         "confidence_node",
         _route_after_confidence,
         {
             "escalation_node": "escalation_node",
+            "hitl_guard_node": "hitl_guard_node",
             "answer_node": "answer_node",
         },
     )
 
     # escalation_node → answer_node
     builder.add_edge("escalation_node", "answer_node")
+
+    # HITL graph pathways
+    builder.add_conditional_edges(
+        "hitl_guard_node",
+        lambda state: (
+            "answer_node"
+        ),  # Placeholder until T025 interrupt logic provides Command(goto=...)
+        {
+            "answer_node": "answer_node",
+            "queue_consumer_node": "queue_consumer_node",
+            "customer_support_node": "customer_support_node",
+        },
+    )
+
+    builder.add_conditional_edges(
+        "queue_consumer_node",
+        lambda state: "state_freshness_validator_node",  # Placeholder
+        {
+            "state_freshness_validator_node": "state_freshness_validator_node",
+            "cancellation_node": "cancellation_node",
+            "hitl_guard_node": "hitl_guard_node",
+        },
+    )
+
+    builder.add_conditional_edges(
+        "state_freshness_validator_node",
+        lambda state: "order_execution_node",  # Placeholder
+        {
+            "order_execution_node": "order_execution_node",
+            "customer_support_node": "customer_support_node",
+            "hitl_guard_node": "hitl_guard_node",
+        },
+    )
+
+    builder.add_edge("order_execution_node", "answer_node")
+    builder.add_edge("cancellation_node", "answer_node")
+    builder.add_edge("customer_support_node", END)
 
     # answer_node → END (universal trace point)
     builder.add_edge("answer_node", END)
