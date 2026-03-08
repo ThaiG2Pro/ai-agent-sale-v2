@@ -280,7 +280,7 @@
 
 **Prerequisite**: T032.
 
-- [ ] T039 Implement cancellation: if `state["order_info"]` exists, update its `status = "cancelled"` in DB (or state). Compose a polite cancellation message: `"Your order has been cancelled as requested. [support_link]"`. Return `Command(goto="answer_node", update={"response": message, "order_info": {**order_info, "status": "cancelled"}})`. **Keywords**: cancellation message, answer_node routing
+- [X] T039 Implement cancellation: if `state["order_info"]` exists, update its `status = "cancelled"` in DB (or state). Compose a polite cancellation message: `"Your order has been cancelled as requested. [support_link]"`. Return `Command(goto="answer_node", update={"response": message, "order_info": {**order_info, "status": "cancelled"}})`. **Keywords**: cancellation message, answer_node routing
 
 ---
 
