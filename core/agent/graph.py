@@ -188,6 +188,7 @@ async def astream_agent(
     session_id: str,
     db=None,
     checkpointer=None,
+    graph=None,
 ) -> AsyncGenerator[NodeStreamEvent]:
     """Stream per-node events as graph executes (T081, FR-006).
 
@@ -199,13 +200,15 @@ async def astream_agent(
         session_id: Session identifier for thread config
         db: Optional AsyncSession — passed to retrieval/answer nodes via configurable
         checkpointer: Optional LangGraph checkpointer
+        graph: Optional already built/compiled graph
 
     Yields:
         NodeStreamEvent for each completed graph node
     """
     from core.agent.state import make_initial_state
 
-    graph = build_graph(checkpointer=checkpointer)
+    if graph is None:
+        graph = build_graph(checkpointer=checkpointer)
     initial_state = make_initial_state(message, session_id)
     # Pass db through configurable so nodes can inject via RunnableConfig
     config: dict = {"configurable": {"thread_id": session_id, "db": db}}

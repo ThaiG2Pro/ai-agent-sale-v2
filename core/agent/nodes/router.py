@@ -31,6 +31,7 @@ async def router_node(state: AgentState) -> Command:
         "- AVAILABILITY: asking about stock, delivery, or availability\n"
         "- COMPLAINT: expressing dissatisfaction, anger, or reporting a problem/defect\n"
         "- NEGOTIATION: asking for better price, bargaining, requesting refund\n"
+        "- ORDER_PLACEMENT: user wants to buy, order, or purchase a product\n"
         "- SMALLTALK: greetings, chitchat, or unrelated conversation\n\n"
         "Respond ONLY with valid JSON matching the schema. "
         "Set primary_intent to the best matching intent. "
@@ -63,6 +64,7 @@ def _get_next_node(classification: IntentClassification) -> str:
     Routing logic (FR-007):
     - ANY intent is COMPLAINT or NEGOTIATION → escalation_node (intent-first escalation)
     - SMALLTALK primary intent → answer_node (no retrieval needed, save cost)
+    - ORDER_PLACEMENT → retrieval_node (need context for the order)
     - INFO_QUERY, PRICING, COMPARISON, AVAILABILITY → retrieval_node (need context)
     - Unknown → retrieval_node (safe fallback)
     """
@@ -71,7 +73,7 @@ def _get_next_node(classification: IntentClassification) -> str:
         return "escalation_node"
     if classification.primary_intent == IntentEnum.SMALLTALK:
         return "answer_node"
-    # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY, unknown
+    # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY, ORDER_PLACEMENT, unknown
     return "retrieval_node"
 
 
@@ -99,5 +101,5 @@ def _route_after_router(state: AgentState) -> str:
     if intent_str == "SMALLTALK":
         return "answer_node"
 
-    # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY → retrieval_node
+    # ORDER_PLACEMENT, INFO_QUERY, PRICING, COMPARISON, AVAILABILITY → retrieval_node
     return "retrieval_node"

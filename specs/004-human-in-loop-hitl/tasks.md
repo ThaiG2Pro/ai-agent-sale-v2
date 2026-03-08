@@ -355,15 +355,15 @@
 **Purpose**: Mount HITL router, start checkpointer in lifespan, add Paused Session Gateway.  
 **Prerequisite**: T018 (checkpointer factory), T050–T052 (routes).
 
-- [ ] T053 Update `api/main.py` lifespan: add `checkpointer = await create_checkpointer(settings.DATABASE_URL_PSYCOPG)` on startup (use a separate `DATABASE_URL_PSYCOPG` settings field that replaces `postgresql+asyncpg://` with `postgresql://`). Store in `app.state.checkpointer`. On shutdown: `await app.state.checkpointer.conn.close()` (or pool close). **Keywords**: `app.state`, lifespan, psycopg3 DSN, pool lifecycle
+- [X] T053 Update `api/main.py` lifespan: add `checkpointer = await create_checkpointer(settings.database_url_psycopg)` on startup. Store in `app.state.checkpointer`. On shutdown: `await app.state.checkpointer.pool.close()`. **Keywords**: `app.state`, lifespan, psycopg3 DSN, pool lifecycle
 
-- [ ] T054 Add `DATABASE_URL_PSYCOPG` to `core/config.py`: derive from `DATABASE_URL` by replacing `asyncpg` driver with psycopg3 driver (`postgresql+asyncpg://` → `postgresql://`). Use `@computed_field` or a `@property`. Add to `.env.example` as comment. **Keywords**: `@computed_field`, DSN transformation, psycopg3 URL format
+- [X] T054 Add `database_url_psycopg` to `core/config.py`: derive from `database_url` by replacing `asyncpg` driver with psycopg3 driver (`postgresql+asyncpg://` → `postgresql://`). Use a `@property`. Add to `.env.example` as comment. **Keywords**: `@computed_field`, DSN transformation, psycopg3 URL format
 
-- [ ] T055 Mount hitl router in `api/main.py`: `app.include_router(hitl_router)`. Add `from api.routes.hitl import router as hitl_router`. Verify routes appear: `uv run python -c "from api.main import app; print([r.path for r in app.routes])"`. **Keywords**: `include_router`, route registration
+- [X] T055 Mount hitl router in `api/main.py`: `app.include_router(hitl_router)`. Add `from api.routes.hitl import router as hitl_router`. Verify routes appear: `uv run python -c "from api.main import app; print([r.path for r in app.routes])"`. **Keywords**: `include_router`, route registration
 
-- [ ] T056 Implement **Paused Session Gateway** as a FastAPI dependency `check_paused_session(session_id: str, message: str, db, request: Request)`: query `HITLMetadata WHERE session_id=X AND status='paused'`. If paused → call `HITLService.enqueue_message(session_id, message, db)`, return `{"queued": True, "message": "Your message has been received. An agent is reviewing your request."}` immediately (skip graph). If not paused → return `{"queued": False}` and let normal routing proceed. Apply this dependency to the main `/agent/query` endpoint in `api/routes/agent.py`. **Keywords**: `Depends`, gateway dependency, enqueue on pause, FR-024, spec §Architecture Layer 1
+- [X] T056 Implement **Paused Session Gateway** as a FastAPI dependency `check_paused_session(session_id: str, message: str, db)`: query `HITLMetadata WHERE session_id=X AND status='paused'`. If paused → call `HITLService.enqueue_message(session_id, message, db)`, return `{"queued": True, "message": "Your message has been received. An agent is reviewing your request."}` immediately (skip graph). Apply this logic to the main `/agent/query` and `/agent/stream` endpoints in `api/routes/agent.py`. **Keywords**: `Depends`, gateway dependency, enqueue on pause, FR-024, spec §Architecture Layer 1
 
-- [ ] T057 Update `router_node` in `core/agent/nodes/router.py`: add `ORDER_PLACEMENT` to the system prompt intent list and to `_get_next_node()` routing logic — `ORDER_PLACEMENT → "hitl_guard_node"`. **Keywords**: router_node extension, ORDER_PLACEMENT intent routing
+- [X] T057 Update `router_node` in `core/agent/nodes/router.py`: add `ORDER_PLACEMENT` to the system prompt intent list and to `_get_next_node()` routing logic — `ORDER_PLACEMENT → "retrieval_node"` (then to `hitl_guard_node` via confidence_node). **Keywords**: router_node extension, ORDER_PLACEMENT intent routing
 
 ---
 

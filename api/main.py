@@ -16,9 +16,12 @@ from api.middleware import (
     global_exception_handler,
     http_exception_handler,
 )
-from api.routes import admin, agent, health, query
+from api.routes import admin, agent, health, hitl, query
+from core.agent.checkpointer import create_checkpointer
+from core.config import settings
 from core.logging import instrument_fastapi, instrument_sqlalchemy, setup_logging
-from services.database import engine
+from services.database import engine, session_factory
+from services.hitl.timeout_scheduler import run_timeout_scheduler
 
 # Initialize observability FIRST — sets OTel TracerProvider → Phoenix.
 # Must run before any instrumented code or FastAPI app creation.
@@ -38,16 +41,34 @@ async def lifespan(app: FastAPI):
     # Wire SQLAlchemy engine to OTel — must happen after engine is created
     instrument_sqlalchemy(engine.sync_engine)
 
+    # Initialize HITL Checkpointer (T053)
+    checkpointer = await create_checkpointer(settings.database_url_psycopg)
+    app.state.checkpointer = checkpointer
+
     logfire.info("Application foundation initialized successfully.")
 
-    # Warm up economy-chat model in background (avoid cold start on first query)
+    # Initialize background task storage
+    app.state.background_tasks = set()
+
+    # Start HITL Timeout Scheduler (Phase 15)
     import asyncio
 
-    _warmup_task = asyncio.create_task(_warmup_model())  # noqa: RUF006
+    timeout_task = asyncio.create_task(run_timeout_scheduler(session_factory=session_factory))
+    app.state.background_tasks.add(timeout_task)
+    timeout_task.add_done_callback(app.state.background_tasks.discard)
+
+    # Warm up economy-chat model in background (avoid cold start on first query)
+    warmup_task = asyncio.create_task(_warmup_model())
+    app.state.background_tasks.add(warmup_task)
+    warmup_task.add_done_callback(app.state.background_tasks.discard)
 
     yield
 
     # Shutdown logic
+    # Close checkpointer pool (psycopg3)
+    if hasattr(app.state, "checkpointer"):
+        await app.state.checkpointer.pool.close()
+
     await engine.dispose()
     logfire.info("Application shutdown complete.")
 
@@ -88,6 +109,7 @@ app.include_router(health.router)
 app.include_router(admin.router)
 app.include_router(query.router)
 app.include_router(agent.router)
+app.include_router(hitl.router)
 
 
 @app.get("/")

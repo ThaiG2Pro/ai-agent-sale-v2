@@ -13,11 +13,11 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
-from core.agent.graph import astream_agent, build_graph
+from api.dependencies import check_paused_session, get_agent_graph
+from core.agent.graph import astream_agent
 from core.agent.state import make_initial_state
 from services.database import get_db
 
@@ -87,17 +87,41 @@ class NodeStreamEvent(BaseModel):
 async def post_agent_query(
     request: AgentQueryRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> AgentQueryResponse:
+    graph: Annotated[Any, Depends(get_agent_graph)],
+) -> Any:
     """Why this exists: Main customer-facing agent query endpoint.
     What it does: Runs the Week 3 LangGraph agent pipeline and returns structured output.
 
     Execution path: router → {retrieval + escalation + answer} → response
     """
+    # T056: Paused Session Gateway
+    pause_info = await check_paused_session(request.session_id, request.message, db)
+    if pause_info["queued"]:
+        return AgentQueryResponse(
+            session_id=request.session_id,
+            message=request.message,
+            answer=pause_info["message"],
+            intent=IntentInfo(
+                primary_intent="FOLLOW_UP",
+                confidence=1.0,
+                secondary_intents=[],
+            ),
+            declined=False,
+            model_trace=ModelTraceMetadata(
+                selected_model="none",
+                escalation_flag=False,
+                escalation_reason="session_paused",
+                similarity_score=0.0,
+                confidence_score=0.0,
+            ),
+            citations=[],
+            elapsed_ms=0.0,
+            execution_path="paused_gateway",
+        )
+
     start_time = time.time()
 
     try:
-        # Build the agent graph with MemorySaver for session checkpointing
-        graph = build_graph(checkpointer=MemorySaver())
         config = {"configurable": {"thread_id": request.session_id, "db": db}}
         initial_state = make_initial_state(request.message, session_id=request.session_id)
 
@@ -143,6 +167,7 @@ async def post_agent_query(
 async def post_agent_stream(
     request: AgentQueryRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
+    graph: Annotated[Any, Depends(get_agent_graph)],
 ):
     """Why this exists: SSE endpoint for streaming agent node execution (FR-006).
     What it does: Streams NodeStreamEvent objects as the agent executes each node.
@@ -150,17 +175,33 @@ async def post_agent_stream(
     Per-node events include: node_name, state_snapshot (delta), timestamp (ISO).
     Client receives Server-Sent Events stream, each event is a JSON object.
     """
+    # T056: Paused Session Gateway
+    pause_info = await check_paused_session(request.session_id, request.message, db)
+    if pause_info["queued"]:
+
+        async def generate_paused_event():
+            from datetime import UTC, datetime
+
+            timestamp = datetime.now(UTC).isoformat()
+            msg = pause_info["message"]
+            data = (
+                f'{{"node_name": "gateway", '
+                f'"state_snapshot": {{"response": "{msg}"}}, '
+                f'"timestamp": "{timestamp}"}}'
+            )
+            yield f"data: {data}\n\n"
+
+        return StreamingResponse(generate_paused_event(), media_type="text/event-stream")
 
     async def generate_events():
         """Generator yielding SSE-formatted NodeStreamEvent objects."""
         try:
-            checkpointer = MemorySaver()
             # Use astream_agent which handles event streaming internally
             async for event in astream_agent(
                 request.message,
                 session_id=request.session_id,
                 db=db,
-                checkpointer=checkpointer,
+                graph=graph,
             ):
                 # astream_agent yields NodeStreamEvent Pydantic models
                 # Convert to SSE format: "data: {json}\n\n"

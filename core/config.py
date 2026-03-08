@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
+    @property
+    def database_url_psycopg(self) -> str:
+        """Why this exists: psycopg3 uses plain postgresql:// prefix (no driver name needed)."""
+        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+
     # Admin Configuration
     X_ADMIN_KEY: str = "dev-secret-key"
 
