@@ -48,22 +48,22 @@
 **Purpose**: One migration file creates all 5 HITL tables. Additive only — no existing table modifications.  
 **Prerequisite**: T005–T009 complete (models defined to verify column types).
 
-- [ ] T010 Generate Alembic migration file: `uv run alembic revision --autogenerate -m "add_hitl_tables"`. Then open the generated file and manually verify it contains all 5 tables (`hitl_metadata`, `review_actions`, `queued_messages`, `support_queue`, `interrupted_sessions`) all under schema `agent_v1`. Fix any missing items. **Keywords**: `alembic revision --autogenerate`, `--autogenerate`, review output
+- [X] T010 Generate Alembic migration file: `uv run alembic revision --autogenerate -m "add_hitl_tables"`. Then open the generated file and manually verify it contains all 5 tables (`hitl_metadata`, `review_actions`, `queued_messages`, `support_queue`, `interrupted_sessions`) all under schema `agent_v1`. Fix any missing items. **Keywords**: `alembic revision --autogenerate`, `--autogenerate`, review output
 
-- [ ] T011 Add custom indexes to the migration `upgrade()` that autogenerate may miss: `op.create_index("ix_hitl_metadata_status_paused", "hitl_metadata", ["status", "paused_at"], schema="agent_v1")`, `op.create_index("ix_queued_messages_session_proc_time", "queued_messages", ["session_id", "processed", "received_at"], schema="agent_v1")`. Ensure `downgrade()` drops them. **Keywords**: `op.create_index`, `op.drop_index`, migration correctness
+- [X] T011 Add custom indexes to the migration `upgrade()` that autogenerate may miss: `op.create_index("ix_hitl_metadata_status_paused", "hitl_metadata", ["status", "paused_at"], schema="agent_v1")`, `op.create_index("ix_queued_messages_session_proc_time", "queued_messages", ["session_id", "processed", "received_at"], schema="agent_v1")`. Ensure `downgrade()` drops them. **Keywords**: `op.create_index`, `op.drop_index`, migration correctness
 
-- [ ] T012 Apply migration against local DB: `uv run alembic upgrade head`. Verify with `docker compose exec postgres psql -U agent_user -d agent_db -c "\dt agent_v1.*"` — all 5 new tables should appear alongside existing ones. Run `uv run pytest tests/ -x -q` to confirm all 130 existing tests still pass. **Keywords**: smoke test, regression check
+- [X] T012 Apply migration against local DB: `uv run alembic upgrade head`. Verify with `docker compose exec postgres psql -U agent_user -d agent_db -c "\dt agent_v1.*"` — all 5 new tables should appear alongside existing ones. Run `uv run pytest tests/ -x -q` to confirm all 130 existing tests still pass. **Keywords**: smoke test, regression check
 
 - [X] T081 Create `agent_v1.orders` stub ORM model in `models/schema.py` for order execution (used by T038). Fields: `id: Mapped[uuid.UUID]` (PK uuid7), `session_id: Mapped[str]` (indexed), `customer_id: Mapped[str]` (indexed), `order_info: Mapped[dict]` (JSONB), `status: Mapped[str]` (default `"pending"`), `created_at: Mapped[datetime]` (UTC). Add composite index on `(session_id, created_at)`. Schema: `agent_v1`. **Keywords**: orders table, Article I SSOT (no duplication with HITLMetadata), testability, Phase 2 positioning (not Phase 20.75)
 
 ---
 
-## Phase 3: Data Layer — Alembic Migration (Updated)
+## Phase 4: Data Layer — Alembic Migration (Updated)
 
 **Purpose**: Extend `AgentState` with HITL fields and define all Pydantic boundary models.  
 **Prerequisite**: T001 complete (langgraph-checkpoint-postgres installed).
 
-- [ ] T013 Add `HITLReasonEnum` to `core/agent/state.py`:
+- [X] T013 Add `HITLReasonEnum` to `core/agent/state.py`:
   ```python
   class HITLReasonEnum(StrEnum):
       ORDER_APPROVAL  = "order_approval"
@@ -74,7 +74,7 @@
   ```
   Also add `ORDER_PLACEMENT = "ORDER_PLACEMENT"` to `IntentEnum`. **Keywords**: `StrEnum`, new intent, Article VI
 
-- [ ] T014 Extend `AgentState` TypedDict in `core/agent/state.py` with 8 new fields (add after existing `error` field):
+- [X] T014 Extend `AgentState` TypedDict in `core/agent/state.py` with 8 new fields (add after existing `error` field):
   ```python
   # HITL fields (Week 4)
   hitl_triggered: bool
@@ -88,7 +88,7 @@
   ```
   **Keywords**: `TypedDict`, additive change, state contract
 
-- [ ] T015 Extend `make_initial_state()` in `core/agent/state.py` to include all new HITL fields with safe defaults:
+- [X] T015 Extend `make_initial_state()` in `core/agent/state.py` to include all new HITL fields with safe defaults:
   ```python
   "hitl_triggered": False,
   "hitl_reason": None,
@@ -101,7 +101,7 @@
   ```
   Run `uv run pytest tests/unit/test_agent_state.py -v` to confirm existing state tests still pass. **Keywords**: `make_initial_state`, explicit False defaults, regression
 
-- [ ] T016 Create `services/hitl/schemas.py` with `ApprovalPayload` and `ReviewActionCreate` Pydantic models:
+- [X] T016 Create `services/hitl/schemas.py` with `ApprovalPayload` and `ReviewActionCreate` Pydantic models:
   ```python
   class ReviewActionCreate(BaseModel):
       session_id: str
@@ -122,7 +122,7 @@
   ```
   **Keywords**: `Literal`, `model_validator`, `field_validator`, Article VI
 
-- [ ] T017 Add `QueueIntentResult` and `QueuedMessageBatch` to `services/hitl/schemas.py`:
+- [X] T017 Add `QueueIntentResult` and `QueuedMessageBatch` to `services/hitl/schemas.py`:
   ```python
   class QueueIntentResult(BaseModel):
       message_id: str

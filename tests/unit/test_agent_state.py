@@ -17,7 +17,7 @@ def test_agent_state_imports():
 
 
 def test_intent_enum_values():
-    """Verify IntentEnum has all 7 required values."""
+    """Verify IntentEnum has all 8 required values."""
     required = {
         "INFO_QUERY",
         "PRICING",
@@ -26,6 +26,7 @@ def test_intent_enum_values():
         "NEGOTIATION",
         "SMALLTALK",
         "AVAILABILITY",
+        "ORDER_PLACEMENT",
     }
     actual = {e.value for e in IntentEnum}
     assert required == actual
@@ -89,6 +90,14 @@ def test_agent_state_fields_complete():
         "response",
         "declined",
         "error",
+        "hitl_triggered",
+        "hitl_reason",
+        "hitl_pause_id",
+        "hitl_rejection_reason",
+        "hitl_escalation_count",
+        "hitl_approved",
+        "estimated_token_cost",
+        "order_info",
         "cached_answer",
         "canonical_query",
         "query_vector",

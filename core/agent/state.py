@@ -26,6 +26,17 @@ class IntentEnum(StrEnum):
     NEGOTIATION = "NEGOTIATION"
     SMALLTALK = "SMALLTALK"
     AVAILABILITY = "AVAILABILITY"
+    ORDER_PLACEMENT = "ORDER_PLACEMENT"
+
+
+class HITLReasonEnum(StrEnum):
+    """Reasons for HITL pause (Week 4)."""
+
+    ORDER_APPROVAL = "order_approval"
+    LOW_CONFIDENCE = "low_confidence"
+    COST_LIMIT = "cost_limit"
+    REFUND_APPROVAL = "refund_approval"
+    STALE_PRICE = "stale_data_price_change"
 
 
 class EscalationReasonEnum(StrEnum):
@@ -109,6 +120,15 @@ class AgentState(TypedDict):
     response: str | None
     declined: bool
     error: str | None
+    # HITL fields (Week 4)
+    hitl_triggered: bool
+    hitl_reason: str | None
+    hitl_pause_id: str | None
+    hitl_rejection_reason: str | None
+    hitl_escalation_count: int
+    hitl_approved: bool
+    estimated_token_cost: int
+    order_info: dict | None
     # Retrieval pipeline fields (set by retrieval_node, used by answer_node)
     cached_answer: str | None  # Pre-generated answer from L1/L2 cache hit (skip LLM)
     canonical_query: str | None  # Normalized query text for cache write
@@ -152,6 +172,14 @@ def make_initial_state(user_message: str, session_id: str) -> AgentState:
         "response": None,
         "declined": False,  # explicit False (SC-001)
         "error": None,
+        "hitl_triggered": False,
+        "hitl_reason": None,
+        "hitl_pause_id": None,
+        "hitl_rejection_reason": None,
+        "hitl_escalation_count": 0,
+        "hitl_approved": False,
+        "estimated_token_cost": 0,
+        "order_info": None,
         "cached_answer": None,
         "canonical_query": None,
         "query_vector": None,
