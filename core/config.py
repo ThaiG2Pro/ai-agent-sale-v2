@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     HITL_COST_THRESHOLD_TOKENS: int = Field(default=8000, ge=100)
     SUPPORT_CONTACT_LINK: str = "https://t.me/support_bot"
 
+    # Telegram Configuration
+    TELEGRAM_BOT_TOKEN: str = "your_bot_token_here"
+    TELEGRAM_CHAT_ID: str = "your_chat_id_here"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

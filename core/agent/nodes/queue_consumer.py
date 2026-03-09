@@ -117,8 +117,13 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
             ],
             response_format=QueuedMessageBatch,
         )
-        # Parse result (litellm uses Pydantic if response_format is provided)
-        batch_result = cast("QueuedMessageBatch", response.choices[0].message.content)
+        # Parse result (litellm returns JSON string in content when using response_format)
+        content = response.choices[0].message.content
+        if isinstance(content, str):
+            batch_result = QueuedMessageBatch.model_validate_json(content)
+        else:
+            # Some providers/litellm versions might return object directly
+            batch_result = QueuedMessageBatch.model_validate(content)
 
         # Apply confidence threshold (T031)
         # Note: Depending on litellm version/provider, content might be a string or object.
@@ -129,6 +134,7 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
         # Let's assume for now the classifier provides a reliable batch.
 
     except Exception as e:
+        print(f"DEBUG EXCEPTION: {e}")
         logger.error(f"Batch classification failed for {session_id}: {e}")
         # Default conservatively to CONFIRM (T031 fallback)
         batch_result = QueuedMessageBatch(

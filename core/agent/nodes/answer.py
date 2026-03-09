@@ -37,6 +37,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     DB session injected via config["configurable"]["db"].
 
     Paths:
+    0. Already responded (response set by business node) → return as-is (tracing only)
     1. Cache hit (cached_answer set) → return cached answer, no LLM call
     2. Declined (Layer 1 or Layer 2) → return DECLINE_MESSAGE, no LLM call
     3. Accepted → LLM call with retrieved_chunks context, then write to cache
@@ -45,6 +46,21 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         State update dict with response, model_used
     """
     db = (config.get("configurable") or {}).get("db")
+
+    # Path 0: Already responded by a business node (e.g., order_execution or customer_support)
+    # We still want to write a trace for this turn.
+    if state.get("response"):
+        await _write_model_trace(
+            state,
+            db=db,
+            metadata_={
+                "guard_decision": "BUSINESS_LOGIC",
+                "escalation_flag": state.get("escalation_flag", False),
+                "declined": False,
+                "intended_model": "business_logic",
+            },
+        )
+        return {}  # No additional updates needed
 
     # Path 1: Cache hit — use pre-generated answer, skip LLM entirely
     cached_answer = state.get("cached_answer")

@@ -117,20 +117,37 @@ def _setup_test_database() -> None:  # type: ignore[return]
     print(f"[conftest] Migrations applied to '{settings.DB_NAME}' ✓")
 
 
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def override_get_db(db_session):
+    """Overrides the get_db dependency for all tests to use the isolated db_session."""
+    from api.main import app
+    from services.database import get_db
+
+    async def _get_db_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _get_db_override
+    yield
+    app.dependency_overrides.pop(get_db, None)
+
+
 @pytest_asyncio.fixture(scope="function")
 async def db_session():
-    """Provides a clean database session for each test using the migrated test DB.
-
-    Uses NullPool to prevent asyncpg connections from being reused across
-    different per-function event loops (pytest-asyncio creates one loop per
-    test).  Without NullPool, connections acquired in one test are returned to
-    the pool but remain bound to that test's (now-closed) event loop, causing
-    ``RuntimeError: Event loop is closed`` during teardown of the next test.
-    """
+    """Provides a clean database session for each test using the migrated test DB."""
     from core.config import settings
-    from models.schema import Product, SemanticCache, TextEmbedding
+    from models.schema import (
+        HITLMetadata,
+        InterruptedSession,
+        Order,
+        Product,
+        QueuedMessage,
+        ReviewAction,
+        SemanticCache,
+        SupportQueue,
+        TextEmbedding,
+    )
 
-    # NullPool: no connection reuse across tests → safe for per-function loops
+    # Use a single engine for the whole session if possible, but NullPool is safer for loop issues
     engine = create_async_engine(settings.database_url, poolclass=NullPool)
     session_factory = async_sessionmaker(
         bind=engine,
@@ -140,9 +157,28 @@ async def db_session():
     )
 
     async with session_factory() as session:
-        yield session
-        # Cleanup created rows between tests
-        await session.execute(delete(TextEmbedding))
-        await session.execute(delete(Product))
-        await session.execute(delete(SemanticCache))
+        # Cleanup rows BEFORE test
+        tables = [
+            ReviewAction,
+            QueuedMessage,
+            SupportQueue,
+            HITLMetadata,
+            InterruptedSession,
+            Order,
+            TextEmbedding,
+            Product,
+            SemanticCache,
+        ]
+        for table in tables:
+            await session.execute(delete(table))
         await session.commit()
+
+        yield session
+
+        # Rollback any remaining transaction and cleanup rows AFTER test
+        await session.rollback()
+        for table in tables:
+            await session.execute(delete(table))
+        await session.commit()
+
+    await engine.dispose()

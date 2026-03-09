@@ -50,12 +50,23 @@ async def lifespan(app: FastAPI):
     # Initialize background task storage
     app.state.background_tasks = set()
 
+    # Verify Telegram Configuration (T073)
+    if not settings.TELEGRAM_BOT_TOKEN or settings.TELEGRAM_BOT_TOKEN == "your_bot_token_here":
+        logfire.warn("TELEGRAM_BOT_TOKEN not configured. Administrative alerts will be disabled.")
+
     # Start HITL Timeout Scheduler (Phase 15)
     import asyncio
 
     timeout_task = asyncio.create_task(run_timeout_scheduler(session_factory=session_factory))
     app.state.background_tasks.add(timeout_task)
     timeout_task.add_done_callback(app.state.background_tasks.discard)
+
+    # Start Nightly Archive Task (T070)
+    from services.hitl.archive_scheduler import run_nightly_archive
+
+    archive_task = asyncio.create_task(run_nightly_archive(session_factory=session_factory))
+    app.state.background_tasks.add(archive_task)
+    archive_task.add_done_callback(app.state.background_tasks.discard)
 
     # Warm up economy-chat model in background (avoid cold start on first query)
     warmup_task = asyncio.create_task(_warmup_model())

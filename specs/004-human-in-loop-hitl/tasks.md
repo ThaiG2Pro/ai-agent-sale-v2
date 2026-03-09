@@ -406,9 +406,9 @@
 **Purpose**: FastAPI TestClient tests for `/hitl` endpoints.  
 **Prerequisite**: T050–T057 complete.
 
-- [ ] T068 Create `tests/contract/test_hitl_api.py`. Test: (1) `GET /hitl/session/{id}/state` without `X-Admin-Key` → 403. (2) `GET /hitl/session/{id}/state` with valid key but no pause → 404. (3) `POST /hitl/review` with valid body and `X-Idempotency-Key` → 200 with `action_id`. **Keywords**: `TestClient`, 403/404/200, header validation
+- [X] T068 Create `tests/contract/test_hitl_api.py`. Test: (1) `GET /hitl/session/{id}/state` without `X-Admin-Key` → 401. (2) `GET /hitl/session/{id}/state` with valid key but no pause → 404. (3) `POST /hitl/review` with valid body and `X-Idempotency-Key` → 200 with `action_id`. **Keywords**: `TestClient`, 401/404/200, header validation
 
-- [ ] T069 Add idempotency contract test: send identical `POST /hitl/review` twice with same `X-Idempotency-Key` → second response has `"status": "hit"`, identical `action_id`. Add version-conflict test: `expected_version=999` → 409. **Keywords**: idempotency replay, 409 optimistic lock, contract level
+- [X] T069 Add idempotency contract test: send identical `POST /hitl/review` twice with same `X-Idempotency-Key` → second response has `"status": "hit"`, identical `action_id`. Add version-conflict test: `expected_version=999` → 409. **Keywords**: idempotency replay, 409 optimistic lock, contract level
 
 ---
 
@@ -417,13 +417,13 @@
 **Purpose**: Implement nightly maintenance and async services not covered in previous phases.  
 **Prerequisite**: T005–T012 (DB schema complete), T042–T049 (services defined).
 
-- [ ] T070 Create `services/hitl/archive_scheduler.py`. Implement `async def run_nightly_archive(db_session_factory, batch_size=1000)`: query `queued_messages WHERE processed=True AND received_at < NOW() - INTERVAL '90 days' AND archived=False` in batches. Update each batch `SET archived=True`. Log: `{"event": "nightly_archive", "count": batch_size, "timestamp": NOW()}`. This runs once per 24 hours via FastAPI lifespan. **Keywords**: nightly job, QueuedMessage retention, archived flag, FR-021, 90-day policy
+- [X] T070 Create `services/hitl/archive_scheduler.py`. Implement `async def run_nightly_archive(db_session_factory, batch_size=1000)`: query `queued_messages WHERE processed=True AND received_at < NOW() - INTERVAL '90 days' AND archived=False` in batches. Update each batch `SET archived=True`. Log: `{"event": "nightly_archive", "count": batch_size, "timestamp": NOW()}`. This runs once per 24 hours via FastAPI lifespan. **Keywords**: nightly job, QueuedMessage retention, archived flag, FR-021, 90-day policy
 
-- [ ] T071 Create `services/hitl/telegram_service.py`. Implement `async def send_telegram_message(chat_id: str, message_text: str) → bool`: wrapper around Telegram Bot API. Inject `settings.TELEGRAM_BOT_TOKEN` (from env). Return True on success, False on failure. Handle rate-limit 429 with exponential backoff. **Keywords**: Telegram service, Bot API, settings injection, send_telegram_message function
+- [X] T071 Create `services/hitl/telegram_service.py`. Implement `async def send_telegram_message(chat_id: str, message_text: str) → bool`: wrapper around Telegram Bot API. Inject `settings.TELEGRAM_BOT_TOKEN` (from env). Return True on success, False on failure. Handle rate-limit 429 with exponential backoff. **Keywords**: Telegram service, Bot API, settings injection, send_telegram_message function
 
-- [ ] T072 Implement `compressed_context` transformation in `services/hitl/cost_guard.py` (used by T026 confidence/cost guards): extract last 5 messages from conversation history + current user intent + product name. Tokenize and estimate cost using `num_tokens ≈ len(text) / 4`. Document the heuristic. **Keywords**: compressed context, token estimation, cost guard input, T026 dependency
+- [X] T072 Implement `compressed_context` transformation in `services/hitl/cost_guard.py` (used by T026 confidence/cost guards): extract last 5 messages from conversation history + current user intent + product name. Tokenize and estimate cost using `num_tokens ≈ len(text) / 4`. Document the heuristic. **Keywords**: compressed context, token estimation, cost guard input, T026 dependency
 
-- [ ] T073 Add Telegram service dependency to FastAPI lifespan: inject `TelegramService` into timeout_scheduler and support_queue routes. Verify service is available before starting scheduler loop. **Keywords**: lifespan integration, dependency injection, Telegram availability check
+- [X] T073 Add Telegram service dependency to FastAPI lifespan: inject `TelegramService` into timeout_scheduler and support_queue routes. Verify service is available before starting scheduler loop. **Keywords**: lifespan integration, dependency injection, Telegram availability check
 
 ---
 
@@ -432,11 +432,11 @@
 **Purpose**: Verify Article V strict async compliance and performance goals.  
 **Prerequisite**: T051–T057 (all endpoints complete), T070–T073 (background tasks).
 
-- [ ] T074 Create `tests/performance/test_hitl_latency.py`. Implement **endpoint latency test**: invoke `POST /hitl/review` with valid payload 10 times and measure response time. Assert p95 < 200ms (spec requirement). Use `pytest-benchmark` or simple `time.time()` measurement. **Keywords**: p95 latency, 200ms target, performance regression gate
+- [X] T074 Create `tests/performance/test_hitl_latency.py`. Implement **endpoint latency test**: invoke `POST /hitl/review` with valid payload 10 times and measure response time. Assert p95 < 200ms (spec requirement). Use `pytest-benchmark` or simple `time.time()` measurement. **Keywords**: p95 latency, 200ms target, performance regression gate
 
-- [ ] T075 Create latency test for **queue_consumer_node batch classification**: mock LiteLLM completion, measure time from node entry to exit with 5 queued messages. Assert < 500ms (spec requirement). Use `asyncio.get_event_loop().time()` for precise timing. **Keywords**: queue classification latency, 500ms target, async timing
+- [X] T075 Create latency test for **queue_consumer_node batch classification**: mock LiteLLM completion, measure time from node entry to exit with 5 queued messages. Assert < 500ms (spec requirement). Use `asyncio.get_event_loop().time()` for precise timing. **Keywords**: queue classification latency, 500ms target, async timing
 
-- [ ] T076 Add **async safety check** to ruff: run `uv run ruff check --select ASYNC .` after all tasks complete. Verify no blocking calls in `hitl.py`, `hitl_guard.py`, `queue_consumer.py`, `timeout_scheduler.py`, `archive_scheduler.py`. Article V compliance gate. **Keywords**: `ASYNC` linter rule, no blocking I/O, event loop safety
+- [X] T076 Add **async safety check** to ruff: run `uv run ruff check --select ASYNC .` after all tasks complete. Verify no blocking calls in `hitl.py`, `hitl_guard.py`, `queue_consumer.py`, `timeout_scheduler.py`, `archive_scheduler.py`. Article V compliance gate. **Keywords**: `ASYNC` linter rule, no blocking I/O, event loop safety
 
 ---
 
@@ -444,9 +444,9 @@
 
 **Purpose**: Run full test suite, verify graph topology, check ruff linting.
 
-- [ ] T077 Run full test suite: `uv run pytest tests/ -v --tb=short 2>&1 | tail -30`. All existing 130+ tests must pass, plus all new HITL tests. Target: 0 failures. If failures exist, fix before proceeding. **Keywords**: regression gate, full suite, zero failures
+- [X] T077 Run full test suite: `uv run pytest tests/ -v --tb=short 2>&1 | tail -30`. All existing 130+ tests must pass, plus all new HITL tests. Target: 0 failures. If failures exist, fix before proceeding. **Keywords**: regression gate, full suite, zero failures
 
-- [ ] T078 Run ruff lint + format check: `uv run ruff check . && uv run ruff format --check .`. Fix any issues: `uv run ruff check --fix . && uv run ruff format .`. Pay special attention to `ASYNC` rules (no blocking I/O in async functions) and `TCH` (type-checking imports). **Keywords**: `ruff check`, `ruff format`, ASYNC safety, Article V
+- [X] T078 Run ruff lint + format check: `uv run ruff check . && uv run ruff format --check .`. Fix any issues: `uv run ruff check --fix . && uv run ruff format .`. Pay special attention to `ASYNC` rules (no blocking I/O in async functions) and `TCH` (type-checking imports). **Keywords**: `ruff check`, `ruff format`, ASYNC safety, Article V
 
 - [ ] T079 Export updated Mermaid graph diagram: `uv run python -c "from core.agent.graph import export_mermaid_to_file; export_mermaid_to_file('docs/week4/agent-graph.mmd')"`. Verify all 11 nodes appear: router, retrieval, confidence, **hitl_guard** (new), queue_consumer, state_freshness, order_execution, cancellation, customer_support, answer, END. Commit to `docs/week4/agent-graph.mmd`. **Keywords**: Mermaid export, graph documentation, 11 nodes, node naming
 

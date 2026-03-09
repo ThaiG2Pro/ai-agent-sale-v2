@@ -6,20 +6,17 @@ What it does: Provides state inspection and review submission for paused session
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from api.dependencies import get_agent_graph, verify_admin_key
 from models.schema import HITLMetadata
 from services.database import get_db
+from services.hitl.schemas import ReviewActionCreate  # noqa: TC001
 from services.hitl.service import HITLService
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from services.hitl.schemas import ReviewActionCreate
 
 router = APIRouter(prefix="/hitl", tags=["hitl"])
 logger = logging.getLogger(__name__)
@@ -53,28 +50,33 @@ async def submit_review(
     """Submit admin decision on a paused session (T051, T052)."""
     config = {"configurable": {"thread_id": payload.session_id, "db": db}}
 
-    # T052: (1) Terminal status gate
-    # We query the status before calling service methods to ensure it's not already resolved.
-    from sqlalchemy import select
-
-    stmt = select(HITLMetadata).where(HITLMetadata.pause_id == payload.pause_id).limit(1)
-    res = await db.execute(stmt)
-    hitl_meta = res.scalar_one_or_none()
-
-    if not hitl_meta:
-        raise HTTPException(status_code=404, detail="No active HITL pause for session")
-
-    if hitl_meta.status in ["approved", "rejected", "abandoned", "escalated"]:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "Session already resolved",
-                "status": hitl_meta.status,
-                "assigned_to": hitl_meta.admin_id,
-            },
-        )
-
     try:
+        # T051: Check idempotency FIRST (before status gate)
+        # This allows replayed requests for already-resolved sessions to return success.
+        if action_id := await HITLService.check_idempotency(x_idempotency_key, db):
+            response.headers["X-Idempotency-Status"] = "hit"
+            return {"status": "hit", "action_id": action_id}
+
+        # T052: (1) Terminal status gate
+        from sqlalchemy import select
+
+        stmt = select(HITLMetadata).where(HITLMetadata.pause_id == payload.pause_id).limit(1)
+        res = await db.execute(stmt)
+        hitl_meta = res.scalar_one_or_none()
+
+        if not hitl_meta:
+            raise HTTPException(status_code=404, detail="No active HITL pause for session")
+
+        if hitl_meta.status in ["approved", "rejected", "abandoned", "escalated"]:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "Session already resolved",
+                    "status": hitl_meta.status,
+                    "assigned_to": hitl_meta.admin_id,
+                },
+            )
+
         if payload.action == "approve":
             result = await HITLService.process_approve(
                 payload, x_idempotency_key, db, graph, config
@@ -90,12 +92,9 @@ async def submit_review(
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported action: {payload.action}")
 
-        # Set idempotency status header
-        if result.get("status") == "hit":
-            response.headers["X-Idempotency-Status"] = "hit"
-        else:
-            response.headers["X-Idempotency-Status"] = "new"
-            await db.commit()  # Commit transaction if successful and new
+        # Set idempotency status header (for non-hits)
+        response.headers["X-Idempotency-Status"] = "new"
+        await db.commit()  # Commit transaction if successful and new
 
         return result
 

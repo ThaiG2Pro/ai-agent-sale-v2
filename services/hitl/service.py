@@ -89,7 +89,7 @@ class HITLService:
         await db.flush()
 
     @staticmethod
-    async def _check_idempotency(idempotency_key: str, db: AsyncSession) -> str | None:
+    async def check_idempotency(idempotency_key: str, db: AsyncSession) -> str | None:
         """Checks if a review action with this idempotency key already exists."""
         stmt = select(ReviewAction.action_id).where(
             ReviewAction.idempotency_key == idempotency_key
@@ -131,7 +131,7 @@ class HITLService:
     ) -> dict[str, Any]:
         """Processes admin approval with optimistic locking and Pattern B (T044)."""
         # 1. Check idempotency
-        if action_id := await HITLService._check_idempotency(idempotency_key, db):
+        if action_id := await HITLService.check_idempotency(idempotency_key, db):
             return {"status": "hit", "action_id": action_id}
 
         # 2. Optimistic lock
@@ -199,7 +199,7 @@ class HITLService:
     ) -> dict[str, Any]:
         """Processes admin rejection (T045)."""
         # 1. Idempotency
-        if action_id := await HITLService._check_idempotency(idempotency_key, db):
+        if action_id := await HITLService.check_idempotency(idempotency_key, db):
             return {"status": "hit", "action_id": action_id}
 
         # 2. Lock
@@ -243,7 +243,7 @@ class HITLService:
     ) -> dict[str, Any]:
         """Processes request_edit with synthetic message (T046)."""
         # 1. Idempotency
-        if action_id := await HITLService._check_idempotency(idempotency_key, db):
+        if action_id := await HITLService.check_idempotency(idempotency_key, db):
             return {"status": "hit", "action_id": action_id}
 
         # 2. Lock

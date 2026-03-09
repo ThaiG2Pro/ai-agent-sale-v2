@@ -6,7 +6,6 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 
-import litellm
 from langgraph.types import Command, interrupt
 from sqlalchemy.dialects.postgresql import insert
 from uuid_utils import uuid7
@@ -61,17 +60,24 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
         trigger_hitl = True
         reason = HITLReasonEnum.LOW_CONFIDENCE
 
-    # Cost Check (T026)
+    # Cost Check (T026, T072)
     if not trigger_hitl:
+        from services.hitl.cost_guard import (
+            estimate_tokens_heuristic,
+            get_compressed_context_text,
+        )
+
         messages = state.get("messages", [])
-        model = state.get("model_used") or settings.CHAT_MODEL
-        try:
-            estimated_tokens = litellm.token_counter(model=model, messages=messages)
-            if estimated_tokens > settings.HITL_COST_THRESHOLD_TOKENS:
-                trigger_hitl = True
-                reason = HITLReasonEnum.COST_LIMIT
-        except Exception as e:
-            logger.warning(f"Token counter failed for session {session_id}: {e}")
+        compressed_text = get_compressed_context_text(
+            messages, intent=intent, order_info=state.get("order_info")
+        )
+        estimated_tokens = estimate_tokens_heuristic(compressed_text)
+
+        if estimated_tokens > settings.HITL_COST_THRESHOLD_TOKENS:
+            trigger_hitl = True
+            reason = HITLReasonEnum.COST_LIMIT
+    else:
+        estimated_tokens = None
 
     # 4. Handle HITL Trigger
     if trigger_hitl:
@@ -183,5 +189,8 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
             logger.error(f"Failed to process interrupt result for session {session_id}: {e}")
             return Command(goto="answer_node", update={"error": "Invalid HITL resume payload"})
 
-    # 6. Default: proceed to answer_node
-    return Command(goto="answer_node")
+    # 6. Default: proceed to answer_node (store token estimate for observability)
+    update: dict = (
+        {"estimated_token_cost": estimated_tokens} if estimated_tokens is not None else {}
+    )
+    return Command(goto="answer_node", update=update)
