@@ -29,6 +29,9 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+# Alias used by background schedulers (timeout_scheduler, archive_scheduler)
+session_factory = AsyncSessionLocal
+
 
 async def get_db() -> AsyncGenerator[AsyncSession]:
     """Dependency for obtaining an async database session."""

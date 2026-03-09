@@ -393,11 +393,11 @@
 **Purpose**: End-to-end flow tests using real LangGraph graph with in-memory checkpointer (or test Postgres).  
 **Prerequisite**: All Phase 8–17 tasks complete.
 
-- [ ] T065 Create `tests/integration/test_hitl_flow.py`. Test: **happy path approve → execute** — (1) invoke graph with ORDER_PLACEMENT message, (2) graph pauses at `hitl_guard_node`, (3) confirm `graph.get_state(config).next == ["hitl_guard_node"]`, (4) simulate admin `process_approve()`, (5) graph resumes, processes empty queue, validates freshness, executes order. Assert final state has `order_info["status"] == "confirmed"`. Use `MemorySaver` checkpointer for speed. **Keywords**: `MemorySaver`, `get_state`, `Command(resume=...)`, end-to-end, happy path
+- [X] T065 Create `tests/integration/test_hitl_flow.py`. Test: **happy path approve → execute** — (1) invoke graph with ORDER_PLACEMENT message, (2) graph pauses at `hitl_guard_node`, (3) confirm `graph.get_state(config).next == ["hitl_guard_node"]`, (4) simulate admin `process_approve()`, (5) graph resumes, processes empty queue, validates freshness, executes order. Assert final state has `order_info["status"] == "confirmed"`. Use `MemorySaver` checkpointer for speed. **Keywords**: `MemorySaver`, `get_state`, `Command(resume=...)`, end-to-end, happy path
 
-- [ ] T066 Add test: **reject → customer_support → support_queue** — pause graph, simulate `process_reject()`, assert graph routes to `customer_support_node`, `SupportQueue` row inserted, `HITLMetadata.status == "rejected"`. **Keywords**: rejection flow, SupportQueue, HITLMetadata status
+- [X] T066 Add test: **reject → customer_support → support_queue** — pause graph, simulate `process_reject()`, assert graph routes to `customer_support_node`, `SupportQueue` row inserted, `HITLMetadata.status == "rejected"`. **Keywords**: rejection flow, SupportQueue, HITLMetadata status
 
-- [ ] T067 Add test: **CANCEL during pause** — graph paused, customer sends CANCEL message (enqueued), admin approves, resume: `queue_consumer_node` classifies CANCEL, routes to `cancellation_node` overriding admin approval. Assert `order_info["status"] == "cancelled"`. **Keywords**: CANCEL override integration, post-approve routing
+- [X] T067 Add test: **CANCEL during pause** — graph paused, customer sends CANCEL message (enqueued), admin approves, resume: `queue_consumer_node` classifies CANCEL, routes to `cancellation_node` overriding admin approval. Assert `order_info["status"] == "cancelled"`. **Keywords**: CANCEL override integration, post-approve routing
 
 ---
 

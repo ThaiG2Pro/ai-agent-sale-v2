@@ -118,37 +118,9 @@ def build_graph(checkpointer=None):
     builder.add_edge("escalation_node", "answer_node")
 
     # HITL graph pathways
-    builder.add_conditional_edges(
-        "hitl_guard_node",
-        lambda state: (
-            "answer_node"
-        ),  # Placeholder until T025 interrupt logic provides Command(goto=...)
-        {
-            "answer_node": "answer_node",
-            "queue_consumer_node": "queue_consumer_node",
-            "customer_support_node": "customer_support_node",
-        },
-    )
-
-    builder.add_conditional_edges(
-        "queue_consumer_node",
-        lambda state: "state_freshness_validator_node",  # Placeholder
-        {
-            "state_freshness_validator_node": "state_freshness_validator_node",
-            "cancellation_node": "cancellation_node",
-            "hitl_guard_node": "hitl_guard_node",
-        },
-    )
-
-    builder.add_conditional_edges(
-        "state_freshness_validator_node",
-        lambda state: "order_execution_node",  # Placeholder
-        {
-            "order_execution_node": "order_execution_node",
-            "customer_support_node": "customer_support_node",
-            "hitl_guard_node": "hitl_guard_node",
-        },
-    )
+    # These nodes return Command(goto=...) directly, so no static edges are needed.
+    # Diagram might not show these dynamic edges without explicit config,
+    # but runtime execution will be correct.
 
     builder.add_edge("order_execution_node", "answer_node")
     builder.add_edge("cancellation_node", "answer_node")

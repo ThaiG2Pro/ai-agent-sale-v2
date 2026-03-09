@@ -95,7 +95,9 @@ def _route_after_confidence(state: AgentState) -> str:
     similarity = state.get("similarity_score", 0.0)
     layer1_declined = state.get("declined", False)  # True only if Layer 1 fired
     confidence_threshold = settings.AGENT_CONFIDENCE_THRESHOLD
-    confidence_score = state.get("confidence_score", similarity)
+    # Use computed confidence_score if set by confidence_node (non-zero),
+    # else fall back to similarity (unit-test path where confidence_node didn't run).
+    confidence_score = state.get("confidence_score") or similarity
 
     # Week 4: Always route ORDER_PLACEMENT through the HITL guard
     if intent == "ORDER_PLACEMENT":
