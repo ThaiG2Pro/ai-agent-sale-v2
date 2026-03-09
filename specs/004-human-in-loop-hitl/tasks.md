@@ -372,19 +372,19 @@
 **Purpose**: Isolated tests for each HITL node and service method. No DB required — use mocks.  
 **Prerequisite**: Phase 8–16 complete.
 
-- [ ] T058 Create `tests/unit/test_hitl_guard_node.py`. Test: (1) **pause fires** — when `escalation_count < max`, `interrupt()` is called (mock `interrupt` to capture payload), HITLMetadata and InterruptedSession are written. (2) **overflow guard** — when `escalation_count >= max`, node routes directly to `customer_support_node` without calling `interrupt()`. Use `pytest-asyncio`, mock db session. **Keywords**: mock `interrupt`, overflow guard, `asyncio_mode=strict`
+- [X] T058 Create `tests/unit/test_hitl_guard_node.py`. Test: (1) **pause fires** — when `escalation_count < max`, `interrupt()` is called (mock `interrupt` to capture payload), HITLMetadata and InterruptedSession are written. (2) **overflow guard** — when `escalation_count >= max`, node routes directly to `customer_support_node` without calling `interrupt()`. Use `pytest-asyncio`, mock db session. **Keywords**: mock `interrupt`, overflow guard, `asyncio_mode=strict`
 
-- [ ] T059 Add tests to `test_hitl_guard_node.py`: (3) **approve resume** — when `interrupt()` returns `{"action":"approve"}`, node returns `Command(goto="queue_consumer_node")`. (4) **reject resume** — returns `Command(goto="customer_support_node")` with `hitl_rejection_reason` set. **Keywords**: resume path, approve/reject routing
+- [X] T059 Add tests to `test_hitl_guard_node.py`: (3) **approve resume** — when `interrupt()` returns `{"action":"approve"}`, node returns `Command(goto="queue_consumer_node")`. (4) **reject resume** — returns `Command(goto="customer_support_node")` with `hitl_rejection_reason` set. **Keywords**: resume path, approve/reject routing
 
-- [ ] T060 Create `tests/unit/test_queue_consumer_node.py`. Test: (1) **orphan ToolCall** — state with AIMessage containing `tool_calls=[{id:"call_abc"}]` and no ToolMessage → after node, messages contain synthetic `ToolMessage(tool_call_id="call_abc", content="[cancelled: session resumed]")`. (2) **empty queue** — no QueuedMessages → routes to `state_freshness_validator_node` directly. **Keywords**: orphan tool call fix, ToolMessage injection, empty queue path
+- [X] T060 Create `tests/unit/test_queue_consumer_node.py`. Test: (1) **orphan ToolCall** — state with AIMessage containing `tool_calls=[{id:"call_abc"}]` and no ToolMessage → after node, messages contain synthetic `ToolMessage(tool_call_id="call_abc", content="[cancelled: session resumed]")`. (2) **empty queue** — no QueuedMessages → routes to `state_freshness_validator_node` directly. **Keywords**: orphan tool call fix, ToolMessage injection, empty queue path
 
-- [ ] T061 Add tests to `test_queue_consumer_node.py`: (3) **CANCEL override** — QueuedMessage classified as CANCEL → routes to `cancellation_node` even when `hitl_approved=True`. (4) **MODIFY_ORDER re-pause** — MODIFY classified with changed `order_info` → `escalation_count` incremented, routes to `hitl_guard_node`. (5) **Double Correction guard** — admin previously set size=L; MODIFY queue message also sets size=L (no change) → treated as CONFIRM, not re-pause. **Keywords**: CANCEL override, Double Correction fix, MODIFY_ORDER re-pause
+- [X] T061 Add tests to `test_queue_consumer_node.py`: (3) **CANCEL override** — QueuedMessage classified as CANCEL → routes to `cancellation_node` even when `hitl_approved=True`. (4) **MODIFY_ORDER re-pause** — MODIFY classified with changed `order_info` → `escalation_count` incremented, routes to `hitl_guard_node`. (5) **Double Correction guard** — admin previously set size=L; MODIFY queue message also sets size=L (no change) → treated as CONFIRM, not re-pause. **Keywords**: CANCEL override, Double Correction fix, MODIFY_ORDER re-pause
 
-- [ ] T062 Create `tests/unit/test_state_freshness_node.py`. Tests: (1) **out-of-stock** — product `stock_quantity=0` → routes to `customer_support_node` with `rejection_reason="out_of_stock"`. (2) **price delta > 5%** — `current_price=105`, `approved_price=100` → routes to `hitl_guard_node`, `escalation_count` unchanged (not incremented). (3) **freshness ok** — stock > 0 and delta < 5% → routes to `order_execution_node`, `hitl_freshness_valid=True`. **Keywords**: price delta, out-of-stock, no escalation_count on stale_price
+- [X] T062 Create `tests/unit/test_state_freshness_node.py`. Tests: (1) **out-of-stock** — product `stock_quantity=0` → routes to `customer_support_node` with `rejection_reason="out_of_stock"`. (2) **price delta > 5%** — `current_price=105`, `approved_price=100` → routes to `hitl_guard_node`, `escalation_count` unchanged (not incremented). (3) **freshness ok** — stock > 0 and delta < 5% → routes to `order_execution_node`, `hitl_freshness_valid=True`. **Keywords**: price delta, out-of-stock, no escalation_count on stale_price
 
-- [ ] T063 Create `tests/unit/test_hitl_service.py`. Tests: (1) **idempotency replay** — `process_approve()` called twice with same `idempotency_key` → second call returns `{"status":"hit"}`, no duplicate DB writes, no second graph resume. (2) **optimistic lock conflict** — `expected_version=0` but `InterruptedSession.version=1` → raises `HTTPException(409)`. (3) **request_edit no auto-resume** — `process_request_edit()` updates state but does NOT call `ainvoke(Command(resume=...))`. **Keywords**: idempotency, 409 conflict, Pattern B no-auto-resume
+- [X] T063 Create `tests/unit/test_hitl_service.py`. Tests: (1) **idempotency replay** — `process_approve()` called twice with same `idempotency_key` → second call returns `{"status":"hit"}`, no duplicate DB writes, no second graph resume. (2) **optimistic lock conflict** — `expected_version=0` but `InterruptedSession.version=1` → raises `HTTPException(409)`. (3) **request_edit no auto-resume** — `process_request_edit()` updates state but does NOT call `ainvoke(Command(resume=...))`. **Keywords**: idempotency, 409 conflict, Pattern B no-auto-resume
 
-- [ ] T064 Create `tests/unit/test_hitl_schemas.py`. Tests: (1) **ReviewActionCreate validation** — `action="request_edit"` with `state_edits=None` raises `ValidationError`. (2) **ApprovalPayload round-trip** — serialize/deserialize via `model_dump()` / `model_validate()`. (3) **QueuedMessageBatch computed fields** — `has_cancel=True` when any message has `intent="CANCEL"`. **Keywords**: Pydantic `model_validator`, `ValidationError`, schema contract
+- [X] T064 Create `tests/unit/test_hitl_schemas.py`. Tests: (1) **ReviewActionCreate validation** — `action="request_edit"` with `state_edits=None` raises `ValidationError`. (2) **ApprovalPayload round-trip** — serialize/deserialize via `model_dump()` / `model_validate()`. (3) **QueuedMessageBatch computed fields** — `has_cancel=True` when any message has `intent="CANCEL"`. **Keywords**: Pydantic `model_validator`, `ValidationError`, schema contract
 
 ---
 
@@ -437,14 +437,6 @@
 - [ ] T075 Create latency test for **queue_consumer_node batch classification**: mock LiteLLM completion, measure time from node entry to exit with 5 queued messages. Assert < 500ms (spec requirement). Use `asyncio.get_event_loop().time()` for precise timing. **Keywords**: queue classification latency, 500ms target, async timing
 
 - [ ] T076 Add **async safety check** to ruff: run `uv run ruff check --select ASYNC .` after all tasks complete. Verify no blocking calls in `hitl.py`, `hitl_guard.py`, `queue_consumer.py`, `timeout_scheduler.py`, `archive_scheduler.py`. Article V compliance gate. **Keywords**: `ASYNC` linter rule, no blocking I/O, event loop safety
-
----
-
-## Phase 20.75: Legacy — REMOVED
-
-**Purpose**: (LEGACY — All moved to earlier phases)  
-- T081 moved to Phase 2 (orders table definition)
-- Other tasks remain in their phases
 
 ---
 
