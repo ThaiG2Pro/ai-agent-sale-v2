@@ -81,12 +81,9 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     intent = state.get("intent", None)
     is_declined = fused < confidence_threshold
 
-    # FR-007: INFO_QUERY, PRICING, AVAILABILITY borderline (0.45 ≤ sim < 0.70) must NOT
-    # be declined here. _route_after_confidence will route them to escalation_node.
-    # - INFO_QUERY borderline → premium model (complex question, borderline context)
-    # - PRICING / AVAILABILITY borderline → economy model (answer with retrieved chunks)
-    # Only COMPARISON borderline is declined at Layer 2 (needs high-quality comparison).
-    _borderline_answer_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY"}
+    # FR-007: INFO_QUERY, PRICING, AVAILABILITY, COMPARISON borderline (0.45 ≤ sim < 0.70)
+    # must NOT be declined here. _route_after_confidence routes them to escalation_node.
+    _borderline_answer_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY", "COMPARISON"}
     if intent in _borderline_answer_intents and is_declined:
         is_declined = False  # escalation_node decides model, answer_node generates
 
@@ -143,9 +140,9 @@ def _route_after_confidence(state: AgentState) -> str:
     if intent == "ORDER_PLACEMENT":
         return "hitl_guard_node"
 
-    # INFO_QUERY, PRICING, AVAILABILITY borderline: Layer 1 didn't fire but below
+    # INFO_QUERY, PRICING, AVAILABILITY, COMPARISON borderline: Layer 1 didn't fire but below
     # Layer 2 threshold → route to escalation_node (which selects premium vs economy)
-    _borderline_route_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY"}
+    _borderline_route_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY", "COMPARISON"}
     if (
         intent in _borderline_route_intents
         and not layer1_declined

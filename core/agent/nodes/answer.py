@@ -84,6 +84,22 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Path 2: Declined (Layer 1 or Layer 2 guard) → return without LLM
     if state.get("declined", False):
+        # SC01 fix: vague browse INFO_QUERY → show product catalog instead of DECLINE_MESSAGE
+        if state.get("intent") == "INFO_QUERY" and db:
+            catalog_response = await _generate_catalog_response(state, db)
+            if catalog_response:
+                await _write_model_trace(
+                    state,
+                    db=db,
+                    metadata_={
+                        "guard_decision": "CATALOG_FALLBACK",
+                        "escalation_flag": False,
+                        "declined": False,
+                        "intended_model": "catalog_fallback",
+                    },
+                )
+                return {"response": catalog_response, "model_used": "catalog_fallback"}
+
         await _write_model_trace(
             state,
             db=db,
@@ -113,14 +129,29 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         for i, citation in enumerate(state["citations"], 1):
             citations_text += f"{i}. {citation.name} ({citation.sku})\n"
 
-    system_prompt = (
-        "Bạn là trợ lý bán hàng AI chuyên nghiệp. "
-        "Trả lời bằng tiếng Việt, thân thiện và hữu ích. "
-        "Chỉ dùng thông tin từ context được cung cấp. "
-        "Nếu không có thông tin phù hợp, nói rõ điều đó."
-    )
+    # SC07 fix: SMALLTALK path — domain guardrail to prevent off-topic answers
+    if state.get("intent") == "SMALLTALK":
+        system_prompt = (
+            "Bạn là trợ lý bán hàng AI chuyên về điện tử tiêu dùng. "
+            "Nhiệm vụ DUY NHẤT của bạn là tư vấn sản phẩm điện tử, giá cả và hỗ trợ đặt hàng. "
+            "Nếu khách hỏi về chủ đề NGOÀI phạm vi bán hàng điện tử "
+            "(lập trình, nấu ăn, thời tiết, học thuật, v.v.): "
+            "hãy lịch sự từ chối và mời khách tìm hiểu sản phẩm điện tử đang có. "
+            "Nếu là lời chào: trả lời thân thiện và giới thiệu ngắn gọn về dịch vụ tư vấn."
+        )
+    else:
+        system_prompt = (
+            "Bạn là trợ lý bán hàng AI chuyên nghiệp. "
+            "Trả lời bằng tiếng Việt, thân thiện và hữu ích. "
+            "Chỉ dùng thông tin từ context được cung cấp. "
+            "Nếu không có thông tin phù hợp, nói rõ điều đó."
+        )
 
-    prompt = f"Context sản phẩm:\n{chunk_text}\n{citations_text}\nCâu hỏi: {state['user_message']}"
+    if state.get("intent") == "SMALLTALK":
+        prompt = state["user_message"]
+    else:
+        user_q = state["user_message"]
+        prompt = f"Context sản phẩm:\n{chunk_text}\n{citations_text}\nCâu hỏi: {user_q}"
 
     try:
         result = await AIGateway.complete(
@@ -154,6 +185,54 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         "response": response,
         "model_used": model,
     }
+
+
+async def _generate_catalog_response(state: AgentState, db: AsyncSession) -> str | None:
+    """SC01 fix: generate a product catalog response for vague browse queries.
+
+    Called when INFO_QUERY is declined (no specific product match). Fetches
+    all product names from DB and returns a formatted catalog listing.
+    Only activates for very short / vague queries (≤ 6 words, no product keywords).
+
+    Returns formatted catalog string or None (fall through to DECLINE_MESSAGE).
+    """
+    import re as _re
+
+    query = state.get("user_message", "")
+    words = query.split()
+
+    # Specific product keywords that should NOT trigger catalog fallback
+    _specific_keywords = _re.compile(
+        r"\b(laptop|điện thoại|phone|tablet|máy tính|tai nghe|headphone|"
+        r"keyboard|chuột|mouse|ssd|ram|gpu|card|màn hình|monitor|charger|"
+        r"pin|sạc|macbook|iphone|samsung|xiaomi|asus|dell|lenovo|sony)\b",
+        _re.IGNORECASE | _re.UNICODE,
+    )
+    if len(words) > 6 or _specific_keywords.search(query):
+        return None
+
+    try:
+        from sqlalchemy import text as sql_text
+
+        rows = await db.execute(
+            sql_text("SELECT name, sku FROM agent_v1.products ORDER BY name LIMIT 12")
+        )
+        products = rows.fetchall()
+        if not products:
+            return None
+
+        lines = ["**Sản phẩm hiện có tại shop:**\n"]
+        for name, sku in products:
+            lines.append(f"• {name} ({sku})")
+        lines.append(
+            "\nBạn quan tâm đến sản phẩm nào? Hãy hỏi thêm để biết thông tin chi tiết! 😊"
+        )
+        return "\n".join(lines)
+    except Exception as exc:
+        import sys
+
+        print(f"[CATALOG_FALLBACK_FAIL] {exc}", file=sys.stderr)
+        return None
 
 
 async def _write_cache(state: AgentState, response: str, db: AsyncSession) -> None:

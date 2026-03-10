@@ -101,6 +101,45 @@ def _keyword_classify_batch(
     return None  # ambiguous → use LLM
 
 
+async def _resolve_new_product_from_modify(
+    queued_rows: list,
+    db: AsyncSession,
+    state: AgentState,
+) -> dict | None:
+    """SC08 fix: extract and resolve the new product name from MODIFY messages.
+
+    Uses RAG retrieval on the queued message text to find the best matching product.
+    Falls back to existing order_info on any failure.
+
+    Returns dict with keys: sku, name, price (same shape as order_info) or None.
+    """
+    # Collect all modify-intent message text
+    modify_texts = [row.message_text for row in queued_rows if row.message_text]
+    if not modify_texts:
+        return None
+
+    combined_text = " ".join(modify_texts)
+    try:
+        from services.rag.pipeline import search_and_retrieve
+
+        result = await search_and_retrieve(db, combined_text, intent="INFO_QUERY")
+        if result.declined or not result.citations:
+            return None
+
+        top = result.citations[0]
+        # Build order_info dict from the resolved product
+        existing = state.get("order_info") or {}
+        return {
+            "sku": top["sku"],
+            "name": top["name"],
+            "price": existing.get("price"),  # keep old price until confidence resolves
+            "quantity": existing.get("quantity", 1),
+        }
+    except Exception as exc:
+        logger.warning("SC08: _resolve_new_product_from_modify failed: %s", exc)
+        return None
+
+
 async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Command:
     """Processes queued messages and orphan tools after resume (Phase 9).
 
@@ -238,6 +277,10 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
     # T033: MODIFY_ORDER re-pause
     if batch_result.has_modify:
         new_escalation_count = state.get("hitl_escalation_count", 0) + 1
+
+        # SC08 fix: extract new product from queued messages and update order_info
+        modify_order_info = await _resolve_new_product_from_modify(queued_rows, db, state)
+
         update_payload.update(
             {
                 "hitl_escalation_count": new_escalation_count,
@@ -247,6 +290,10 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
                 "hitl_approved": False,
             }
         )
+        if modify_order_info:
+            update_payload["order_info"] = modify_order_info
+            logger.info("SC08: MODIFY resolved new product: %s", modify_order_info.get("sku"))
+
         return Command(goto="hitl_guard_node", update=update_payload)
 
     # T034: Fallthrough to freshness check
