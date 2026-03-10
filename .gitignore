@@ -63,7 +63,7 @@ htmlcov/
 
 # my local
 mise.toml
-reports/
+# reports/ — intentionally tracked; remove exclusion
 GEMINI.md 
 
 .gemini/

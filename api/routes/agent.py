@@ -14,6 +14,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from openinference.semconv.trace import SpanAttributes
+from opentelemetry import trace
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
@@ -104,6 +106,11 @@ async def post_agent_query(
 
     Execution path: router → {retrieval + escalation + answer} → response
     """
+    # ── Observability Trace Tagging (SME Pro 2026) ──
+    # Link this request to the conversation session in Phoenix
+    current_span = trace.get_current_span()
+    current_span.set_attribute(SpanAttributes.SESSION_ID, request.session_id)
+
     # T056: Paused Session Gateway
     pause_info = await check_paused_session(request.session_id, request.message, db)
     if pause_info["queued"]:
@@ -219,6 +226,11 @@ async def post_agent_stream(
     Per-node events include: node_name, state_snapshot (delta), timestamp (ISO).
     Client receives Server-Sent Events stream, each event is a JSON object.
     """
+    # ── Observability Trace Tagging (SME Pro 2026) ──
+    # Link this request to the conversation session in Phoenix
+    current_span = trace.get_current_span()
+    current_span.set_attribute(SpanAttributes.SESSION_ID, request.session_id)
+
     # T056: Paused Session Gateway
     pause_info = await check_paused_session(request.session_id, request.message, db)
     if pause_info["queued"]:
