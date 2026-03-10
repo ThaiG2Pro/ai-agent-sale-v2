@@ -45,6 +45,13 @@ async def lifespan(app: FastAPI):
     checkpointer = await create_checkpointer(settings.database_url_psycopg)
     app.state.checkpointer = checkpointer
 
+    # Cache compiled LangGraph once at startup (stateless — state lives in checkpointer).
+    # All concurrent sessions share the same compiled graph object safely.
+    from core.agent.graph import build_graph
+
+    app.state.graph = build_graph(checkpointer=checkpointer)
+    logfire.info("LangGraph compiled and cached at startup.")
+
     logfire.info("Application foundation initialized successfully.")
 
     # Initialize background task storage

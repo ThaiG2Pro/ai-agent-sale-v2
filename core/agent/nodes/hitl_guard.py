@@ -176,6 +176,16 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
             payload = ApprovalPayload.model_validate(interrupt_result)
 
             if payload.action == "approve":
+                # Mark this pause as approved immediately so downstream re-pauses
+                # (e.g. MODIFY_ORDER from queue_consumer) see a clean slate in the DB.
+                from sqlalchemy import update as sa_update
+
+                await db.execute(
+                    sa_update(HITLMetadata)
+                    .where(HITLMetadata.pause_id == pause_id)
+                    .values(status="approved", admin_id=payload.admin_user_id)
+                )
+                await db.commit()
                 # T027: Success path — include order_info so freshness validator can proceed
                 return Command(
                     goto="queue_consumer_node",

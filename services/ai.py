@@ -6,11 +6,15 @@ What it does: Provides async wrappers for LiteLLM with fallback and latency trac
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import Any, Literal
 
 import logfire
 from litellm import Router
+from openinference.instrumentation import using_session
+from openinference.semconv.trace import SpanAttributes
+from opentelemetry import trace
 from pydantic import BaseModel, Field
 
 from core.ai_config import LITELLM_CONFIG
@@ -139,13 +143,21 @@ class AIGateway:
         What it does: Wraps litellm.acompletion with latency monitoring.
         FR-016: Model switching latency < 2s.
         """
+        # ── Trace Linking (SME Pro 2026) ──
+        # Extract session_id from current OTel span (set by FastAPI router)
+        current_span = trace.get_current_span()
+        session_id = getattr(current_span, "attributes", {}).get(SpanAttributes.SESSION_ID)
+
         start_time = time.perf_counter()
 
         try:
             logfire.info("AI Completion started: {model}", model=model)
-            response = await ai_router.acompletion(
-                model=model, messages=messages, stream=stream, **kwargs
-            )
+
+            # Link LiteLLM sub-spans to the conversation session
+            with using_session(session_id) if session_id else contextlib.nullcontext():
+                response = await ai_router.acompletion(
+                    model=model, messages=messages, stream=stream, **kwargs
+                )
 
             latency = time.perf_counter() - start_time
             logfire.info(
@@ -181,6 +193,9 @@ class AIGateway:
         Why this exists: Generates text embeddings for RAG and caching.
         What it does: Wraps litellm.aembedding with latency monitoring.
         """
+        current_span = trace.get_current_span()
+        session_id = getattr(current_span, "attributes", {}).get(SpanAttributes.SESSION_ID)
+
         start_time = time.perf_counter()
 
         # Ensure input is a list for consistent processing
@@ -189,7 +204,9 @@ class AIGateway:
 
         try:
             logfire.info("AI Embedding started: {model}", model=model)
-            response = await ai_router.aembedding(model=model, input=input_text, **kwargs)
+
+            with using_session(session_id) if session_id else contextlib.nullcontext():
+                response = await ai_router.aembedding(model=model, input=input_text, **kwargs)
 
             latency = time.perf_counter() - start_time
             logfire.info(
@@ -284,12 +301,16 @@ class AIGateway:
             {"role": "user", "content": query},
         ]
         try:
-            response = await ai_router.acompletion(
-                model="economy-chat",  # Same as generate_answer — no Ollama swap
-                messages=messages,
-                response_format=NormalizedQuery,
-                temperature=0,
-            )
+            current_span = trace.get_current_span()
+            session_id = getattr(current_span, "attributes", {}).get(SpanAttributes.SESSION_ID)
+
+            with using_session(session_id) if session_id else contextlib.nullcontext():
+                response = await ai_router.acompletion(
+                    model="economy-chat",  # Same as generate_answer — no Ollama swap
+                    messages=messages,
+                    response_format=NormalizedQuery,
+                    temperature=0,
+                )
             latency = time.perf_counter() - start_time
             logfire.info("normalize_query: {latency:.4f}s", latency=latency)
             content = response.choices[0].message.content

@@ -1,0 +1,2131 @@
+{
+  "total_cases": 20,
+  "tier1_pass_rate": 0.95,
+  "avg_keyword_score": 0.6958,
+  "avg_best_similarity": 0.5873,
+  "declined_count": 0,
+  "tier2_graded_count": 20,
+  "avg_human_grade": 3.65,
+  "details": [
+    {
+      "id": "sme_001",
+      "query": "What high-performance laptops do you have?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.6299,
+      "declined": false,
+      "answer_snippet": "\n\nDưới đây là các laptop cao cấp có khả năng xử lý hiệu suất cao, phù hợp cho gaming, sáng tạo nội dung hoặc làm việc chuyên nghiệp:\n\n1. **Dell XPS 15 Plus (2024)**  \n   - **GPU**: RTX 4060  \n   - **R",
+      "citations": [
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.5,
+      "tier1_pass": true,
+      "human_grade": 3
+    },
+    {
+      "id": "sme_002",
+      "query": "How much does the MacBook Pro cost?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.7416,
+      "declined": false,
+      "answer_snippet": "\n\nThe MacBook Pro 16 inch M3 Pro 18GB costs **54,990,000 VND**. This model is specifically listed with the price, featuring a Liquid Retina XDR 16-inch screen, Apple M3 Pro chip, 18GB unified memory, ",
+      "citations": [
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 1.0,
+      "tier1_pass": true,
+      "human_grade": 4
+    },
+    {
+      "id": "sme_003",
+      "query": "Can I get a discount if I buy 100 smartphones?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.521,
+      "declined": false,
+      "answer_snippet": "\n\nThe product context does not mention any discounts for purchasing 100 smartphones. The listed prices are for individual products (e.g., Xiaomi 14 Ultra, iPhone 15 Pro Max, Samsung Galaxy S24 Ultra, ",
+      "citations": [
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 1.0,
+      "tier1_pass": true,
+      "human_grade": 4
+    },
+    {
+      "id": "sme_004",
+      "query": "I received a broken iPhone, I want a refund.",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.5218,
+      "declined": false,
+      "answer_snippet": "\n\nBạn có thể yêu cầu hoàn tiền cho sản phẩm iPhone 15 Pro Max 512GB, nhưng cần xác minh tình trạng sản phẩm theo quy định của cửa hàng. Nếu sản phẩm vẫn trong thời gian bảo hành, bạn có thể liên hệ vớ",
+      "citations": [
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.3333,
+      "tier1_pass": true,
+      "human_grade": 4
+    },
+    {
+      "id": "sme_005",
+      "query": "Where is my laptop order #12345?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.4984,
+      "declined": false,
+      "answer_snippet": "\n\nKhông có thông tin nào trong danh sách sản phẩm được cung cấp về đơn hàng #12345. Hiện tại, chúng tôi không có dữ liệu liên quan đến đơn hàng này trong hệ thống. Bạn có thể kiểm tra lại thông tin đơ",
+      "citations": [
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.3333,
+      "tier1_pass": true,
+      "human_grade": 4
+    },
+    {
+      "id": "sme_006",
+      "query": "Do you ship gaming laptops to Vietnam?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.5258,
+      "declined": false,
+      "answer_snippet": "\n\nBased on the provided product context, the company does ship gaming laptops to Vietnam. The listed products (e.g., Lenovo ThinkPad X1 Carbon Gen 12, ASUS VivoBook Pro 15, Dell XPS 15 Plus, and NVIDI",
+      "citations": [
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 1.0,
+      "tier1_pass": true,
+      "human_grade": 3
+    },
+    {
+      "id": "sme_007",
+      "query": "What are the technical specs of the Dell XPS 15?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.6944,
+      "declined": false,
+      "answer_snippet": "\n\nThe Dell XPS 15 Plus (2024) RTX 4060 features the following technical specifications:  \n- **Display**: 15.6-inch InfinityEdge FHD+ screen.  \n- **Processor**: Intel Core Ultra 7.  \n- **Graphics**: NV",
+      "citations": [
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.6667,
+      "tier1_pass": true,
+      "human_grade": 5
+    },
+    {
+      "id": "sme_008",
+      "query": "How do I set up the wireless headphones I bought?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.4861,
+      "declined": false,
+      "answer_snippet": "\n\nĐể thiết lập tai nghe Sony WH-1000XM5 (màu sắc và thiết kế tương tự như sản phẩm được liệt kê) vào thiết bị của bạn, bạn có thể thực hiện các bước sau:\n\n1. **Charged the headphones**: Đảm bảo tai ng",
+      "citations": [
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.5,
+      "tier1_pass": true,
+      "human_grade": 3
+    },
+    {
+      "id": "sme_009",
+      "query": "Your smartphone price is too high compared to competitor X.",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.5822,
+      "declined": false,
+      "answer_snippet": "\n\nThe prices of the smartphones listed in the product context are as follows:  \n- **Xiaomi 14 Ultra 512GB**: 18,990,000 VND  \n- **iPhone 15 Pro Max 512GB**: 28,900,000 VND  \n- **Samsung Galaxy S24 Ult",
+      "citations": [
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.75,
+      "tier1_pass": true,
+      "human_grade": 5
+    },
+    {
+      "id": "sme_010",
+      "query": "Tell me about your warranty policy for laptops.",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.552,
+      "declined": false,
+      "answer_snippet": "\n\nThe provided product context does not include specific information about warranty policies for the laptops listed. While the products are detailed with specifications, features, prices, and technica",
+      "citations": [
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.6667,
+      "tier1_pass": true,
+      "human_grade": 5
+    },
+    {
+      "id": "vn_001",
+      "query": "Giá của laptop MacBook Pro cao cấp là bao nhiêu?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.7231,
+      "declined": false,
+      "answer_snippet": "\n\nGiá của laptop MacBook Pro cao cấp (MacBook Pro 16 inch M3 Pro 18GB) là **54,990,000 VND**. Đây là sản phẩm chuyên nghiệp với màn hình Liquid Retina XDR 16 inch, chip Apple M3 Pro, bộ nhớ 18GB, SSD ",
+      "citations": [
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 1.0,
+      "tier1_pass": true,
+      "human_grade": 5
+    },
+    {
+      "id": "vn_002",
+      "query": "iPhone 15 Pro Max có những tính năng gì?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.7172,
+      "declined": false,
+      "answer_snippet": "\n\niPhone 15 Pro Max 512GB là một thiết bị cao cấp với nhiều tính năng vượt trội, bao gồm:  \n- **Màn hình Super Retina XDR 6.7 inch** với tần số quét 120Hz ProMotion, mang lại trải nghiệm hiển thị mượt",
+      "citations": [
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 1.0,
+      "tier1_pass": true,
+      "human_grade": 3
+    },
+    {
+      "id": "vn_003",
+      "query": "Tôi muốn đặt mua 50 cái smartphone Samsung, có được giảm giá không?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.536,
+      "declined": false,
+      "answer_snippet": "\n\nKhông, không có khuyến mãi giảm giá nào được áp dụng cho 50 chiếc smartphone Samsung Galaxy S24 Ultra 256GB trong sản phẩm hiện tại. Giá bán từng chiếc là 24,990,000 VND, nên tổng giá cho 50 chiếc s",
+      "citations": [
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.6667,
+      "tier1_pass": true,
+      "human_grade": 4
+    },
+    {
+      "id": "vn_004",
+      "query": "Thời gian bảo hành sản phẩm laptop là bao lâu?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.5701,
+      "declined": false,
+      "answer_snippet": "\n\nThe warranty period for the listed laptop products is not specified in the provided product context. The available information only mentions features, specifications, and prices, but does not includ",
+      "citations": [
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.5,
+      "tier1_pass": true,
+      "human_grade": 4
+    },
+    {
+      "id": "vn_005",
+      "query": "Sony WH-1000XM5 headphones có sẵn hàng để giao ngay không?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.6394,
+      "declined": false,
+      "answer_snippet": "\n\nThe Sony WH-1000XM5 Wireless Headphones are listed in the product context with a price of 8,490,000 VND and detailed specifications, but **no information is provided about stock availability or whet",
+      "citations": [
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.3333,
+      "tier1_pass": true,
+      "human_grade": 3
+    },
+    {
+      "id": "vn_006",
+      "query": "So sánh iPad và Galaxy Tab, loại nào phù hợp cho công việc văn phòng?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.5219,
+      "declined": false,
+      "answer_snippet": "\n\nCả hai sản phẩm (iPad và Galaxy Tab S9 Ultra) đều phù hợp cho công việc văn phòng, nhưng có những khác biệt đáng chú ý dựa trên yêu cầu cụ thể của bạn:\n\n### **1. Galaxy Tab S9 Ultra (Tablet):**\n- **",
+      "citations": [
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 1.0,
+      "tier1_pass": true,
+      "human_grade": 2
+    },
+    {
+      "id": "vn_007",
+      "query": "Tôi đặt hàng laptop nhưng chưa nhận được, liên hệ bộ phận nào?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.5027,
+      "declined": false,
+      "answer_snippet": "\n\nThe provided product context does not include any information about customer service departments, order tracking, or contact details for follow-up on orders. Therefore, I cannot specify which depart",
+      "citations": [
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.0,
+      "tier1_pass": false,
+      "human_grade": 3
+    },
+    {
+      "id": "vn_008",
+      "query": "Apple Watch Ultra có hỗ trợ kết nối Bluetooth không?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.6115,
+      "declined": false,
+      "answer_snippet": "\n\nThe Apple Watch Ultra 2 (model [WATCH-APPLE-001]) is a high-end smartwatch with features like a Retina display, S9 SiP chip, Action button, and water resistance up to 100m. However, the provided pro",
+      "citations": [
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 0.6667,
+      "tier1_pass": true,
+      "human_grade": 3
+    },
+    {
+      "id": "vn_009",
+      "query": "Tôi muốn mua smartphone nhưng ngân sách chỉ có 5 triệu, có sản phẩm phù hợp không?",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.6278,
+      "declined": false,
+      "answer_snippet": "\n\nKhông có sản phẩm smartphone nào trong danh sách được liệt kê phù hợp với ngân sách 5 triệu VND. Tất cả các điện thoại thông minh trong danh sách đều có giá cao hơn 5 triệu VND, từ Xiaomi 14 Ultra (",
+      "citations": [
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca6da-45f4-7022-9a5a-9a9753d97b7d",
+          "chunk_id": "019ca6da-6402-7ed0-a56d-5432ca3ebe79",
+          "sku": "RAM-CORSAIR-001",
+          "name": "Corsair Vengeance DDR5 32GB (2x16GB) 5600MHz"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca5c2-3c41-7132-bb95-d98d70d00d75",
+          "chunk_id": "019ca5c2-6313-75b0-b0fe-f39f37749e58",
+          "sku": "LAPTOP-MACBOOK-001",
+          "name": "MacBook Pro 16 inch M3 Pro 18GB"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        },
+        {
+          "product_id": "019ca6da-93ba-72d1-8b3e-f6f8b1d5255d",
+          "chunk_id": "019ca6da-acfb-7f83-8916-5f96d060b389",
+          "sku": "GPU-RTX-001",
+          "name": "NVIDIA RTX 4070 Super Graphics Card"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 1.0,
+      "tier1_pass": true,
+      "human_grade": 4
+    },
+    {
+      "id": "vn_010",
+      "query": "Hãy cho tôi biết tất cả những sản phẩm điện tử mà công ty bạn đang kinh doanh, giá của từng loại cũng như các chính sách ưu đãi hiện tại.",
+      "query_category": "long",
+      "top_k_used": 15,
+      "best_similarity": 0.5428,
+      "declined": false,
+      "answer_snippet": "\n\nDưới đây là danh sách các sản phẩm điện tử mà công ty chúng tôi đang kinh doanh, cùng với giá cả và các chính sách ưu đãi hiện tại:\n\n---\n\n### **1. Laptop Lenovo ThinkPad X1 Carbon Gen 12**  \n- **Giá",
+      "citations": [
+        {
+          "product_id": "019ca5c4-f30b-7d52-b6f8-fd1a6287610c",
+          "chunk_id": "019ca5c5-126e-7842-bd2e-1fa7a2673d6d",
+          "sku": "LAPTOP-LENOVO-001",
+          "name": "Lenovo ThinkPad X1 Carbon Gen 12 Intel Core i7"
+        },
+        {
+          "product_id": "019ca5ab-b5f3-7ab1-bc12-fb9ae356668e",
+          "chunk_id": "019ca5ab-ce6d-7e03-adfc-b2669c28c0ea",
+          "sku": "PHONE-XM-001",
+          "name": "Xiaomi 14 Ultra 512GB"
+        },
+        {
+          "product_id": "019ca6d8-a1bb-7300-aa37-cfac8f8c0407",
+          "chunk_id": "019ca6d8-cb20-7a91-b336-3953ddc6aa7f",
+          "sku": "WATCH-APPLE-001",
+          "name": "Apple Watch Ultra 2 49mm Titanium"
+        },
+        {
+          "product_id": "019ca6d9-7cc9-72b0-bcd9-5ece376f31eb",
+          "chunk_id": "019ca6da-45c5-79d2-bbe2-b7bfd977bdd6",
+          "sku": "KEYBOARD-MECH-001",
+          "name": "Keychron K3 Pro Mechanical Keyboard RGB"
+        },
+        {
+          "product_id": "019ca6d9-633c-7543-ab71-a6e11e9d6173",
+          "chunk_id": "019ca6d9-7c9e-7c82-9abd-6a21b0e6042a",
+          "sku": "SSD-SAMSUNG-001",
+          "name": "Samsung 990 PRO 4TB NVMe SSD"
+        },
+        {
+          "product_id": "019ca6da-ad24-70c1-8a8f-5f48de713638",
+          "chunk_id": "019ca6da-c638-7c71-b713-8cdd780312fd",
+          "sku": "MOUSE-LOGI-001",
+          "name": "Logitech MX Master 3S Wireless Mouse"
+        },
+        {
+          "product_id": "019ca5ab-9bff-7083-814f-59b1d0e7f564",
+          "chunk_id": "019ca5ab-b5c7-7750-92eb-49c40338d5e8",
+          "sku": "PHONE-IP-001",
+          "name": "iPhone 15 Pro Max 512GB"
+        },
+        {
+          "product_id": "019ca5ab-7e37-7773-b8f2-88000cfb752e",
+          "chunk_id": "019ca5ab-9bdd-7012-84a1-f72806c2054b",
+          "sku": "PHONE-SM-001",
+          "name": "Samsung Galaxy S24 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca6da-7af4-7c02-a807-8eb2aa7b5c0f",
+          "chunk_id": "019ca6da-938e-71b0-b5ff-9f9d03a3977f",
+          "sku": "PSU-CORSAIR-001",
+          "name": "Corsair RM1000x 1000W Gold Modular PSU"
+        },
+        {
+          "product_id": "019ca5ab-32b6-77a0-acad-6abf9fd846ae",
+          "chunk_id": "019ca5ab-610d-73e3-99cf-c9e98ddb0743",
+          "sku": "LAPTOP-ASUS-001",
+          "name": "ASUS VivoBook Pro 15 (2024) OLED RTX 4050"
+        },
+        {
+          "product_id": "019ca6d9-3e23-7403-9240-75b7e51d1a67",
+          "chunk_id": "019ca6d9-6300-7ba0-8273-a1e8b53c3f3d",
+          "sku": "CHARGER-ANKER-001",
+          "name": "Anker 737 Power Bank 140W 55000mAh"
+        },
+        {
+          "product_id": "019ca6da-642e-7951-bea0-ac869462f9b0",
+          "chunk_id": "019ca6da-7acb-71e0-b783-41c946c11eda",
+          "sku": "HEADPHONE-SONY-001",
+          "name": "Sony WH-1000XM5 Wireless Headphones"
+        },
+        {
+          "product_id": "019ca6da-c665-78c1-9e6c-c3404e6fb5e8",
+          "chunk_id": "019ca6da-deec-78a3-97f8-6ddb5b141879",
+          "sku": "MONITOR-LG-001",
+          "name": "LG 32UP550 32-inch 4K Professional Monitor"
+        },
+        {
+          "product_id": "019ca6d7-6e12-7ed2-a944-8388a103070d",
+          "chunk_id": "019ca6d7-baa2-78e3-8fe9-876dfbfecfcf",
+          "sku": "TABLET-SM-001",
+          "name": "Samsung Galaxy Tab S9 Ultra 256GB"
+        },
+        {
+          "product_id": "019ca5ab-6136-7822-82b4-6c5bebd62eae",
+          "chunk_id": "019ca5ab-7e07-7b02-91dc-c6d2db5a64fa",
+          "sku": "LAPTOP-DELL-001",
+          "name": "Dell XPS 15 Plus (2024) RTX 4060"
+        }
+      ],
+      "chunks_before": 15,
+      "chunks_after": 15,
+      "tier1_keyword_score": 1.0,
+      "tier1_pass": true,
+      "human_grade": 2
+    }
+  ]
+}

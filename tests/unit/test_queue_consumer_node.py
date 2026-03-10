@@ -120,3 +120,110 @@ async def test_queue_consumer_modify_re_pause(initial_state, mock_config, mock_d
         assert result.goto == "hitl_guard_node"
         assert result.update["hitl_escalation_count"] == 1
         assert result.update["hitl_triggered"] is False  # Reset for hitl_guard to re-trigger
+
+
+# ---------------------------------------------------------------------------
+# Keyword heuristic tests (model-size-agnostic — no LLM call needed)
+# ---------------------------------------------------------------------------
+from core.agent.nodes.queue_consumer import _keyword_classify_batch  # noqa: E402
+
+
+def _make_row(text: str, msg_id: str = "msg-1"):
+    row = MagicMock()
+    row.message_id = msg_id
+    row.message_text = text
+    return row
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "tôi đổi ý rồi. lấy Xiaomi 14 ultra đi",
+        "thay sang Samsung Galaxy S24",
+        "đặt iPhone thay cho cái kia",
+        "lấy Lenovo thay đi nhé",
+        "I changed my mind, get the Dell instead",
+        "đổi qua MacBook Pro đi",
+        "muốn đổi sản phẩm khác",
+    ],
+)
+def test_keyword_heuristic_modify_order(text):
+    """Keyword heuristic must catch Vietnamese change-of-mind phrases as MODIFY_ORDER."""
+    result = _keyword_classify_batch("s1", [_make_row(text)])
+    assert result is not None, f"Should not fall back to LLM for: {text!r}"
+    assert result.has_modify is True
+    assert result.has_cancel is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "huỷ đơn hàng",
+        "không mua nữa",
+        "thôi không đặt nữa",
+        "cancel the order",
+        "bỏ đơn đi",
+    ],
+)
+def test_keyword_heuristic_cancel(text):
+    """Keyword heuristic must catch Vietnamese cancel phrases."""
+    result = _keyword_classify_batch("s1", [_make_row(text)])
+    assert result is not None
+    assert result.has_cancel is True
+    assert result.has_modify is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ok",
+        "đồng ý",
+        "được rồi",
+        "yes",
+        "xác nhận",
+    ],
+)
+def test_keyword_heuristic_confirm(text):
+    """Single-word confirmations should be caught by heuristic."""
+    result = _keyword_classify_batch("s1", [_make_row(text)])
+    assert result is not None
+    assert result.has_confirm is True
+
+
+def test_keyword_heuristic_ambiguous_returns_none():
+    """Ambiguous messages must return None → fall through to LLM."""
+    result = _keyword_classify_batch("s1", [_make_row("tôi muốn hỏi thêm về sản phẩm")])
+    assert result is None  # LLM should handle this
+
+
+def test_keyword_heuristic_cancel_takes_priority_over_modify():
+    """When batch has both CANCEL and MODIFY, has_cancel wins (highest priority)."""
+    rows = [
+        _make_row("huỷ đơn đi", "m1"),
+        _make_row("thay sang Xiaomi đi", "m2"),
+    ]
+    result = _keyword_classify_batch("s1", rows)
+    assert result is not None
+    assert result.has_cancel is True
+    assert result.has_modify is True  # Both flagged; caller checks cancel first
+
+
+@pytest.mark.asyncio
+async def test_sc5_vietnamese_change_of_mind_no_llm_call(initial_state, mock_config, mock_db):
+    """SC5 regression: 'đổi ý rồi. lấy Xiaomi 14 ultra đi' must route to hitl_guard_node
+    WITHOUT calling the LLM — keyword heuristic catches it deterministically."""
+    mock_msg = _make_row("tôi đổi ý rồi. lấy Xiaomi 14 ultra đi")
+    mock_result = MagicMock()
+    mock_result.scalars().all.return_value = [mock_msg]
+    mock_db.execute.return_value = mock_result
+
+    with patch("litellm.acompletion") as mock_llm:
+        result = await queue_consumer_node(initial_state, mock_config)
+
+        # Must route to re-pause
+        assert result.goto == "hitl_guard_node", "Change-of-mind must re-pause"
+        assert result.update["hitl_escalation_count"] == 1
+        # hitl_approved must be reset so hitl_guard_node re-evaluates (not skip to answer_node)
+        assert result.update["hitl_approved"] is False
+        # LLM must NOT have been called (keyword heuristic handles it)
+        mock_llm.assert_not_called()

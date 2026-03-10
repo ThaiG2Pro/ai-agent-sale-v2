@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     DB_NAME: str = "ai_agent"
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
+    # Pool sizing: tune for concurrent customer sessions.
+    # Dev default: small (5+10). Prod: set DB_POOL_SIZE=20, DB_MAX_OVERFLOW=40 via env.
+    DB_POOL_SIZE: int = Field(default=10, ge=1, le=100)
+    DB_MAX_OVERFLOW: int = Field(default=20, ge=0, le=200)
 
     @property
     def database_url(self) -> str:

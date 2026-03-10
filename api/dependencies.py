@@ -35,8 +35,14 @@ async def verify_admin_key(x_admin_key: str = Header(None)):
 async def get_agent_graph(request: Request) -> CompiledStateGraph:
     """
     Why this exists: Provides the compiled LangGraph with persistent checkpointer.
-    What it does: Returns graph built with checkpointer stored in app state.
+    What it does: Returns the graph cached at startup (compiled once, shared across all
+    concurrent sessions — safe because the compiled graph is stateless; all per-session
+    state lives in the PostgreSQL checkpointer keyed by thread_id=session_id).
     """
+    cached = getattr(request.app.state, "graph", None)
+    if cached is not None:
+        return cached
+    # Fallback for tests / non-lifespan startup paths
     checkpointer = getattr(request.app.state, "checkpointer", None)
     return build_graph(checkpointer=checkpointer)
 

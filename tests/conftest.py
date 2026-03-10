@@ -36,6 +36,17 @@ import sys
 # every Settings() instantiation (and therefore every engine URL) points at
 # the test database for the entire test session.
 os.environ["DB_NAME"] = "ai_agent_test"
+
+# ── Model configuration override for tests ──────────────────────────────────
+# Tests mock all litellm calls, so model names here don't matter for unit tests.
+# For integration tests against a real Ollama, set these env vars to swap models:
+#   CHAT_MODEL=ollama/llama3:8b pytest tests/integration/
+# This ensures the full flow (routing, classification, answer generation) is
+# validated end-to-end regardless of model tier — same code path, different model.
+# Production model switch: set CHAT_MODEL / LIGHT_CHAT_MODEL / POWERFUL_CHAT_MODEL
+# in the deployment .env; no code changes required.
+os.environ.setdefault("CHAT_MODEL", os.environ.get("CHAT_MODEL", "ollama/qwen3-1.7b"))
+os.environ.setdefault("LIGHT_CHAT_MODEL", os.environ.get("LIGHT_CHAT_MODEL", "ollama/qwen3:0.6b"))
 # ────────────────────────────────────────────────────────────────────────────
 
 import pytest
