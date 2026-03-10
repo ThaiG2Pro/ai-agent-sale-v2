@@ -87,6 +87,7 @@ class HITLService:
         )
         db.add(new_msg)
         await db.flush()
+        await db.commit()
 
     @staticmethod
     async def check_idempotency(idempotency_key: str, db: AsyncSession) -> str | None:
@@ -151,8 +152,11 @@ class HITLService:
         db.add(new_action)
 
         # 4. State updates (Pattern B)
+        # Use hitl_guard_node as the as_node — it's the actual interrupted node.
+        # hitl_review_node was a phantom lambda with no writers; LangGraph 1.0.8
+        # rejects it in aupdate_state's Pregel validation.
         if payload.state_edits:
-            await graph.aupdate_state(config, payload.state_edits, as_node="hitl_review_node")
+            await graph.aupdate_state(config, payload.state_edits, as_node="hitl_guard_node")
 
         # 5. Set status="resuming"
         await db.execute(
@@ -300,7 +304,7 @@ class HITLService:
                 **(payload.state_edits or {}),
                 "messages": [*messages[:insertion_idx], synthetic, *messages[insertion_idx:]],
             },
-            as_node="hitl_review_node",
+            as_node="hitl_guard_node",
         )
 
         return {"status": "edit_applied", "action_id": str(new_action.action_id)}
