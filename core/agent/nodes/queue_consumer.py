@@ -45,6 +45,14 @@ _CONFIRM_PATTERNS = re.compile(
     r"^(ok|oke|okay|được(\s*rồi)?|đồng\s*ý|cứ\s*đặt|yes|xác\s*nhận|chốt)[.!,\s]*$",
     re.IGNORECASE | re.UNICODE,
 )
+# ADD_ON: customer wants to add a new product alongside the existing order,
+# NOT replace it. "thêm X vào đơn" → CONFIRM (keep original) not MODIFY_ORDER.
+_ADD_ON_PATTERNS = re.compile(
+    r"thêm\s+\S.{2,}\s+(vào\s*đơn|luôn\s*nhé|vào\s*giỏ|cùng\s*đơn|thêm\s*vào)"
+    r"|cũng\s+(lấy|mua|đặt)\s+thêm"
+    r"|order\s+also\s+|add\s+.+\s+to\s+(the\s+)?order",
+    re.IGNORECASE | re.UNICODE,
+)
 
 
 def _keyword_classify_batch(
@@ -71,6 +79,11 @@ def _keyword_classify_batch(
             intent, conf = "CANCEL", 0.95
             has_cancel = True
             all_confirm = False
+        elif _ADD_ON_PATTERNS.search(text):
+            # "thêm X vào đơn" = add-on, NOT replace. Treat as CONFIRM so original
+            # order proceeds. The add-on request will surface in the next turn.
+            intent, conf = "CONFIRM", 0.85
+            logger.info("queue_consumer: ADD_ON detected (treated as CONFIRM): %r", text[:60])
         elif _MODIFY_PATTERNS.search(text):
             intent, conf = "MODIFY_ORDER", 0.92
             has_modify = True
@@ -229,14 +242,15 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
                             "while their order was under admin review.\n\n"
                             "OUTPUT one of: CONFIRM, CANCEL, MODIFY_ORDER, OTHER\n\n"
                             "Rules:\n"
-                            "- MODIFY_ORDER: customer wants to change product/quantity "
+                            "- MODIFY_ORDER: customer wants to REPLACE product/quantity "
                             "(e.g. 'đổi ý rồi, lấy X đi', 'thay sang X', 'đặt X thay', "
-                            "'lấy X thay vì Y', 'I changed my mind, get X instead').\n"
+                            "'lấy X thay vì Y', 'I changed my mind, get X', 'đổi sang X').\n"
                             "- CANCEL: customer wants to cancel "
                             "(e.g. 'huỷ đơn', 'không mua nữa', 'cancel').\n"
-                            "- CONFIRM: customer confirms existing order "
-                            "(e.g. 'ok', 'đồng ý', 'được rồi', 'yes').\n"
-                            "- OTHER: unrelated.\n\n"
+                            "- CONFIRM: customer confirms existing order OR wants to ADD an item "
+                            "(e.g. 'ok', 'đồng ý', 'được rồi', 'yes', "
+                            "'thêm X vào đơn luôn nhé' — ADD-ON is NOT a MODIFY).\n"
+                            "- OTHER: unrelated info query (e.g. 'màu gì?', 'bao giờ giao?').\n\n"
                             "If ANY message is MODIFY_ORDER set has_modify=true. "
                             "If ANY message is CANCEL set has_cancel=true (highest priority)."
                         ),

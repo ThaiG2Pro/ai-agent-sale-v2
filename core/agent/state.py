@@ -176,7 +176,6 @@ def make_initial_state(user_message: str, session_id: str) -> AgentState:
         "hitl_triggered": False,
         "hitl_reason": None,
         "hitl_pause_id": None,
-        "hitl_rejection_reason": None,
         "hitl_escalation_count": 0,
         "hitl_approved": False,
         "hitl_freshness_valid": False,

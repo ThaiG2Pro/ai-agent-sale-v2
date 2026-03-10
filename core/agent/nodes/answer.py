@@ -140,11 +140,19 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             "Nếu là lời chào: trả lời thân thiện và giới thiệu ngắn gọn về dịch vụ tư vấn."
         )
     else:
+        # P2 fix: surface rejection reason if admin rejected previous order
+        rejection_note = ""
+        if state.get("hitl_rejection_reason"):
+            rejection_note = (
+                f"\n[Lưu ý hệ thống]: Đơn hàng gần nhất của khách đã bị từ chối. "
+                f"Lý do: {state['hitl_rejection_reason']}. "
+                "Nếu khách hỏi về lý do từ chối, hãy giải thích rõ ràng và đề xuất hỗ trợ."
+            )
         system_prompt = (
             "Bạn là trợ lý bán hàng AI chuyên nghiệp. "
             "Trả lời bằng tiếng Việt, thân thiện và hữu ích. "
             "Chỉ dùng thông tin từ context được cung cấp. "
-            "Nếu không có thông tin phù hợp, nói rõ điều đó."
+            f"Nếu không có thông tin phù hợp, nói rõ điều đó.{rejection_note}"
         )
 
     if state.get("intent") == "SMALLTALK":
