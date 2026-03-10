@@ -8,8 +8,12 @@ from psycopg_pool import AsyncConnectionPool
 
 
 async def create_checkpointer(dsn: str) -> AsyncPostgresSaver:
+    # Step 1: Run setup() using a direct autocommit connection (required because
+    # CREATE INDEX CONCURRENTLY cannot run inside a transaction block).
+    async with AsyncPostgresSaver.from_conn_string(dsn) as setup_saver:
+        await setup_saver.setup()
+
+    # Step 2: Build the pool-based saver for all runtime operations.
     pool = AsyncConnectionPool(conninfo=dsn, max_size=10, open=False)
     await pool.open()
-    saver = AsyncPostgresSaver(pool, serde=JsonPlusSerializer(pickle_fallback=False))
-    await saver.setup()  # Creates 4 LangGraph tables if not exists
-    return saver
+    return AsyncPostgresSaver(pool, serde=JsonPlusSerializer(pickle_fallback=False))

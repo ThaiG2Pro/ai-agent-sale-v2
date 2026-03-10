@@ -91,48 +91,71 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
             )
 
         # Record pause in DB (T005, T009)
-        pause_id = uuid7()
+        # LangGraph re-runs this node from the start on resume (checkpoint is input state),
+        # so we must detect resume vs. fresh trigger via DB to avoid duplicate records.
+        # On resume, service.py sets status="resuming" before calling graph.ainvoke().
+        from sqlalchemy import select as sa_select
 
-        # Insert HITLMetadata
-        new_metadata = HITLMetadata(
-            pause_id=pause_id,
-            session_id=session_id,
-            pause_reason=reason,
-            status="paused",
-            escalation_count=escalation_count,
-            paused_at=datetime.now(UTC),
+        existing_stmt = (
+            sa_select(HITLMetadata)
+            .where(HITLMetadata.session_id == session_id)
+            .where(HITLMetadata.status.in_(["paused", "resuming"]))
+            .order_by(HITLMetadata.paused_at.desc())
+            .limit(1)
         )
-        db.add(new_metadata)
+        existing_result = await db.execute(existing_stmt)
+        existing_record = existing_result.scalar_one_or_none()
 
-        # Upsert InterruptedSession
-        stmt = (
-            insert(InterruptedSession)
-            .values(
+        if existing_record:
+            # Resume mode: reuse existing pause_id, skip DB inserts
+            pause_id = existing_record.pause_id
+        else:
+            # Fresh trigger: create new records
+            pause_id = uuid7()
+
+            new_metadata = HITLMetadata(
+                pause_id=pause_id,
                 session_id=session_id,
-                next_node="hitl_guard_node",
-                reason=reason,
+                pause_reason=reason,
+                status="paused",
                 escalation_count=escalation_count,
-                version=0,
-                timestamp=datetime.now(UTC),
+                paused_at=datetime.now(UTC),
             )
-            .on_conflict_do_update(
-                index_elements=["session_id"],
-                set_={
-                    "next_node": "hitl_guard_node",
-                    "reason": reason,
-                    "timestamp": datetime.now(UTC),
-                    "escalation_count": escalation_count,
-                },
+            db.add(new_metadata)
+
+            # Upsert InterruptedSession
+            stmt = (
+                insert(InterruptedSession)
+                .values(
+                    session_id=session_id,
+                    next_node="hitl_guard_node",
+                    reason=reason,
+                    escalation_count=escalation_count,
+                    version=0,
+                    timestamp=datetime.now(UTC),
+                )
+                .on_conflict_do_update(
+                    index_elements=["session_id"],
+                    set_={
+                        "next_node": "hitl_guard_node",
+                        "reason": reason,
+                        "timestamp": datetime.now(UTC),
+                        "escalation_count": escalation_count,
+                    },
+                )
             )
-        )
-        await db.execute(stmt)
-        await db.flush()  # Send to DB but don't commit yet (let graph handle tx?)
-        # LangGraph checkpointer handles its own transactions, but we use our own DB.
-        # We should commit our own metadata.
-        await db.commit()
+            await db.execute(stmt)
+            await db.flush()
+            await db.commit()
+
+        # For ORDER_PLACEMENT: order_info should already be in state (set by
+        # confidence_node before this node ran). Use it if present.
+        order_info = state.get("order_info")
 
         # Call interrupt() (FR-001)
-        # Execution pauses here. It returns the resume value when unpaused.
+        # Execution pauses here. LangGraph checkpoints state and suspends.
+        # ainvoke() returns the state snapshot at this point.
+        # The resume value (admin payload) is returned when graph is resumed.
         interrupt_result = interrupt(
             {
                 "pause_id": str(pause_id),
@@ -140,7 +163,7 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                 "session_id": session_id,
                 "state_snapshot": {
                     "intent": intent,
-                    "order_info": state.get("order_info"),
+                    "order_info": order_info,
                     "confidence_score": confidence_score,
                 },
             }
@@ -153,13 +176,14 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
             payload = ApprovalPayload.model_validate(interrupt_result)
 
             if payload.action == "approve":
-                # T027: Success path
+                # T027: Success path — include order_info so freshness validator can proceed
                 return Command(
                     goto="queue_consumer_node",
                     update={
                         "hitl_approved": True,
                         "hitl_triggered": False,
                         "hitl_pause_id": str(pause_id),
+                        "order_info": order_info,
                     },
                 )
             elif payload.action == "reject":

@@ -1,6 +1,6 @@
 """Unit tests for hitl_guard_node (T058, T059)."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langgraph.types import Command
@@ -11,7 +11,10 @@ from core.agent.state import HITLReasonEnum
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = AsyncMock()
+    # scalar_one_or_none is sync on SQLAlchemy result; return None = no existing record
+    db.execute.return_value.scalar_one_or_none = MagicMock(return_value=None)
+    return db
 
 
 @pytest.fixture

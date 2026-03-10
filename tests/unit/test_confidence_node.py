@@ -1,5 +1,7 @@
 """Unit tests for confidence node (T058-T060)."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from core.agent.nodes.confidence import _route_after_confidence, confidence_node
@@ -9,8 +11,16 @@ from core.agent.state import (
 from core.config import settings
 
 
+@pytest.fixture
+def mock_config():
+    """Minimal RunnableConfig with a mock DB that returns no product (non-ORDER tests)."""
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+    return {"configurable": {"thread_id": "test", "db": mock_db}}
+
+
 @pytest.mark.asyncio
-async def test_confidence_node_fused_score_with_reranker():
+async def test_confidence_node_fused_score_with_reranker(mock_config):
     """Test confidence_node fused score with reranker (T058).
 
     Given: similarity_score=0.8, rerank_score=0.9
@@ -22,7 +32,7 @@ async def test_confidence_node_fused_score_with_reranker():
     state["rerank_score"] = 0.9
     state["declined"] = False
 
-    result = await confidence_node(state)
+    result = await confidence_node(state, mock_config)
 
     # Verify fused score: (1-0.7)*0.8 + 0.7*0.9 = 0.87
     expected_score = (1 - settings.AGENT_ALPHA) * 0.8 + settings.AGENT_ALPHA * 0.9
@@ -31,7 +41,7 @@ async def test_confidence_node_fused_score_with_reranker():
 
 
 @pytest.mark.asyncio
-async def test_confidence_node_fused_score_no_reranker():
+async def test_confidence_node_fused_score_no_reranker(mock_config):
     """Test confidence_node without reranker (T059).
 
     Given: similarity_score=0.75, rerank_score=None
@@ -42,7 +52,7 @@ async def test_confidence_node_fused_score_no_reranker():
     state["rerank_score"] = None
     state["declined"] = False
 
-    result = await confidence_node(state)
+    result = await confidence_node(state, mock_config)
 
     # Without reranker, use similarity directly
     assert result["confidence_score"] == 0.75
@@ -50,7 +60,7 @@ async def test_confidence_node_fused_score_no_reranker():
 
 
 @pytest.mark.asyncio
-async def test_confidence_node_layer1_fast_path():
+async def test_confidence_node_layer1_fast_path(mock_config):
     """Test Layer 1 fast-path in confidence_node (T060).
 
     Given: declined=True (from retrieval node, Layer 1)
@@ -61,7 +71,7 @@ async def test_confidence_node_layer1_fast_path():
     state["rerank_score"] = 0.9
     state["declined"] = True  # Already declined at Layer 1
 
-    result = await confidence_node(state)
+    result = await confidence_node(state, mock_config)
 
     # Should skip fusion and return immediately
     assert result["declined"] is True
@@ -69,7 +79,7 @@ async def test_confidence_node_layer1_fast_path():
 
 
 @pytest.mark.asyncio
-async def test_confidence_node_layer2_threshold():
+async def test_confidence_node_layer2_threshold(mock_config):
     """Test Layer 2 threshold in confidence_node.
 
     Given: similarity=0.60, rerank=None, no previous decline
@@ -80,7 +90,7 @@ async def test_confidence_node_layer2_threshold():
     state["rerank_score"] = None
     state["declined"] = False
 
-    result = await confidence_node(state)
+    result = await confidence_node(state, mock_config)
 
     assert result["confidence_score"] == 0.60
     assert result["declined"] is True  # Below AGENT_CONFIDENCE_THRESHOLD
@@ -152,28 +162,28 @@ def test_route_after_confidence_info_query_high_confidence():
 
 
 @pytest.mark.asyncio
-async def test_confidence_node_layer2_guard_fires():
+async def test_confidence_node_layer2_guard_fires(mock_config):
     """T073: Layer 2 guard fires for similarity=0.55 (below 0.70 threshold)."""
     state = make_initial_state("Test query", "session-009")
     state["similarity_score"] = 0.55
     state["rerank_score"] = None
     state["declined"] = False
 
-    result = await confidence_node(state)
+    result = await confidence_node(state, mock_config)
 
     assert result["declined"] is True
     assert abs(result["confidence_score"] - 0.55) < 0.01
 
 
 @pytest.mark.asyncio
-async def test_confidence_node_accepted():
+async def test_confidence_node_accepted(mock_config):
     """T074: similarity=0.85 → accepted (above 0.70 threshold)."""
     state = make_initial_state("Test query", "session-010")
     state["similarity_score"] = 0.85
     state["rerank_score"] = None
     state["declined"] = False
 
-    result = await confidence_node(state)
+    result = await confidence_node(state, mock_config)
 
     assert result["declined"] is False
     assert abs(result["confidence_score"] - 0.85) < 0.01

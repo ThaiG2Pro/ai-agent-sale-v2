@@ -8,6 +8,7 @@ What it does:
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Annotated, Any
 
@@ -22,6 +23,7 @@ from core.agent.state import make_initial_state
 from services.database import get_db
 
 router = APIRouter(prefix="/agent", tags=["agent"])
+logger = logging.getLogger(__name__)
 
 
 # ── Pydantic schemas ─────────────────────────────────────────────────────────
@@ -69,6 +71,14 @@ class AgentQueryResponse(BaseModel):
     execution_path: str = Field(
         ...,
         description="Which nodes were executed (router→escalation→answer, etc.)",
+    )
+    hitl_paused: bool = Field(
+        default=False,
+        description="True when graph is paused awaiting admin review (HITL interrupt)",
+    )
+    hitl_pause_id: str | None = Field(
+        default=None,
+        description="Pause ID for admin to use in POST /hitl/review",
     )
 
 
@@ -135,11 +145,43 @@ async def post_agent_query(
         if final_state.get("citations"):
             citations = [{"name": c.name, "sku": c.sku} for c in final_state.get("citations", [])]
 
+        # Detect HITL pause: when interrupt() fires, aget_state().next is non-empty
+        # containing the interrupted node name. This is the stable LangGraph V1+ API.
+        snapshot = await graph.aget_state(config)
+        is_hitl_paused = bool(snapshot.next)
+        pause_id = final_state.get("hitl_pause_id")
+
+        # If paused and pause_id not in state yet (initial trigger, not resume),
+        # extract it from interrupt metadata stored in the snapshot tasks.
+        if is_hitl_paused and not pause_id:
+            for task in snapshot.tasks or []:
+                for intr in getattr(task, "interrupts", None) or []:
+                    iv = getattr(intr, "value", None)
+                    if isinstance(iv, dict) and "pause_id" in iv:
+                        pause_id = iv["pause_id"]
+                        break
+                if pause_id:
+                    break
+
+        logger.debug(
+            "agent_query result: response=%r, is_hitl_paused=%s",
+            final_state.get("response"),
+            is_hitl_paused,
+        )
+
+        if is_hitl_paused:
+            answer = (
+                "Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên. "
+                "Chúng tôi sẽ phản hồi sớm nhất có thể. Cảm ơn bạn đã kiên nhẫn!"
+            )
+        else:
+            answer = final_state.get("response") or ""
+
         # Build response
         return AgentQueryResponse(
             session_id=request.session_id,
             message=request.message,
-            answer=final_state.get("response", ""),
+            answer=answer,
             intent=IntentInfo(
                 primary_intent=final_state.get("intent", "UNKNOWN"),
                 confidence=final_state.get("intent_confidence", 0.0),
@@ -156,6 +198,8 @@ async def post_agent_query(
             citations=citations,
             elapsed_ms=elapsed_ms,
             execution_path=final_state.get("execution_path", "unknown"),
+            hitl_paused=is_hitl_paused,
+            hitl_pause_id=str(pause_id) if pause_id else None,
         )
 
     except Exception as e:

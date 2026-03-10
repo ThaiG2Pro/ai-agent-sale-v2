@@ -9,8 +9,17 @@ applies thresholds, and routes to escalation_node or answer_node.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
+from sqlalchemy import select
+
 from core.agent.state import AgentState  # noqa: TC001 (required for LangGraph type resolution)
 from core.config import settings
+from models.schema import Product
+
+if TYPE_CHECKING:
+    from langchain_core.runnables import RunnableConfig
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 # ──────────────────────────────────────────────────────────────────────────
 # CONFIDENCE NODE LOGIC (FR-007 + FR-010 interaction)
@@ -27,7 +36,7 @@ from core.config import settings
 # ──────────────────────────────────────────────────────────────────────────
 
 
-async def confidence_node(state: AgentState) -> dict:
+async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     """Compute fused confidence score and apply Layer 2 guard (T047).
 
     Three-path logic:
@@ -36,11 +45,16 @@ async def confidence_node(state: AgentState) -> dict:
        let routing logic escalate
     3. Normal: Compute fused score, apply 0.70 threshold
 
+    For ORDER_PLACEMENT: also extracts order_info from top citation so it is
+    available in state BEFORE hitl_guard_node calls interrupt() (LangGraph
+    checkpoints state after a node completes, not mid-node).
+
     Args:
         state: Current agent state
+        config: RunnableConfig (provides DB session)
 
     Returns:
-        State update dict with confidence_score, declined flag
+        State update dict with confidence_score, declined flag, and optionally order_info
     """
     similarity = state.get("similarity_score", 0.0)
     rerank = state.get("rerank_score", None)
@@ -76,10 +90,36 @@ async def confidence_node(state: AgentState) -> dict:
     if intent in _borderline_answer_intents and is_declined:
         is_declined = False  # escalation_node decides model, answer_node generates
 
-    return {
+    result: dict = {
         "confidence_score": fused,
         "declined": is_declined,
     }
+
+    # For ORDER_PLACEMENT: extract order_info from the top citation so it lands
+    # in the LangGraph checkpoint BEFORE hitl_guard_node calls interrupt().
+    # (interrupt() checkpoints state as-received, not mid-node updates)
+    if intent == "ORDER_PLACEMENT" and not state.get("order_info"):
+        citations = state.get("citations", [])
+        if citations:
+            db = cast("AsyncSession", config["configurable"].get("db"))
+            top = citations[0]
+            product_id = top.product_id if hasattr(top, "product_id") else top.get("product_id")
+            sku = top.sku if hasattr(top, "sku") else top.get("sku", "")
+            name = top.name if hasattr(top, "name") else top.get("name", "")
+            stmt = select(Product).where(Product.id == product_id)
+            product_row = (await db.execute(stmt)).scalar_one_or_none()
+            price = float(product_row.price) if product_row else 0.0
+            result["order_info"] = {
+                "product_id": str(product_id),
+                "sku": sku,
+                "name": name,
+                "price": price,
+                "approved_price": price,
+                "quantity": 1,
+                "status": "pending",
+            }
+
+    return result
 
 
 def _route_after_confidence(state: AgentState) -> str:

@@ -76,9 +76,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown logic
-    # Close checkpointer pool (psycopg3)
+    # Close checkpointer connection/pool (psycopg3)
     if hasattr(app.state, "checkpointer"):
-        await app.state.checkpointer.pool.close()
+        conn_or_pool = getattr(app.state.checkpointer, "conn", None)
+        if conn_or_pool is not None and hasattr(conn_or_pool, "close"):
+            await conn_or_pool.close()
 
     await engine.dispose()
     logfire.info("Application shutdown complete.")
