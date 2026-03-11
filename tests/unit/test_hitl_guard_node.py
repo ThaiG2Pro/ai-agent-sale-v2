@@ -70,9 +70,20 @@ async def test_hitl_guard_triggers_on_low_confidence(initial_state, mock_config,
 
 @pytest.mark.asyncio
 async def test_hitl_guard_triggers_on_order_placement(initial_state, mock_config, mock_db):
-    """Test that interrupt is called for ORDER_PLACEMENT regardless of confidence."""
+    """Test that interrupt is called for ORDER_PLACEMENT when order_info is resolved."""
     initial_state["intent"] = "ORDER_PLACEMENT"
     initial_state["confidence_score"] = 0.9
+    # order_info must be set (product found by confidence_node); without it the guard
+    # routes to answer_node with "product not found" instead of triggering HITL.
+    initial_state["order_info"] = {
+        "product_id": "test-product-id",
+        "sku": "TEST-001",
+        "name": "Test Product",
+        "price": 10000000.0,
+        "approved_price": 10000000.0,
+        "quantity": 1,
+        "status": "pending",
+    }
 
     with patch(
         "core.agent.nodes.hitl_guard.interrupt",
@@ -81,6 +92,21 @@ async def test_hitl_guard_triggers_on_order_placement(initial_state, mock_config
         await hitl_guard_node(initial_state, mock_config)
         mock_interrupt.assert_called_once()
         assert mock_interrupt.call_args[0][0]["reason"] == HITLReasonEnum.ORDER_APPROVAL
+
+
+@pytest.mark.asyncio
+async def test_hitl_guard_order_placement_no_product_found(initial_state, mock_config):
+    """Test that ORDER_PLACEMENT without order_info routes to answer_node (product not found)."""
+    initial_state["intent"] = "ORDER_PLACEMENT"
+    initial_state["confidence_score"] = 0.9
+    # order_info is NOT set — product not found in catalog
+
+    with patch("core.agent.nodes.hitl_guard.interrupt") as mock_interrupt:
+        result = await hitl_guard_node(initial_state, mock_config)
+
+        # interrupt must NOT be called — no point pausing human if product unknown
+        mock_interrupt.assert_not_called()
+        assert result.goto == "answer_node"
 
 
 @pytest.mark.asyncio

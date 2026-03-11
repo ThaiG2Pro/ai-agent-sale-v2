@@ -54,6 +54,21 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
     # Confidence Check (T025)
     # Trigger if explicit ORDER_PLACEMENT or low confidence for other intents
     if intent == "ORDER_PLACEMENT":
+        # Guard: only trigger HITL if order_info was successfully resolved by
+        # confidence_node (product found in catalog). If order_info is None
+        # the product was not found — surface a helpful response instead.
+        if not state.get("order_info"):
+            return Command(
+                goto="answer_node",
+                update={
+                    "response": (
+                        "Xin lỗi, tôi không tìm thấy sản phẩm bạn đề cập "
+                        "trong danh mục của chúng tôi. "
+                        "Bạn có thể cho tôi biết tên chính xác hơn "
+                        "hoặc xem danh sách sản phẩm hiện có không?"
+                    )
+                },
+            )
         trigger_hitl = True
         reason = HITLReasonEnum.ORDER_APPROVAL
     elif confidence_score < settings.AGENT_CONFIDENCE_THRESHOLD:

@@ -140,13 +140,35 @@ async def _resolve_new_product_from_modify(
             return None
 
         top = result.citations[0]
-        # Build order_info dict from the resolved product
+        # Fetch actual product from DB to get correct price and product_id.
+        # This ensures state_freshness_validator has all required fields.
+        from sqlalchemy import select as sa_select
+
+        from models.schema import Product
+
         existing = state.get("order_info") or {}
+        if isinstance(top, dict):
+            product_id = top.get("product_id")
+            sku = top.get("sku", "")
+            name = top.get("name", "")
+        else:
+            product_id = getattr(top, "product_id", None)
+            sku = getattr(top, "sku", "")
+            name = getattr(top, "name", "")
+        price = None
+        if product_id:
+            product_row = (
+                await db.execute(sa_select(Product).where(Product.id == product_id))
+            ).scalar_one_or_none()
+            price = float(product_row.price) if product_row else None
         return {
-            "sku": top["sku"],
-            "name": top["name"],
-            "price": existing.get("price"),  # keep old price until confidence resolves
+            "product_id": str(product_id) if product_id else None,
+            "sku": sku,
+            "name": name,
+            "price": price or existing.get("price"),
+            "approved_price": price or existing.get("approved_price"),
             "quantity": existing.get("quantity", 1),
+            "status": "pending",
         }
     except Exception as exc:
         logger.warning("SC08: _resolve_new_product_from_modify failed: %s", exc)

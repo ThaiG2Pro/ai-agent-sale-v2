@@ -71,18 +71,28 @@ def _get_next_node(classification: IntentClassification) -> str:
     """Routing map from intent to next node (T045).
 
     Routing logic (FR-007):
-    - ANY intent is COMPLAINT or NEGOTIATION → escalation_node (intent-first escalation)
+    - ORDER_PLACEMENT → retrieval_node (ALWAYS; HITL is the safety net for orders,
+      secondary COMPLAINT/NEGOTIATION on order messages are often small-model artifacts
+      and must not short-circuit the retrieval → confidence → HITL flow)
+    - Primary intent is COMPLAINT or NEGOTIATION → escalation_node (premium model)
+    - Secondary intent COMPLAINT/NEGOTIATION (non-ORDER) → escalation_node
     - SMALLTALK primary intent → answer_node (no retrieval needed, save cost)
-    - ORDER_PLACEMENT → retrieval_node (need context for the order)
     - INFO_QUERY, PRICING, COMPARISON, AVAILABILITY → retrieval_node (need context)
     - Unknown → retrieval_node (safe fallback)
     """
-    # Check primary AND secondary intents per FR-007
+    # ORDER_PLACEMENT MUST always go through retrieval → confidence → HITL.
+    # HITL is its safety net. Secondary COMPLAINT/NEGOTIATION on an order message
+    # are often LLM hallucinations with a small model; routing to escalation_node
+    # would bypass retrieval entirely and produce no order_info.
+    if classification.primary_intent == IntentEnum.ORDER_PLACEMENT:
+        return "retrieval_node"
+
+    # For all other intents: escalate if primary OR secondary is COMPLAINT/NEGOTIATION.
     if classification.has_escalation_intent():
         return "escalation_node"
     if classification.primary_intent == IntentEnum.SMALLTALK:
         return "answer_node"
-    # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY, ORDER_PLACEMENT, unknown
+    # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY, unknown
     return "retrieval_node"
 
 
