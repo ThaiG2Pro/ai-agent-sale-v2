@@ -78,18 +78,55 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
         # Spec says "within a single DB transaction".
         await db.flush()
 
-        # 3. Compose confirmation message
+        # 3. Compose confirmation message (SC5: append pending INFO answers if any)
         confirmation_msg = (
             f"Great news! Your order for {order_info.get('name', 'the product')} "
             f"(Quantity: {quantity}) has been successfully placed. "
             f"Order Reference: {session_id}"
         )
 
+        # SC5-fix: if customer asked INFO questions while waiting, answer them now.
+        pending_questions = state.get("pending_info_questions")
+        if pending_questions:
+            import litellm
+
+            from core.config import settings
+
+            try:
+                citations = state.get("citations") or []
+                context = "\n".join(
+                    c.get("name", "") + ": " + c.get("description", "")
+                    for c in citations
+                    if isinstance(c, dict)
+                )
+                qa_resp = await litellm.acompletion(
+                    model=settings.LIGHT_CHAT_MODEL,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a helpful sales assistant. "
+                                "The customer just had their order confirmed. "
+                                "They also asked some questions while waiting. "
+                                "Answer them briefly and naturally in Vietnamese. "
+                                f"Product context: {context or order_info.get('name', '')}"
+                            ),
+                        },
+                        {"role": "user", "content": pending_questions},
+                    ],
+                )
+                qa_answer = qa_resp.choices[0].message.content or ""
+                confirmation_msg += f"\n\nNgoài ra, trả lời câu hỏi của bạn: {qa_answer.strip()}"
+                logger.info("SC5: appended INFO answer to order confirmation")
+            except Exception as qa_exc:
+                logger.warning("SC5: failed to fetch INFO answer: %s", qa_exc)
+
         return Command(
             goto="answer_node",
             update={
                 "response": confirmation_msg,
                 "order_info": {**order_info, "status": "confirmed"},
+                "pending_info_questions": None,
             },
         )
 

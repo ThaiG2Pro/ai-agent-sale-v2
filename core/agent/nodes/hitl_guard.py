@@ -220,6 +220,21 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                         k: v for k, v in payload.state_edits.items() if k in _VALID_STATE_KEYS
                     }
 
+                # SC3-fix: merge admin approved_price override into existing order_info.
+                # This allows admin to grant discounts at approval time without replacing
+                # the full order_info (which would lose product_id, sku, quantity, etc.).
+                final_order_info = order_info or {}
+                if payload.approved_price is not None and final_order_info:
+                    final_order_info = {
+                        **final_order_info,
+                        "approved_price": payload.approved_price,
+                    }
+                    logger.info(
+                        "SC3: admin approved_price override applied: %.0f → %.0f",
+                        (order_info or {}).get("approved_price", 0),
+                        payload.approved_price,
+                    )
+
                 # T027: Success path — include order_info so freshness validator can proceed
                 return Command(
                     goto="queue_consumer_node",
@@ -227,7 +242,7 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                         "hitl_approved": True,
                         "hitl_triggered": False,
                         "hitl_pause_id": str(pause_id),
-                        "order_info": order_info,
+                        "order_info": final_order_info,
                         **safe_edits,
                     },
                 )

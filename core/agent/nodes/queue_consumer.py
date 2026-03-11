@@ -53,6 +53,29 @@ _ADD_ON_PATTERNS = re.compile(
     r"|order\s+also\s+|add\s+.+\s+to\s+(the\s+)?order",
     re.IGNORECASE | re.UNICODE,
 )
+# SC3-FIX: Quantity change — customer changes count on the SAME product.
+# Must come AFTER _MODIFY_PATTERNS check (MODIFY takes higher priority when product also changes).
+_QTY_CHANGE_PATTERNS = re.compile(
+    r"lấy\s+(?:cho\s+tôi\s+)?(\d+)\s*(cái|chiếc|máy)"
+    r"|(\d+)\s*(cái|chiếc|máy)\s*(nhé|đi|thôi)"
+    r"|số\s*lượng\s*(\d+)"
+    r"|mua\s+(\d+)\s*(cái|chiếc)"
+    r"|đặt\s+(?:cho\s+tôi\s+)?(\d+)\s*(cái|chiếc|máy)",
+    re.IGNORECASE | re.UNICODE,
+)
+# SC5-FIX: INFO_QUERY guard — messages that are clearly QUESTIONS about the product,
+# not intent-to-replace or cancel. Must be checked BEFORE LLM to prevent small-model
+# misclassification (e.g. "bao nhiêu Watt" → MODIFY_ORDER picking "Anker 140W").
+_INFO_QUERY_PATTERNS = re.compile(
+    r"\?$"  # ends with question mark
+    r"|bao\s*nhiêu"  # "bao nhiêu Watt/tiền/..."
+    r"|có\s*(không|được|kèm|tặng|hỗ\s*trợ)"  # "có ... không/được"
+    r"|(nhỉ|hả|ha|không\s*nhỉ)\s*\??$"  # ends with discourse particle
+    r"|dùng\s*(được|sạc|pin|ram|ổ|màn)"  # technical questions
+    r"|giao\s*(hàng|trong)\s*(bao\s*lâu|mấy\s*ngày)"  # delivery questions
+    r"|bảo\s*hành",  # warranty questions
+    re.IGNORECASE | re.UNICODE,
+)
 
 
 def _keyword_classify_batch(
@@ -62,15 +85,24 @@ def _keyword_classify_batch(
     """Fast deterministic pre-classifier. Returns None when ambiguous (→ fall back to LLM).
 
     Strategy:
-    - If ANY message matches MODIFY_ORDER keywords → has_modify=True (skip LLM).
+    - If ANY message matches MODIFY_ORDER or QTY_CHANGE keywords → has_modify=True (skip LLM).
     - If ANY message matches CANCEL keywords → has_cancel=True (skip LLM).
     - If ALL messages match CONFIRM keywords → has_confirm=True (skip LLM).
+    - If ALL messages match INFO_QUERY keywords → has_info=True (skip LLM, answer questions).
     - Otherwise return None → caller uses LLM.
+
+    Priority order per message:
+    CANCEL > ADD_ON > MODIFY > QTY_CHANGE > INFO_QUERY > CONFIRM > OTHER.
+    INFO_QUERY guard (SC5-fix): question-style messages are forced to OTHER/INFO before the LLM
+    can misclassify them as MODIFY_ORDER (e.g. "bao nhiêu Watt" → picks an unrelated product).
     """
     results: list[QueueIntentResult] = []
     has_cancel = False
     has_modify = False
+    has_qty_change = False
+    has_product_change = False  # SC3: tracks if a product NAME change was requested (not just qty)
     all_confirm = True
+    all_info = True
 
     for row in rows:
         text = row.message_text
@@ -79,35 +111,59 @@ def _keyword_classify_batch(
             intent, conf = "CANCEL", 0.95
             has_cancel = True
             all_confirm = False
+            all_info = False
         elif _ADD_ON_PATTERNS.search(text):
-            # "thêm X vào đơn" = add-on, NOT replace. Treat as CONFIRM so original
-            # order proceeds. The add-on request will surface in the next turn.
             intent, conf = "CONFIRM", 0.85
+            all_info = False
             logger.info("queue_consumer: ADD_ON detected (treated as CONFIRM): %r", text[:60])
         elif _MODIFY_PATTERNS.search(text):
             intent, conf = "MODIFY_ORDER", 0.92
             has_modify = True
+            has_product_change = True
             all_confirm = False
+            all_info = False
+        elif _QTY_CHANGE_PATTERNS.search(text):
+            # SC3-fix: quantity change on the SAME product → MODIFY_ORDER (re-HITL for review).
+            intent, conf = "MODIFY_ORDER", 0.88
+            has_qty_change = True
+            has_modify = True
+            all_confirm = False
+            all_info = False
+            logger.info("queue_consumer: QTY_CHANGE detected as MODIFY_ORDER: %r", text[:60])
+        elif _INFO_QUERY_PATTERNS.search(text):
+            # SC5-fix: question about product specs/policy → classify as OTHER so the
+            # order flow is not interrupted. Answers will be fetched after order confirmation.
+            intent, conf = "OTHER", 0.85
+            all_confirm = False
+            logger.info("queue_consumer: INFO_QUERY detected (forced OTHER): %r", text[:60])
         elif _CONFIRM_PATTERNS.match(text.strip()):
             intent, conf = "CONFIRM", 0.90
+            all_info = False
         else:
             intent, conf = "OTHER", 0.50
             all_confirm = False
+            all_info = False
         results.append(
             QueueIntentResult(message_id=msg_id, text=text, intent=intent, confidence=conf)
         )
 
     # Only skip LLM when we have strong keyword signal
-    if has_cancel or has_modify or (all_confirm and results):
+    if has_cancel or has_modify or (all_confirm and results) or (all_info and results):
         batch = QueuedMessageBatch(session_id=session_id, messages=results)
         batch.has_cancel = has_cancel
         batch.has_modify = has_modify
+        batch.has_qty_change = has_qty_change
+        batch.has_product_change = has_product_change
         batch.has_confirm = all_confirm and not has_cancel and not has_modify
+        batch.has_info = all_info and not has_cancel and not has_modify
         logger.info(
-            "queue_consumer keyword classify: cancel=%s modify=%s confirm=%s",
+            "queue_consumer keyword classify: "
+            "cancel=%s modify=%s confirm=%s info=%s qty_change=%s",
             has_cancel,
             has_modify,
             batch.has_confirm,
+            batch.has_info,
+            has_qty_change,
         )
         return batch
 
@@ -173,6 +229,26 @@ async def _resolve_new_product_from_modify(
     except Exception as exc:
         logger.warning("SC08: _resolve_new_product_from_modify failed: %s", exc)
         return None
+
+
+def _extract_quantity(queued_rows: list) -> int | None:
+    """SC3-fix: extract the first numeric quantity from queued messages.
+
+    Matches patterns like "lấy 2 cái", "lấy cho tôi 2 cái", "2 chiếc nhé", "mua 3 cái".
+    Returns the integer quantity or None if not found.
+    """
+    qty_re = re.compile(
+        r"(?:lấy|mua|đặt)(?:\s+cho\s+tôi)?\s+(\d+)\s*(?:cái|chiếc|máy)"
+        r"|(\d+)\s*(?:cái|chiếc|máy)\s*(?:nhé|đi|thôi)",
+        re.IGNORECASE | re.UNICODE,
+    )
+    for row in queued_rows:
+        m = qty_re.search(row.message_text)
+        if m:
+            qty_str = m.group(1) or m.group(2)
+            if qty_str and qty_str.isdigit():
+                return int(qty_str)
+    return None
 
 
 async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Command:
@@ -298,10 +374,6 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
         .where(QueuedMessage.message_id.in_(queued_ids))
         .values(processed=True)
     )
-    # We rely on the caller/config to commit the transaction if necessary,
-    # but here we are in a node, usually the graph handles it.
-    # However, T030 says "Begin atomic SQLAlchemy transaction here".
-    # Since nodes are async, we might need to flush.
     await db.flush()
 
     update_payload = {"messages": messages}
@@ -313,9 +385,43 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
     # T033: MODIFY_ORDER re-pause
     if batch_result.has_modify:
         new_escalation_count = state.get("hitl_escalation_count", 0) + 1
+        current_order = state.get("order_info") or {}
 
-        # SC08 fix: extract new product from queued messages and update order_info
-        modify_order_info = await _resolve_new_product_from_modify(queued_rows, db, state)
+        # SC3-fix: pure qty change (no product name replacement) → skip RAG entirely.
+        # Only run RAG when a product NAME change was detected (_MODIFY_PATTERNS matched).
+        if batch_result.has_qty_change and not batch_result.has_product_change:
+            new_qty = _extract_quantity(queued_rows)
+            if new_qty and current_order.get("product_id"):
+                modify_order_info = {**current_order, "quantity": new_qty}
+                logger.info(
+                    "SC3: pure QTY_CHANGE (no product change), new_qty=%s for sku=%s",
+                    new_qty,
+                    current_order.get("sku"),
+                )
+            else:
+                modify_order_info = current_order or None
+        else:
+            # Product name change requested → run RAG to find new product
+            modify_order_info = await _resolve_new_product_from_modify(queued_rows, db, state)
+
+            # SC3-fix: if modify_order_info resolves to the SAME product as current order_info,
+            # treat as a quantity change. Extract the new quantity from the message text.
+            if modify_order_info and modify_order_info.get("sku") == current_order.get("sku"):
+                new_qty = _extract_quantity(queued_rows)
+                modify_order_info = {
+                    **current_order,
+                    "quantity": new_qty or current_order.get("quantity", 1),
+                }
+                logger.info(
+                    "SC3: RAG returned same product, treating as QTY_CHANGE, new_qty=%s",
+                    new_qty,
+                )
+            elif not modify_order_info:
+                # RAG couldn't resolve — fallback to qty change if detected
+                new_qty = _extract_quantity(queued_rows)
+                if new_qty and current_order.get("product_id"):
+                    modify_order_info = {**current_order, "quantity": new_qty}
+                    logger.info("SC3: RAG miss, QTY_CHANGE fallback, new_qty=%s", new_qty)
 
         update_payload.update(
             {
@@ -328,9 +434,27 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
         )
         if modify_order_info:
             update_payload["order_info"] = modify_order_info
-            logger.info("SC08: MODIFY resolved new product: %s", modify_order_info.get("sku"))
+            logger.info(
+                "SC08/SC3: MODIFY resolved: sku=%s qty=%s",
+                modify_order_info.get("sku"),
+                modify_order_info.get("quantity"),
+            )
 
         return Command(goto="hitl_guard_node", update=update_payload)
+
+    # SC5-fix: INFO_QUERY fallthrough — questions about product specs/policy.
+    # Collect all question texts and store for answer_node to append to the order confirmation.
+    info_questions = [
+        row.message_text for row in queued_rows if _INFO_QUERY_PATTERNS.search(row.message_text)
+    ]
+    if info_questions:
+        combined = " | ".join(info_questions)
+        update_payload["pending_info_questions"] = combined
+        logger.info(
+            "SC5: %d INFO question(s) stored for answer_node: %r",
+            len(info_questions),
+            combined[:80],
+        )
 
     # T034: Fallthrough to freshness check
     return Command(goto="state_freshness_validator_node", update=update_payload)

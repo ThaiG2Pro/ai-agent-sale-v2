@@ -130,6 +130,8 @@ class AgentState(TypedDict):
     hitl_freshness_valid: bool
     estimated_token_cost: int
     order_info: dict | None
+    # SC5: INFO questions queued during HITL pause; answered alongside order confirmation
+    pending_info_questions: str | None
     # Retrieval pipeline fields (set by retrieval_node, used by answer_node)
     cached_answer: str | None  # Pre-generated answer from L1/L2 cache hit (skip LLM)
     canonical_query: str | None  # Normalized query text for cache write
@@ -181,6 +183,7 @@ def make_initial_state(user_message: str, session_id: str) -> AgentState:
         "hitl_freshness_valid": False,
         "estimated_token_cost": 0,
         "order_info": None,
+        "pending_info_questions": None,
         "cached_answer": None,
         "canonical_query": None,
         "query_vector": None,

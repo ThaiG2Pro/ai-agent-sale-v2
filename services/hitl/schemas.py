@@ -19,6 +19,9 @@ class ReviewActionCreate(BaseModel):
     expected_version: int
     admin_user_id: str
     state_edits: dict | None = None
+    # SC3: admin may override the approved price (e.g. apply a discount) at approval time.
+    # Merged into existing order_info rather than replacing it.
+    approved_price: float | None = None
     reason_or_comment: str | None = None
 
     model_config = ConfigDict(strict=True)
@@ -43,6 +46,7 @@ class ApprovalPayload(BaseModel):
     action: Literal["approve", "reject", "request_edit"]
     admin_user_id: str
     state_edits: dict | None = None
+    approved_price: float | None = None  # SC3: admin price override at approval time
     reason_or_comment: str | None = None
     acknowledged_message_ids: list[str] = Field(default_factory=list)
 
@@ -66,6 +70,9 @@ class QueuedMessageBatch(BaseModel):
     has_cancel: bool = False
     has_modify: bool = False
     has_confirm: bool = False
+    has_info: bool = False  # SC5: all queued msgs are INFO_QUERY (questions about product)
+    has_qty_change: bool = False  # SC3: qty change only (skip RAG, keep same product)
+    has_product_change: bool = False  # SC3: product name change requested (use RAG)
 
     @model_validator(mode="after")
     def compute_flags(self) -> QueuedMessageBatch:

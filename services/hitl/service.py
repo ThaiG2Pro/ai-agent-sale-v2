@@ -173,6 +173,7 @@ class HITLService:
                 action=payload.action,
                 admin_user_id=payload.admin_user_id,
                 state_edits=payload.state_edits,
+                approved_price=payload.approved_price,
                 reason_or_comment=payload.reason_or_comment,
             )
             result_state = await graph.ainvoke(
