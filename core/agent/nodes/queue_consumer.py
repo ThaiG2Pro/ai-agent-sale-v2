@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # Works correctly in dev (small model) AND production (large model agrees).
 # ---------------------------------------------------------------------------
 _MODIFY_PATTERNS = re.compile(
-    r"đổi\s*ý|thay\s*(đổi|sang|cho)|đặt\s*\w+\s*thay|lấy\s*\w+\s*(thay|đi|nhé|đó|này)|"
+    r"đổi\s*ý|thay\s*(đổi|sang|cho)|đặt\s+.+?\s*thay|lấy\s+.+?\s*(thay|đi|nhé|đó|này)|"
     r"đổi\s*sang|đổi\s*qua|muốn\s*(đổi|thay)|changed?\s*my\s*mind|switch\s*to|instead",
     re.IGNORECASE | re.UNICODE,
 )
@@ -47,9 +47,11 @@ _CONFIRM_PATTERNS = re.compile(
 )
 # ADD_ON: customer wants to add a new product alongside the existing order,
 # NOT replace it. "thêm X vào đơn" → CONFIRM (keep original) not MODIFY_ORDER.
+# NQ3-FIX: "lấy thêm X nhé" must match here BEFORE _MODIFY_PATTERNS catches "lấy...nhé".
 _ADD_ON_PATTERNS = re.compile(
     r"thêm\s+\S.{2,}\s+(vào\s*đơn|luôn\s*nhé|vào\s*giỏ|cùng\s*đơn|thêm\s*vào)"
     r"|cũng\s+(lấy|mua|đặt)\s+thêm"
+    r"|lấy\s+thêm\s+.{3,}(?:nhé|đi|thôi|luôn)"  # NQ3: "lấy thêm 1 sạc Anker nhé"
     r"|order\s+also\s+|add\s+.+\s+to\s+(the\s+)?order",
     re.IGNORECASE | re.UNICODE,
 )
@@ -76,6 +78,28 @@ _INFO_QUERY_PATTERNS = re.compile(
     r"|bảo\s*hành",  # warranty questions
     re.IGNORECASE | re.UNICODE,
 )
+# NQ2-FIX: Negotiation with conditional cancel.
+# "bớt cho tôi còn 27.9tr được thì lấy, không thì hủy" → detect price proposal.
+# These messages combine NEGOTIATION price offer with conditional CANCEL.
+# Strategy: if NEGOTIATION detected alongside CANCEL, treat as re-HITL with proposed_price.
+_NEGOTIATION_PATTERNS = re.compile(
+    r"bớt\s*(cho\s*tôi|giá|đi)?"  # "bớt cho tôi", "bớt giá"
+    r"|giảm\s*(giá|còn|xuống)"  # "giảm giá", "giảm còn"
+    r"|còn\s+\d"  # "còn 27tr" (price reduction)
+    r"|\d[\d.,]*\s*(tr|triệu|M)\s*"
+    r"(được\s*(thì|là)|thì\s*(tôi\s*)?(lấy|ok|được))"  # "27tr được thì lấy"
+    r"|mặc\s*cả|thương\s*lượng|thêm\s*khuyến\s*mãi"  # negotiation terms
+    r"|chỗ\s*(khác|kia)\s*(bán|có)\s*(có\s*)?\d"  # competitor price reference
+    r"|negotiate|discount\s*to",
+    re.IGNORECASE | re.UNICODE,
+)
+# NQ2-FIX: Extract proposed price from negotiation text.
+# "còn 27.9tr" / "27tr thì tôi lấy" / "giảm xuống 28 triệu"
+_PRICE_EXTRACT = re.compile(
+    r"(?:còn|xuống|giá|bớt\s+(?:cho\s+tôi\s+)?còn?)\s*(\d+(?:[.,]\d+)?)\s*(tr|triệu|M)\b"
+    r"|(\d+(?:[.,]\d+)?)\s*(tr|triệu|M)\s+(?:được\s*(?:thì|là)|thì\s*(?:tôi\s*)?(?:lấy|ok|đồng\s*ý))",
+    re.IGNORECASE | re.UNICODE,
+)
 
 
 def _keyword_classify_batch(
@@ -89,6 +113,7 @@ def _keyword_classify_batch(
     - If ANY message matches CANCEL keywords → has_cancel=True (skip LLM).
     - If ALL messages match CONFIRM keywords → has_confirm=True (skip LLM).
     - If ALL messages match INFO_QUERY keywords → has_info=True (skip LLM, answer questions).
+    - NQ2: If CANCEL + NEGOTIATION coexist → has_negotiation=True (re-HITL with proposed_price).
     - Otherwise return None → caller uses LLM.
 
     Priority order per message:
@@ -101,13 +126,24 @@ def _keyword_classify_batch(
     has_modify = False
     has_qty_change = False
     has_product_change = False  # SC3: tracks if a product NAME change was requested (not just qty)
+    has_negotiation = False  # NQ2: price negotiation detected
     all_confirm = True
     all_info = True
 
     for row in rows:
         text = row.message_text
         msg_id = str(row.message_id)
-        if _CANCEL_PATTERNS.search(text):
+        # NQ2-fix: Check negotiation BEFORE cancel to detect conditional-cancel pattern.
+        # "27.9tr được thì lấy, không thì hủy" → NEGOTIATION wins over CANCEL.
+        if _NEGOTIATION_PATTERNS.search(text) and _CANCEL_PATTERNS.search(text):
+            intent, conf = "NEGOTIATION", 0.90
+            has_negotiation = True
+            # Still record cancel intent so routing can handle "reject → cancel" path
+            has_cancel = True
+            all_confirm = False
+            all_info = False
+            logger.info("NQ2: NEGOTIATION+CANCEL detected (propose price re-HITL): %r", text[:60])
+        elif _CANCEL_PATTERNS.search(text):
             intent, conf = "CANCEL", 0.95
             has_cancel = True
             all_confirm = False
@@ -148,7 +184,14 @@ def _keyword_classify_batch(
         )
 
     # Only skip LLM when we have strong keyword signal
-    if has_cancel or has_modify or (all_confirm and results) or (all_info and results):
+    has_strong_signal = (
+        has_cancel
+        or has_modify
+        or has_negotiation
+        or (all_confirm and results)
+        or (all_info and results)
+    )
+    if has_strong_signal:
         batch = QueuedMessageBatch(session_id=session_id, messages=results)
         batch.has_cancel = has_cancel
         batch.has_modify = has_modify
@@ -156,14 +199,16 @@ def _keyword_classify_batch(
         batch.has_product_change = has_product_change
         batch.has_confirm = all_confirm and not has_cancel and not has_modify
         batch.has_info = all_info and not has_cancel and not has_modify
+        batch.has_negotiation = has_negotiation
         logger.info(
             "queue_consumer keyword classify: "
-            "cancel=%s modify=%s confirm=%s info=%s qty_change=%s",
+            "cancel=%s modify=%s confirm=%s info=%s qty_change=%s negotiation=%s",
             has_cancel,
             has_modify,
             batch.has_confirm,
             batch.has_info,
             has_qty_change,
+            has_negotiation,
         )
         return batch
 
@@ -248,6 +293,35 @@ def _extract_quantity(queued_rows: list) -> int | None:
             qty_str = m.group(1) or m.group(2)
             if qty_str and qty_str.isdigit():
                 return int(qty_str)
+    return None
+
+
+def _extract_proposed_price(queued_rows: list) -> float | None:
+    """NQ2-fix: extract customer's proposed price from negotiation messages.
+
+    Matches patterns like "còn 27.9tr", "27tr được thì lấy", "giảm xuống 28 triệu".
+    Returns price in VND (multiplied by 1_000_000) or None if not found.
+    """
+    for row in queued_rows:
+        m = _PRICE_EXTRACT.search(row.message_text)
+        if m:
+            # Group 1+2 → "còn/xuống X tr" form; Group 3+4 → "X tr được thì" form
+            price_str = m.group(1) or m.group(3)
+            if price_str:
+                price_str = price_str.replace(",", ".")
+                try:
+                    price_val = float(price_str)
+                    # Values like 27.9 are in millions (triệu), convert to VND
+                    if price_val < 10_000:
+                        price_val *= 1_000_000
+                    logger.info(
+                        "NQ2: extracted proposed_price=%s from %r",
+                        price_val,
+                        row.message_text[:60],
+                    )
+                    return price_val
+                except ValueError:
+                    pass
     return None
 
 
@@ -377,6 +451,40 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
     await db.flush()
 
     update_payload = {"messages": messages}
+
+    # NQ2-fix: NEGOTIATION+CANCEL → re-HITL with proposed_price (before plain CANCEL check).
+    # "bớt cho tôi còn 27.9tr thì lấy, không thì hủy" → extract price, ask admin to decide.
+    if batch_result.has_negotiation:
+        current_order = state.get("order_info") or {}
+        proposed_price = _extract_proposed_price(queued_rows)
+        new_escalation_count = state.get("hitl_escalation_count", 0) + 1
+        if proposed_price and current_order.get("product_id"):
+            negotiation_order_info = {
+                **current_order,
+                "approved_price": proposed_price,  # pre-fill admin's approved price
+                "status": "pending",
+            }
+            logger.info(
+                "NQ2: NEGOTIATION re-HITL: proposed_price=%s for sku=%s",
+                proposed_price,
+                current_order.get("sku"),
+            )
+            update_payload.update(
+                {
+                    "hitl_escalation_count": new_escalation_count,
+                    "hitl_triggered": False,
+                    "hitl_pause_id": None,
+                    "hitl_approved": False,
+                    "order_info": negotiation_order_info,
+                }
+            )
+            return Command(goto="hitl_guard_node", update=update_payload)
+        else:
+            # Could not extract price → fall through to plain CANCEL
+            logger.warning(
+                "NQ2: negotiation detected but could not extract proposed_price; cancelling."
+            )
+            return Command(goto="cancellation_node", update=update_payload)
 
     # T032: CANCEL override (highest priority)
     if batch_result.has_cancel:

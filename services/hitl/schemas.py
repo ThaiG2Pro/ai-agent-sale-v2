@@ -58,7 +58,7 @@ class QueueIntentResult(BaseModel):
 
     message_id: str
     text: str
-    intent: Literal["CONFIRM", "CANCEL", "MODIFY_ORDER", "OTHER"]
+    intent: Literal["CONFIRM", "CANCEL", "MODIFY_ORDER", "NEGOTIATION", "OTHER"]
     confidence: float
 
 
@@ -73,6 +73,8 @@ class QueuedMessageBatch(BaseModel):
     has_info: bool = False  # SC5: all queued msgs are INFO_QUERY (questions about product)
     has_qty_change: bool = False  # SC3: qty change only (skip RAG, keep same product)
     has_product_change: bool = False  # SC3: product name change requested (use RAG)
+    has_negotiation: bool = False  # NQ2: price negotiation with conditional cancel
+    proposed_price: float | None = None  # NQ2: customer's proposed price (e.g. 27.9tr)
 
     @model_validator(mode="after")
     def compute_flags(self) -> QueuedMessageBatch:
