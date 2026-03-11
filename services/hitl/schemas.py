@@ -29,6 +29,11 @@ class ReviewActionCreate(BaseModel):
             raise ValueError("state_edits is required when action is 'request_edit'")
         if self.action == "reject" and not self.reason_or_comment:
             raise ValueError("reason_or_comment is required when action is 'reject'")
+        # Strip state_edits for approve/reject — it's only meaningful for request_edit.
+        # This prevents Swagger example data ({"additionalProp1": {}}) from corrupting
+        # the LangGraph checkpoint via aupdate_state.
+        if self.action in ("approve", "reject"):
+            self.state_edits = None
         return self
 
 

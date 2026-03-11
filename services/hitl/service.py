@@ -152,12 +152,12 @@ class HITLService:
         )
         db.add(new_action)
 
-        # 4. State updates (Pattern B)
-        # Use hitl_guard_node as the as_node — it's the actual interrupted node.
-        # hitl_review_node was a phantom lambda with no writers; LangGraph 1.0.8
-        # rejects it in aupdate_state's Pregel validation.
-        if payload.state_edits:
-            await graph.aupdate_state(config, payload.state_edits, as_node="hitl_guard_node")
+        # 4. NOTE: Do NOT call aupdate_state here for "approve".
+        # aupdate_state() creates a new checkpoint that CLEARS the pending
+        # interrupt — subsequent ainvoke(Command(resume=...)) can't find the
+        # interrupt to resume and exits immediately without running queue_consumer.
+        # Instead, state_edits are forwarded inside ApprovalPayload and applied
+        # by hitl_guard_node via Command(update={...}) after interrupt() returns.
 
         # 5. Set status="resuming"
         await db.execute(

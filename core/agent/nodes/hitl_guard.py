@@ -186,6 +186,25 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                     .values(status="approved", admin_id=payload.admin_user_id)
                 )
                 await db.commit()
+
+                # Apply admin state_edits (e.g. approved_price override) if provided.
+                # We filter to known AgentState keys to discard Swagger example artifacts
+                # like {"additionalProp1": {}} that would otherwise corrupt downstream state.
+                _VALID_STATE_KEYS = {
+                    "order_info",
+                    "intent",
+                    "confidence_score",
+                    "similarity_score",
+                    "hitl_escalation_count",
+                    "response",
+                    "error",
+                }
+                safe_edits: dict = {}
+                if payload.state_edits:
+                    safe_edits = {
+                        k: v for k, v in payload.state_edits.items() if k in _VALID_STATE_KEYS
+                    }
+
                 # T027: Success path — include order_info so freshness validator can proceed
                 return Command(
                     goto="queue_consumer_node",
@@ -194,6 +213,7 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                         "hitl_triggered": False,
                         "hitl_pause_id": str(pause_id),
                         "order_info": order_info,
+                        **safe_edits,
                     },
                 )
             elif payload.action == "reject":
