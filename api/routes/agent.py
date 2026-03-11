@@ -14,6 +14,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from langgraph.errors import GraphInterrupt
 from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
 from pydantic import BaseModel, Field
@@ -209,6 +210,50 @@ async def post_agent_query(
             hitl_pause_id=str(pause_id) if pause_id else None,
         )
 
+    except GraphInterrupt:
+        # Defensive catch: LangGraph normally suppresses GraphInterrupt inside ainvoke,
+        # but in rare edge cases (e.g. asyncio task context) it may propagate here.
+        # Read the checkpoint snapshot to build the proper HITL pause response.
+        try:
+            config = {"configurable": {"thread_id": request.session_id, "db": db}}
+            snapshot = await graph.aget_state(config)
+            pause_id = None
+            for task in snapshot.tasks or []:
+                for intr in getattr(task, "interrupts", None) or []:
+                    iv = getattr(intr, "value", None)
+                    if isinstance(iv, dict) and "pause_id" in iv:
+                        pause_id = iv["pause_id"]
+                        break
+                if pause_id:
+                    break
+        except Exception:
+            pause_id = None
+        return AgentQueryResponse(
+            session_id=request.session_id,
+            message=request.message,
+            answer=(
+                "Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên. "
+                "Chúng tôi sẽ phản hồi sớm nhất có thể. Cảm ơn bạn đã kiên nhẫn!"
+            ),
+            intent=IntentInfo(
+                primary_intent="ORDER_PLACEMENT",
+                confidence=0.0,
+                secondary_intents=[],
+            ),
+            declined=False,
+            model_trace=ModelTraceMetadata(
+                selected_model="unknown",
+                escalation_flag=False,
+                escalation_reason=None,
+                similarity_score=0.0,
+                confidence_score=0.0,
+            ),
+            citations=[],
+            elapsed_ms=(time.time() - start_time) * 1000,
+            execution_path="hitl_interrupt",
+            hitl_paused=True,
+            hitl_pause_id=str(pause_id) if pause_id else None,
+        )
     except Exception as e:
         msg = f"Agent execution failed: {e!s}"
         raise HTTPException(status_code=500, detail=msg) from e

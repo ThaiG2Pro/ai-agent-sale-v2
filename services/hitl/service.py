@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
+from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 from sqlalchemy import select, update
 
@@ -174,14 +175,74 @@ class HITLService:
                 state_edits=payload.state_edits,
                 reason_or_comment=payload.reason_or_comment,
             )
-            await graph.ainvoke(Command(resume=resume_payload.model_dump()), config=config)
+            result_state = await graph.ainvoke(
+                Command(resume=resume_payload.model_dump()), config=config
+            )
 
-            # 7. Success: set status="approved"
+            # 7. Success: set old pause to "approved" (hitl_guard_node may have already done this
+            # internally, but we ensure consistency here in case it didn't).
             await db.execute(
                 update(HITLMetadata)
                 .where(HITLMetadata.pause_id == payload.pause_id)
                 .values(status="approved")
             )
+
+            # 8. Detect if queue processing triggered a NEW HITL pause (e.g. customer
+            # changed order during pause — MODIFY → new order → new approval needed).
+            new_hitl: dict[str, Any] | None = None
+            if isinstance(result_state, dict):
+                interrupts = result_state.get("__interrupt__", [])
+                if interrupts:
+                    intr = interrupts[0]
+                    iv = intr.value if hasattr(intr, "value") else {}
+                    new_hitl = {
+                        "pause_id": iv.get("pause_id") if isinstance(iv, dict) else None,
+                        "reason": str(iv.get("reason", "")) if isinstance(iv, dict) else "",
+                        "state_snapshot": (
+                            iv.get("state_snapshot") if isinstance(iv, dict) else None
+                        ),
+                    }
+                    logger.info(
+                        f"New HITL pause created after queue processing for session "
+                        f"{payload.session_id}: pause_id={new_hitl['pause_id']}"
+                    )
+
+            queue_response = (
+                result_state.get("response") if isinstance(result_state, dict) else None
+            )
+
+        except GraphInterrupt as gi:
+            # Defensive catch: GraphInterrupt escaped ainvoke — this means a new HITL pause
+            # was triggered during queue processing (ainvoke didn't suppress it).
+            # The old pause was already approved (hitl_guard_node sets it), so mark it done.
+            await db.execute(
+                update(HITLMetadata)
+                .where(HITLMetadata.pause_id == payload.pause_id)
+                .values(status="approved")
+            )
+            # Extract new pause info from the interrupt
+            new_pause_id = None
+            queue_response = None
+            try:
+                interrupts = gi.args[0] if gi.args else []
+                if interrupts:
+                    iv = getattr(interrupts[0], "value", {})
+                    new_pause_id = iv.get("pause_id") if isinstance(iv, dict) else None
+            except Exception:
+                pass
+            logger.info(
+                f"GraphInterrupt caught in process_approve for session {payload.session_id}: "
+                f"new_pause_id={new_pause_id}"
+            )
+            new_hitl = (
+                {"pause_id": new_pause_id, "reason": "queue_modified"} if new_pause_id else None
+            )
+            return {
+                "status": "resumed",
+                "action_id": str(new_action.action_id),
+                "new_hitl": new_hitl,
+                "queue_response": queue_response,
+            }
         except Exception as e:
             logger.error(f"Resume failed for session {payload.session_id}: {e}")
             await db.execute(
@@ -191,7 +252,12 @@ class HITLService:
             )
             raise HTTPException(status_code=500, detail="Failed to resume graph") from e
 
-        return {"status": "resumed", "action_id": str(new_action.action_id)}
+        return {
+            "status": "resumed",
+            "action_id": str(new_action.action_id),
+            "new_hitl": new_hitl,
+            "queue_response": queue_response,
+        }
 
     @staticmethod
     async def process_reject(
@@ -227,7 +293,11 @@ class HITLService:
             admin_user_id=payload.admin_user_id,
             reason_or_comment=payload.reason_or_comment,
         )
-        await graph.ainvoke(Command(resume=resume_payload.model_dump()), config=config)
+        try:
+            await graph.ainvoke(Command(resume=resume_payload.model_dump()), config=config)
+        except GraphInterrupt:
+            # Defensive: GraphInterrupt shouldn't escape on reject path, but handle gracefully.
+            logger.warning(f"GraphInterrupt on reject for session {payload.session_id} — ignoring")
 
         # 5. Update status
         await db.execute(
