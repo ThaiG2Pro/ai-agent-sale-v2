@@ -112,60 +112,60 @@ app = FastAPI(
     description="SME-Ready AI Sales Agent (2026) Infrastructure",
     version="0.1.0",
     lifespan=lifespan,
-    # Prevent Pydantic from trying to generate schemas for AsyncSession dependencies
-    openapi_extra={
-        "info": {"x-logo": {"url": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png"}}
-    },
 )
 
 
-# Custom OpenAPI schema to work around Pydantic's AsyncSession issue
+# Custom OpenAPI schema generator to avoid Pydantic errors on AsyncSession
+# The issue: Pydantic can't generate schemas for AsyncSession + Depends() combinations.
+# We use Python's forward references + TYPE_CHECKING in routes to hide AsyncSession
+# from Pydantic during module import, but Pydantic still tries to resolve them at
+# OpenAPI generation time. This handler gracefully falls back to minimal schema.
 def custom_openapi():
-    """
-    Override OpenAPI schema generation to avoid Pydantic errors with AsyncSession.
-    FastAPI's default calls get_openapi() which triggers Pydantic's schema generation,
-    which fails on AsyncSession + Depends() combinations.
-
-    This version manually builds a minimal schema without hitting the problematic code path.
-    """
+    """Generate OpenAPI schema, with fallback for AsyncSession issues."""
     if app.openapi_schema:
         return app.openapi_schema
 
-    # Start with a minimal but valid OpenAPI schema structure
-    openapi_schema = {
-        "openapi": "3.1.0",
-        "info": {
-            "title": app.title,
-            "description": app.description,
-            "version": app.version,
-        },
-        "paths": {},
-        "components": {
-            "schemas": {},
-        },
-    }
+    try:
+        from fastapi.openapi.utils import get_openapi
 
-    # Manually build path items from routes, skipping problematic AsyncSession params
-    for route in app.routes:
-        # Skip non-path routes
-        if not hasattr(route, "path") or not hasattr(route, "methods"):
-            continue
-
-        path = route.path
-        methods = route.methods or ["GET"]
-
-        # Initialize path object if not exists
-        if path not in openapi_schema["paths"]:
-            openapi_schema["paths"][path] = {}
-
-        # Add operation for each method
-        for method in methods:
-            operation = {
-                "responses": {
-                    "200": {"description": "Successful response"},
+        openapi_schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            tags=app.openapi_tags,
+            servers=app.servers,
+        )
+    except Exception as e:
+        # If Pydantic fails on AsyncSession/db dependencies, build minimal schema
+        if "not fully defined" in str(e) or "AsyncSession" in str(e) or "ForwardRef" in str(e):
+            openapi_schema = {
+                "openapi": "3.1.0",
+                "info": {
+                    "title": app.title,
+                    "description": app.description,
+                    "version": app.version,
                 },
+                "paths": {},
+                "components": {"schemas": {}},
             }
-            openapi_schema["paths"][path][method.lower()] = operation
+
+            # Add all routes with basic structure
+            for route in app.routes:
+                if hasattr(route, "path") and hasattr(route, "methods"):
+                    path = route.path
+                    methods = route.methods or ["GET"]
+
+                    if path not in openapi_schema["paths"]:
+                        openapi_schema["paths"][path] = {}
+
+                    for method in methods:
+                        openapi_schema["paths"][path][method.lower()] = {
+                            "responses": {"200": {"description": "Successful response"}}
+                        }
+        else:
+            # Different error - re-raise
+            raise
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema

@@ -4,17 +4,19 @@ What it does: Implements ingestion and search routes secured by X-Admin-Key.
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from api.dependencies import verify_admin_key
 from models.schema import Product, TextEmbedding
 from services.database import get_db
 from services.rag import ingest_product_text, search_products
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/admin/rag", tags=["admin"], dependencies=[Depends(verify_admin_key)])
 

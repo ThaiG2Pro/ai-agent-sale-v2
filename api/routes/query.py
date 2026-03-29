@@ -4,14 +4,16 @@ What it does: Accepts user queries and returns RAG-powered answers.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from services.database import get_db
 from services.rag import answer_with_rag
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/query", tags=["query"])
 
