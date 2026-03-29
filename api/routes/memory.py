@@ -8,11 +8,14 @@ Phase 7d (T138-T139): Semantic memory endpoint for cross-session retrieval.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,  # noqa: TC002 - NEEDED: for Pydantic schema resolution
+)
 
 from models.schema import IntentTracking
 from services.database import get_db
@@ -21,9 +24,6 @@ from services.memory.intent_tracker import (
     IntentLockConflictError,
     IntentTracker,
 )
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 

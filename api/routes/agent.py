@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -19,15 +19,15 @@ from langgraph.errors import GraphInterrupt
 from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,  # noqa: TC002 - NEEDED: for Pydantic schema resolution
+)
 
 from api.dependencies import check_paused_session, get_agent_graph
 from core.agent.graph import astream_agent
 from core.agent.state import make_initial_state
 from services.database import get_db
 from services.memory.background import post_turn_tasks
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 logger = logging.getLogger(__name__)

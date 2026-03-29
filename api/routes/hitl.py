@@ -6,19 +6,19 @@ What it does: Provides state inspection and review submission for paused session
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,  # noqa: TC002 - NEEDED: for Pydantic schema resolution
+)
 
 from api.dependencies import get_agent_graph, verify_admin_key
 from models.schema import HITLMetadata
 from services.database import get_db
 from services.hitl.schemas import ReviewActionCreate  # noqa: TC001
 from services.hitl.service import HITLService
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/hitl", tags=["hitl"])
 logger = logging.getLogger(__name__)
