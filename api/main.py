@@ -16,7 +16,7 @@ from api.middleware import (
     global_exception_handler,
     http_exception_handler,
 )
-from api.routes import admin, agent, health, hitl, query
+from api.routes import admin, agent, health, hitl, memory, query
 from core.agent.checkpointer import create_checkpointer
 from core.config import settings
 from core.logging import instrument_fastapi, instrument_sqlalchemy, setup_logging
@@ -130,6 +130,7 @@ app.include_router(admin.router)
 app.include_router(query.router)
 app.include_router(agent.router)
 app.include_router(hitl.router)
+app.include_router(memory.router, prefix="/memory", tags=["memory"])
 
 
 @app.get("/")

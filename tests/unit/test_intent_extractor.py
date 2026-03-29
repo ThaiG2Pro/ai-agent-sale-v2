@@ -60,7 +60,7 @@ class TestSalesIntentExtractor:
         mock_db = AsyncMock()
         conversation = "Hi, how are you?"
 
-        with patch("services.memory.intent_extractor.litellm.acompletion") as mock_llm:
+        with patch("litellm.acompletion") as mock_llm:
             # Mock LiteLLM response: no signals
             mock_response = MagicMock()
             mock_response.choices = [
@@ -76,7 +76,7 @@ class TestSalesIntentExtractor:
                     )
                 )
             ]
-            mock_llm.return_value = mock_response
+            mock_llm.return_value = AsyncMock(return_value=mock_response)
 
             result = await self.extractor.extract(conversation, mock_db)
 
@@ -90,7 +90,7 @@ class TestSalesIntentExtractor:
         mock_db = AsyncMock()
         conversation = "Tôi cần gấp một chiếc máy lạnh để buổi hôm nay"
 
-        with patch("services.memory.intent_extractor.litellm.acompletion") as mock_llm:
+        with patch("litellm.acompletion") as mock_llm:
             mock_response = MagicMock()
             mock_response.choices = [
                 MagicMock(
@@ -105,7 +105,7 @@ class TestSalesIntentExtractor:
                     )
                 )
             ]
-            mock_llm.return_value = mock_response
+            mock_llm.return_value = AsyncMock(return_value=mock_response)
 
             result = await self.extractor.extract(conversation, mock_db)
 
@@ -118,7 +118,7 @@ class TestSalesIntentExtractor:
         mock_db = AsyncMock()
         conversation = "Tôi muốn mua máy lạnh khoảng 20 triệu đồng"
 
-        with patch("services.memory.intent_extractor.litellm.acompletion") as mock_llm:
+        with patch("litellm.acompletion") as mock_llm:
             mock_response = MagicMock()
             mock_response.choices = [
                 MagicMock(
@@ -133,7 +133,7 @@ class TestSalesIntentExtractor:
                     )
                 )
             ]
-            mock_llm.return_value = mock_response
+            mock_llm.return_value = AsyncMock(return_value=mock_response)
 
             result = await self.extractor.extract(conversation, mock_db)
 
@@ -151,7 +151,7 @@ class TestSalesIntentExtractor:
         mock_db = AsyncMock()
         conversation = "Test conversation"
 
-        with patch("services.memory.intent_extractor.litellm.acompletion") as mock_llm:
+        with patch("litellm.acompletion") as mock_llm:
             mock_response = MagicMock()
             mock_response.choices = [
                 MagicMock(
@@ -166,7 +166,7 @@ class TestSalesIntentExtractor:
                     )
                 )
             ]
-            mock_llm.return_value = mock_response
+            mock_llm.return_value = AsyncMock(return_value=mock_response)
 
             await self.extractor.extract(conversation, mock_db)
 

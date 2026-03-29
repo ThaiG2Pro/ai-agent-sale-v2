@@ -39,6 +39,7 @@ class TestMemoryContractPreImpl:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            # GET doesn't require admin key, so this should just 404
             response = await ac.get("/memory/intent/unknown-customer")
             assert response.status_code == 404
 
@@ -68,8 +69,7 @@ class TestMemoryContractPreImpl:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             response = await ac.patch(
-                "/memory/intent/unknown-customer/status",
+                "/memory/intent/unknown-customer/status?x_admin_key=" + TEST_ADMIN_KEY,
                 json={"new_status": "CONTACTED", "expected_version": 1},
-                headers=admin_headers,
             )
             assert response.status_code == 404
