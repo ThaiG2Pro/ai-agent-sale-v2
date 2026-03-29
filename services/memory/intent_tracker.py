@@ -15,8 +15,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, update
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import func, select, text, update
 
 from core.config import settings
 from models.schema import IntentTracking
@@ -24,7 +23,6 @@ from models.schema import IntentTracking
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from core.agent.state import SalesIntentExtraction
 
 logger = logging.getLogger(__name__)
 
@@ -58,15 +56,17 @@ class IntentTracker:
     async def upsert_with_lock(
         self,
         customer_id: str,
-        session_id: str,
-        extraction: SalesIntentExtraction,
+        thread_id: str,
         db: AsyncSession,
+        last_intent_model: str | None = None,
     ) -> IntentTracking:
-        """INSERT or UPDATE intent with optimistic lock retry loop.
+        """INSERT or UPDATE lightweight intent state with optimistic lock retry loop.
 
         Uses INSERT ON CONFLICT DO UPDATE pattern:
-        - If customer_id exists: increment version, update fields
-        - If customer_id missing: insert new row with version=1
+        - If (customer_id, thread_id) exists: increment version
+        - If missing: insert new row with version=1
+
+        Stores ONLY state (status, version). Extraction details go to sales_intent_logs.
 
         Retry logic:
         - On version conflict (rowcount=0): retry up to 3 times
@@ -75,9 +75,9 @@ class IntentTracker:
 
         Args:
             customer_id: Unique customer identifier
-            session_id: LangGraph thread_id for context
-            extraction: SalesIntentExtraction model with fields to upsert
+            thread_id: LangGraph thread_id for context
             db: AsyncSession for database operations
+            last_intent_model: Name of the extraction model (optional)
 
         Returns:
             Updated IntentTracking row
@@ -85,73 +85,80 @@ class IntentTracker:
         Raises:
             IntentLockConflictError: If version conflict not resolved after retries
         """
-        return await self._do_upsert_with_retry(customer_id, session_id, extraction, db)
+        return await self._do_upsert_with_retry(customer_id, thread_id, last_intent_model, db)
 
     async def _do_upsert_with_retry(
         self,
         customer_id: str,
-        session_id: str,
-        extraction: SalesIntentExtraction,
+        thread_id: str,
+        last_intent_model: str | None,
         db: AsyncSession,
     ) -> IntentTracking:
         """Execute upsert with retry loop on version conflict."""
+
         max_retries = settings.INTENT_LOCK_MAX_RETRIES
         backoff_delays = settings.INTENT_LOCK_RETRY_BACKOFF_MS
 
         for attempt in range(max_retries):
             try:
-                # INSERT ... ON CONFLICT DO UPDATE pattern (PostgreSQL-specific)
-                stmt = (
-                    insert(IntentTracking)
-                    .values(
-                        customer_id=customer_id,
-                        session_id=session_id,
-                        budget_range=extraction.budget_range,
-                        urgency_level=extraction.urgency_level.value
-                        if extraction.urgency_level
-                        else "UNKNOWN",
-                        product_interest=extraction.product_interest,
-                        decision_timeline=extraction.decision_timeline,
-                        contact_preference=extraction.contact_preference,
-                        version=1,
-                        intent_status="NEW",
-                        status_change_trigger="agent",
+                # Use raw SQL for ON CONFLICT with proper column reference semantics
+                sql = """
+                    INSERT INTO agent_v1.intent_tracking
+                    (
+                        id, customer_id, thread_id, status, version,
+                        last_updated_by, last_intent_model, created_at,
+                        updated_at
                     )
-                    .on_conflict_do_update(
-                        index_elements=["customer_id"],
-                        set_={
-                            "budget_range": extraction.budget_range,
-                            "urgency_level": extraction.urgency_level.value
-                            if extraction.urgency_level
-                            else "UNKNOWN",
-                            "product_interest": extraction.product_interest,
-                            "decision_timeline": extraction.decision_timeline,
-                            "contact_preference": extraction.contact_preference,
-                            "version": IntentTracking.version + 1,
-                            "status_change_trigger": "agent",
-                            "updated_at": "now()",
-                        },
+                    VALUES (
+                        gen_random_uuid(), :customer_id, :thread_id, 'NEW', 1,
+                        'agent', :last_intent_model, now(), now()
                     )
-                    .returning(IntentTracking)
+                    ON CONFLICT (customer_id, thread_id) DO UPDATE SET
+                        version = agent_v1.intent_tracking.version + 1,
+                        last_updated_by = 'agent',
+                        last_intent_model = :last_intent_model,
+                        updated_at = now()
+                """
+
+                await db.execute(
+                    text(sql),
+                    {
+                        "customer_id": customer_id,
+                        "thread_id": thread_id,
+                        "last_intent_model": last_intent_model,
+                    },
                 )
 
-                result = await db.execute(stmt)
+                # Refetch to get the updated row with real version
+                # Use expire_on_commit=False, so we need to refresh explicitly
+                refetch_stmt = select(IntentTracking).where(
+                    (IntentTracking.customer_id == customer_id)
+                    & (IntentTracking.thread_id == thread_id)
+                )
+                result = await db.execute(refetch_stmt)
                 row = result.scalar_one_or_none()
 
                 if row:
+                    # Force refresh from DB to ensure version is current
+                    await db.refresh(row)
                     logger.debug(
-                        "Intent upserted",
-                        extra={"customer_id": customer_id, "version": row.version},
+                        "Intent state upserted",
+                        extra={
+                            "customer_id": customer_id,
+                            "thread_id": thread_id,
+                            "version": row.version,
+                        },
                     )
                     return row
 
-                # rowcount=0 indicates version conflict (concurrent update)
+                # Shouldn't reach here if conflict handling worked
                 if attempt < max_retries - 1:
                     delay_ms = backoff_delays[attempt]
                     logger.debug(
                         "Version conflict, retrying",
                         extra={
                             "customer_id": customer_id,
+                            "thread_id": thread_id,
                             "attempt": attempt + 1,
                             "delay_ms": delay_ms,
                         },
@@ -159,7 +166,8 @@ class IntentTracker:
                     await asyncio.sleep(delay_ms / 1000.0)
                 else:
                     raise IntentLockConflictError(
-                        f"Failed to upsert intent for {customer_id} after {max_retries} attempts"
+                        f"Failed to upsert intent for customer={customer_id}, "
+                        f"thread={thread_id} after {max_retries} attempts"
                     )
 
             except Exception as e:
@@ -167,17 +175,19 @@ class IntentTracker:
                     raise
                 logger.error(
                     "Upsert failed with exception",
-                    extra={"customer_id": customer_id, "error": str(e)},
+                    extra={"customer_id": customer_id, "thread_id": thread_id, "error": str(e)},
                 )
                 raise
 
         raise IntentLockConflictError(
-            f"Failed to upsert intent for {customer_id} after {max_retries} attempts"
+            f"Failed to upsert intent for customer={customer_id}, "
+            f"thread={thread_id} after {max_retries} attempts"
         )
 
     async def update_status(
         self,
         customer_id: str,
+        thread_id: str,
         new_status: str,
         expected_version: int,
         trigger: str,
@@ -187,7 +197,8 @@ class IntentTracker:
 
         Args:
             customer_id: Unique customer identifier
-            new_status: New intent_status value (e.g., "CONTACTED", "CONVERTED")
+            thread_id: LangGraph thread_id
+            new_status: New status value (e.g., "CONTACTED", "CONVERTED", "INCOMPATIBLE")
             expected_version: Expected current version (for optimistic lock)
             trigger: Who triggered the update ("admin", "agent", "system")
             db: AsyncSession for database operations
@@ -196,21 +207,21 @@ class IntentTracker:
             Updated IntentTracking row
 
         Raises:
-            OptimisticLockError: If expected_version doesn't match (HTTP 409)
+            IntentLockConflictError: If expected_version doesn't match (HTTP 409)
             CustomerNotFoundError: If customer not found (HTTP 404)
         """
         stmt = (
             update(IntentTracking)
             .where(
-                IntentTracking.customer_id == customer_id,
-                IntentTracking.version == expected_version,
+                (IntentTracking.customer_id == customer_id)
+                & (IntentTracking.thread_id == thread_id)
+                & (IntentTracking.version == expected_version),
             )
             .values(
-                intent_status=new_status,
+                status=new_status,
                 version=IntentTracking.version + 1,
-                status_changed_at="now()",
-                status_change_trigger=trigger,
-                updated_at="now()",
+                last_updated_by=trigger,
+                updated_at=func.now(),
             )
             .returning(IntentTracking)
         )
@@ -223,19 +234,23 @@ class IntentTracker:
                 "Intent status updated",
                 extra={
                     "customer_id": customer_id,
+                    "thread_id": thread_id,
                     "new_status": new_status,
                     "version": row.version,
                 },
             )
             return row
 
-        # Check if customer exists at all
-        check_stmt = select(IntentTracking).where(IntentTracking.customer_id == customer_id)
+        # Check if customer/thread combo exists at all
+        check_stmt = select(IntentTracking).where(
+            (IntentTracking.customer_id == customer_id) & (IntentTracking.thread_id == thread_id)
+        )
         existing = await db.execute(check_stmt)
         if not existing.scalar_one_or_none():
-            raise CustomerNotFoundError(f"Customer {customer_id} not found")
+            raise CustomerNotFoundError(f"Customer {customer_id}, thread {thread_id} not found")
 
         # Customer exists but version mismatch (optimistic lock conflict)
         raise IntentLockConflictError(
-            f"Version mismatch for customer {customer_id} (expected {expected_version})"
+            f"Version mismatch for customer={customer_id}, "
+            f"thread={thread_id} (expected {expected_version})"
         )
