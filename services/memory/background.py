@@ -131,6 +131,97 @@ async def _maybe_extract_intent(
         )
 
 
+async def _maybe_summarize(
+    customer_id: str,
+    thread_id: str,
+    state: AgentState,
+    db_factory: Callable[[], AsyncSession],
+) -> None:
+    """Conditionally summarize conversation (FR-010, T104).
+
+    Checks if summary should be created based on message count.
+    If yes, calls summarizer, saves to DB, and updates semantic memory.
+
+    Args:
+        customer_id: Customer identifier
+        thread_id: LangGraph thread_id
+        state: Current AgentState with messages
+        db_factory: AsyncSession factory for DB operations
+    """
+    try:
+        from services.memory.summarizer import ConversationSummarizer
+
+        message_count = len(state.get("messages", []))
+        has_existing_summary = state.get("thread_summary_exists", False)
+        messages_since = len(state.get("messages", [])) - (
+            state.get("last_summary_message_count", 0)
+        )
+
+        # Check if summary should be created (T093-T096)
+        if not ConversationSummarizer.should_summarize(
+            message_count=message_count,
+            has_existing_summary=has_existing_summary,
+            messages_since_last_summary=messages_since,
+        ):
+            logger.debug(
+                "Summarization skipped (below threshold)",
+                extra={
+                    "customer_id": customer_id,
+                    "thread_id": thread_id,
+                    "message_count": message_count,
+                },
+            )
+            return
+
+        # Summarize conversation (T097-T101)
+        messages = state.get("messages", [])
+        summarizer = ConversationSummarizer()
+        summary = await summarizer.summarize(messages, session_id=thread_id)
+
+        # Save to DB (T102-T103)
+        async with db_factory() as db:
+            await ConversationSummarizer.save_summary(
+                summary=summary,
+                session_id=thread_id,
+                customer_id=customer_id,
+                turn_count=message_count,
+                db=db,
+            )
+            await db.commit()
+
+        logger.debug(
+            "Conversation summarized",
+            extra={
+                "customer_id": customer_id,
+                "thread_id": thread_id,
+                "summary_text_length": len(summary.summary_text or ""),
+                "products": summary.products_discussed,
+            },
+        )
+
+    except ValueError as e:
+        # Expected error for empty conversations
+        logger.debug(
+            "Summarization failed (empty conversation)",
+            extra={
+                "customer_id": customer_id,
+                "thread_id": thread_id,
+                "error": str(e),
+            },
+        )
+    except Exception as e:
+        # FR-013: Graceful degradation - log error, do not re-raise
+        logger.error(
+            "Summarization failed (non-blocking)",
+            extra={
+                "customer_id": customer_id,
+                "thread_id": thread_id,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            },
+        )
+
+
 async def post_turn_tasks(
     customer_id: str,
     thread_id: str,
@@ -142,7 +233,7 @@ async def post_turn_tasks(
     Executes all 4 memory tasks in parallel:
     1. _check_checkpoint_size()
     2. _maybe_extract_intent()
-    3. _maybe_summarize() (placeholder)
+    3. _maybe_summarize()
     4. _update_semantic_memory() (placeholder)
 
     All tasks run via asyncio.gather(return_exceptions=True) so failures
@@ -159,19 +250,15 @@ async def post_turn_tasks(
         async with db_factory() as db:
             await check_checkpoint_size(thread_id, db)
 
-    async def _maybe_summarize() -> None:
-        # Placeholder for Phase 6 implementation
-        logger.debug("Summarization task placeholder")
-
-    async def _update_semantic_memory() -> None:
+    async def _semantic_memory_task() -> None:
         # Placeholder for Phase 7 implementation
         logger.debug("Semantic memory update task placeholder")
 
     results = await asyncio.gather(
         _checkpoint_task(),
         _maybe_extract_intent(customer_id, thread_id, state, db_factory),
-        _maybe_summarize(),
-        _update_semantic_memory(),
+        _maybe_summarize(customer_id, thread_id, state, db_factory),
+        _semantic_memory_task(),
         return_exceptions=True,
     )
 

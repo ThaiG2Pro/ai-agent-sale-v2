@@ -105,11 +105,12 @@ class EscalationDecision(BaseModel):
 class ConversationSummaryOutput(BaseModel):
     """Structured summary of a conversation thread (FR-004, FR-011b)."""
 
+    summary_text: str  # Main summary of the conversation
     products_discussed: list[str] = Field(default_factory=list)
     customer_preference: str | None = None
     budget_stated: str | None = None
     open_questions: list[str] = Field(default_factory=list)
-    summary_model: str  # e.g., "ollama/qwen3:0.6b" for audit trail
+    summary_model: str = ""  # e.g., "ollama/qwen3:0.6b" for audit trail (filled later)
 
     model_config = ConfigDict(strict=True)
 
