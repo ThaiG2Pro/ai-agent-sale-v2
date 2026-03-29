@@ -212,10 +212,10 @@
 
 ### 6b. Answer Node — Context Compression
 
-- [ ] T108 [US5] Update `core/agent/nodes/answer.py`: when `state["thread_summary_exists"]` is `True`, replace old messages in context with summary text + last 5 raw messages (FR-005)
-- [ ] T109 [US5] Write test: answer_node with `thread_summary_exists=True` and 25 raw messages → LiteLLM called with ≤ 6 context items (1 summary + 5 recent)
-- [ ] T110 [US5] Write test: answer_node with `thread_summary_exists=False` and 5 raw messages → LiteLLM called with all 5 messages (no compression)
-- [ ] T111 [US5] Write integration test `test_summary_created_at_threshold` in `tests/integration/test_memory_flow.py`: create session, insert 22 messages, call `_maybe_summarize()` directly, assert 1 row in `conversation_summaries` with `turn_count_at_summary=22`
+- [x] T108 [US5] Update `core/agent/nodes/answer.py`: when `state["thread_summary_exists"]` is `True`, replace old messages in context with summary text + last 5 raw messages (FR-005)
+- [x] T109 [US5] Write test: answer_node with `thread_summary_exists=True` and 25 raw messages → LiteLLM called with ≤ 6 context items (1 summary + 5 recent)
+- [x] T110 [US5] Write test: answer_node with `thread_summary_exists=False` and 5 raw messages → LiteLLM called with all 5 messages (no compression)
+- [x] T111 [US5] Write integration test `test_summary_created_at_threshold` in `tests/integration/test_memory_flow.py`: create session, insert 22 messages, call `_maybe_summarize()` directly, assert 1 row in `conversation_summaries` with `turn_count_at_summary=22`
 
 ---
 
