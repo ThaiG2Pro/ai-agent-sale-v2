@@ -8,7 +8,7 @@ Tests cover:
 - Threshold-based relevance filtering
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -26,10 +26,8 @@ def semantic_service():
 
 @pytest.fixture
 def mock_db():
-    """Fixture for mocking AsyncSession."""
+    """Fixture for mocking AsyncSession properly."""
     db = AsyncMock()
-    mock_result = AsyncMock()
-    db.execute.return_value = mock_result
     return db
 
 
@@ -38,9 +36,10 @@ class TestSemanticMemoryStore:
 
     @pytest.mark.asyncio
     async def test_store_inserts_with_model_version(self, semantic_service, mock_db):
-        """T114: store() inserts row with model_version='bge-m3@1024'."""
+        """T114: store() inserts row with embedding_model='bge-m3'."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024  # Correct dimension
+            mock_db.commit = AsyncMock()
 
             await semantic_service.store(
                 summary_id="summary_001",
@@ -50,33 +49,35 @@ class TestSemanticMemoryStore:
                 db=mock_db,
             )
 
-            # Verify db.add was called
+            # Verify add() was called
             mock_db.add.assert_called_once()
-            # Verify db.commit was called
+            # Verify commit was called
             mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_store_sets_status_active(self, semantic_service, mock_db):
-        """T115: store() sets status='ACTIVE' on insert."""
+        """T115: store() sets status=ACTIVE on insert."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024
+            mock_db.commit = AsyncMock()
 
             await semantic_service.store(
-                summary_id="summary_002",
-                customer_id="cust_002",
-                session_id="t002",
-                summary_text="Another summary",
+                summary_id="summary_001",
+                customer_id="cust_001",
+                session_id="t001",
+                summary_text="Test summary",
                 db=mock_db,
             )
 
             # Get the added object
-            call_args = mock_db.add.call_args
-            semantic_memory = call_args[0][0]
-            assert semantic_memory.status == "ACTIVE"
+            mock_db.add.assert_called_once()
+            added_obj = mock_db.add.call_args[0][0]
+            assert added_obj.status.value == "ACTIVE"
 
     @pytest.mark.asyncio
-    async def test_store_wrong_dimension_raises_error(self, semantic_service, mock_db):
+    async def test_store_wrong_dimension_raises_error(self, semantic_service):
         """T116: store() with wrong dimension → raises EmbeddingDimensionMismatchError."""
+        mock_db = AsyncMock()
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 512  # Wrong dimension
 
@@ -95,18 +96,18 @@ class TestSemanticMemoryRetrieve:
 
     @pytest.mark.asyncio
     async def test_retrieve_customer_a_returns_only_customer_a(self, semantic_service, mock_db):
-        """T118: retrieve() with customer_id='A' → only returns customer A's results."""
+        """T118: retrieve() with customer_id='A' returns only customer A rows."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024
 
-            # Mock DB returns 3 rows for customer A
-            mock_result = AsyncMock()
+            # Create a proper async result
+            mock_result = MagicMock()
             mock_result.fetchall.return_value = [
                 ("id1", "sum_id1", "Summary A1", 0.9),
                 ("id2", "sum_id2", "Summary A2", 0.85),
                 ("id3", "sum_id3", "Summary A3", 0.8),
             ]
-            mock_db.execute.return_value = mock_result
+            mock_db.execute = AsyncMock(return_value=mock_result)
 
             results = await semantic_service.retrieve(
                 customer_id="A",
@@ -123,138 +124,113 @@ class TestSemanticMemoryRetrieve:
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024
 
-            # Mock DB returns only customer A rows (isolation enforced by SQL WHERE)
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.fetchall.return_value = [
-                ("id1", "sum_id1", "Summary A", 0.9),
+                ("id_a1", "sum_id_a1", "Summary A only", 0.95),
             ]
-            mock_db.execute.return_value = mock_result
+            mock_db.execute = AsyncMock(return_value=mock_result)
 
             results = await semantic_service.retrieve(
                 customer_id="A",
-                query="test query",
+                query="test",
                 db=mock_db,
             )
 
-            # Verify the query included customer_id filter
-            call_args = mock_db.execute.call_args
-            sql = call_args[0][0]
-            assert ":customer_id" in str(sql)
-
             assert len(results) == 1
+            # Verify WHERE customer_id filtering was passed to SQL
+            call_args = mock_db.execute.call_args
+            assert "customer_id" in call_args[0][1]
+            assert call_args[0][1]["customer_id"] == "A"
 
     @pytest.mark.asyncio
     async def test_retrieve_filters_by_threshold(self, semantic_service, mock_db):
-        """T120: retrieve() filters by min_score → only returns scores >= 0.75."""
+        """T120: retrieve() filters scores < min_score (0.75)."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024
 
-            # Mock DB returns 3 results: 2 above threshold, 1 below
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.fetchall.return_value = [
-                ("id1", "sum_id1", "Good result", 0.9),
-                ("id2", "sum_id2", "Borderline", 0.60),  # Below threshold
-                ("id3", "sum_id3", "Good result", 0.85),
+                ("id1", "sum_id1", "Good", 0.95),
+                ("id2", "sum_id2", "Bad", 0.50),
+                ("id3", "sum_id3", "Okay", 0.76),
             ]
-            mock_db.execute.return_value = mock_result
+            mock_db.execute = AsyncMock(return_value=mock_result)
 
             results = await semantic_service.retrieve(
-                customer_id="A",
-                query="test query",
-                min_score=0.75,
-                db=mock_db,
+                customer_id="A", query="test", db=mock_db, min_score=0.75
             )
 
-            # Only 2 results should be returned
+            # Only scores >= 0.75 should be returned
             assert len(results) == 2
             assert all(r.similarity_score >= 0.75 for r in results)
 
     @pytest.mark.asyncio
     async def test_retrieve_all_below_threshold_returns_empty(self, semantic_service, mock_db):
-        """T121: retrieve() with all scores < threshold → empty list (no error)."""
+        """T121: retrieve() with all scores < threshold → empty list."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024
 
-            # Mock DB returns results all below threshold
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.fetchall.return_value = [
-                ("id1", "sum_id1", "Poor result", 0.5),
-                ("id2", "sum_id2", "Poor result", 0.6),
+                ("id1", "sum_id1", "Bad1", 0.60),
+                ("id2", "sum_id2", "Bad2", 0.50),
             ]
-            mock_db.execute.return_value = mock_result
+            mock_db.execute = AsyncMock(return_value=mock_result)
 
             results = await semantic_service.retrieve(
-                customer_id="A",
-                query="test query",
-                min_score=0.75,
-                db=mock_db,
+                customer_id="A", query="test", db=mock_db, min_score=0.75
             )
 
             assert len(results) == 0
 
     @pytest.mark.asyncio
     async def test_retrieve_no_rows_cold_start(self, semantic_service, mock_db):
-        """T122: retrieve() with no rows for customer → empty list (cold start, no error)."""
+        """T122: retrieve() with no rows → empty list, no exception."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024
 
-            # Mock DB returns empty result
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.fetchall.return_value = []
-            mock_db.execute.return_value = mock_result
+            mock_db.execute = AsyncMock(return_value=mock_result)
 
             results = await semantic_service.retrieve(
-                customer_id="new_customer",
-                query="test query",
-                db=mock_db,
+                customer_id="UNKNOWN", query="test", db=mock_db
             )
 
             assert len(results) == 0
 
     @pytest.mark.asyncio
     async def test_retrieve_excludes_stale_rows(self, semantic_service, mock_db):
-        """T123: retrieve() excludes STALE rows (status='STALE' not returned)."""
+        """T123: retrieve() excludes STALE rows from results."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
             mock_embed.return_value = [0.1] * 1024
 
-            # Mock DB returns only ACTIVE rows (STALE excluded by SQL WHERE)
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.fetchall.return_value = [
-                ("id1", "sum_id1", "Active result", 0.9),
+                ("id1", "sum_id1", "Active summary", 0.95),
             ]
-            mock_db.execute.return_value = mock_result
+            mock_db.execute = AsyncMock(return_value=mock_result)
 
-            results = await semantic_service.retrieve(
-                customer_id="A",
-                query="test query",
-                db=mock_db,
-            )
+            results = await semantic_service.retrieve(customer_id="A", query="test", db=mock_db)
 
-            # Verify SQL included status filter
+            # Verify SQL includes WHERE status = 'ACTIVE'
             call_args = mock_db.execute.call_args
-            sql = str(call_args[0][0])
-            assert "status" in sql and "ACTIVE" in sql
-
+            sql_str = str(call_args[0][0])
+            assert "status = 'ACTIVE'" in sql_str
             assert len(results) == 1
 
 
 class TestSemanticMemoryFlagStale:
-    """Test suite for stale embedding flagging."""
+    """Test suite for embedding versioning."""
 
     @pytest.mark.asyncio
     async def test_flag_stale_updates_old_version(self, semantic_service, mock_db):
-        """T125: flag_stale() → 3 old rows → 3 flagged STALE, 2 current remain ACTIVE."""
-        mock_db.execute = AsyncMock()
+        """T125: flag_stale() marks old embedding_model rows as STALE."""
+        mock_db.execute = AsyncMock(return_value=MagicMock(rowcount=3))
         mock_db.commit = AsyncMock()
 
-        # Mock the update result
-        mock_result = AsyncMock()
-        mock_result.rowcount = 3  # 3 rows updated
-        mock_db.execute.return_value = mock_result
-
         count = await semantic_service.flag_stale(
-            current_model_version="bge-m3@1024",
-            db=mock_db,
+            current_embedding_model="new-model-v2", db=mock_db
         )
 
         assert count == 3
@@ -263,18 +239,13 @@ class TestSemanticMemoryFlagStale:
 
     @pytest.mark.asyncio
     async def test_flag_stale_current_version_no_change(self, semantic_service, mock_db):
-        """T126: flag_stale() with all rows current version → 0 rows changed."""
-        mock_db.execute = AsyncMock()
+        """T126: flag_stale() with all current → 0 rows changed, no exception."""
+        mock_db.execute = AsyncMock(return_value=MagicMock(rowcount=0))
         mock_db.commit = AsyncMock()
 
-        # Mock the update result
-        mock_result = AsyncMock()
-        mock_result.rowcount = 0  # No rows updated
-        mock_db.execute.return_value = mock_result
-
         count = await semantic_service.flag_stale(
-            current_model_version="bge-m3@1024",
-            db=mock_db,
+            current_embedding_model="current-model", db=mock_db
         )
 
         assert count == 0
+        mock_db.commit.assert_called_once()

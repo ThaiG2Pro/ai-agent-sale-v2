@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text, update
 
 from core.config import settings
+from models.schema import EmbeddingStatus
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,12 +109,10 @@ class SemanticMemoryService:
             semantic_memory = SemanticMemory(
                 summary_id=summary_id,
                 customer_id=customer_id,
-                session_id=session_id,
                 embedding=embedding,
                 embedding_model=self.embed_model,
                 embedding_dimension=self.embed_dimension,
-                model_version=self.model_version,
-                status="ACTIVE",  # T115: Always ACTIVE on creation
+                status=EmbeddingStatus.ACTIVE,  # T115: Always ACTIVE on creation
             )
             db.add(semantic_memory)
             await db.commit()
@@ -194,7 +193,7 @@ class SemanticMemoryService:
                 return []
 
             # Cosine search with strict customer_id isolation (T117, T119)
-            # WHERE customer_id = :cid AND status = 'ACTIVE' AND model_version = :ver
+            # WHERE customer_id = :cid AND status = 'ACTIVE' AND embedding_model = :model
             query_sql = text(
                 """
             SELECT sm.id, sm.summary_id, cs.summary_text,
@@ -204,7 +203,7 @@ class SemanticMemoryService:
               ON sm.summary_id = cs.id
             WHERE sm.customer_id = :customer_id
               AND sm.status = 'ACTIVE'
-              AND sm.model_version = :model_version
+              AND sm.embedding_model = :embedding_model
             ORDER BY sm.embedding <=> :vec
             LIMIT :top_k
             """
@@ -215,7 +214,7 @@ class SemanticMemoryService:
                 {
                     "customer_id": customer_id,
                     "vec": query_embedding,
-                    "model_version": self.model_version,
+                    "embedding_model": self.embed_model,
                     "top_k": top_k,
                 },
             )
@@ -232,7 +231,7 @@ class SemanticMemoryService:
                             summary_id=str(row[1]),
                             summary_text=row[2],
                             similarity_score=score,
-                            session_id="",  # Will be filled from DB if needed
+                            session_id="",  # Not used; kept for compatibility
                         )
                     )
 
@@ -260,16 +259,16 @@ class SemanticMemoryService:
 
     async def flag_stale(
         self,
-        current_model_version: str,
+        current_embedding_model: str,
         db: AsyncSession,
     ) -> int:
         """Mark old embeddings as STALE when model version changes (T124, FR-010b).
 
         Called when embedding model is updated. Flags all rows with different
-        model_version but keeps them for audit trail.
+        embedding_model but keeps them for audit trail.
 
         Args:
-            current_model_version: Current model@dimension version string
+            current_embedding_model: Current embedding model name (e.g., "bge-m3")
             db: Async database session
 
         Returns:
@@ -278,14 +277,14 @@ class SemanticMemoryService:
         try:
             from models.schema import SemanticMemory
 
-            # UPDATE status='STALE' WHERE model_version != :ver AND status = 'ACTIVE'
+            # UPDATE status='STALE' WHERE embedding_model != :model AND status = 'ACTIVE'
             stmt = (
                 update(SemanticMemory)
                 .where(
-                    (SemanticMemory.model_version != current_model_version)
-                    & (SemanticMemory.status == "ACTIVE")
+                    (SemanticMemory.embedding_model != current_embedding_model)
+                    & (SemanticMemory.status == EmbeddingStatus.ACTIVE)
                 )
-                .values(status="STALE")
+                .values(status=EmbeddingStatus.STALE)
             )
 
             result = await db.execute(stmt)
@@ -296,7 +295,7 @@ class SemanticMemoryService:
             logger.info(
                 "Embeddings flagged STALE",
                 extra={
-                    "new_model_version": current_model_version,
+                    "new_embedding_model": current_embedding_model,
                     "rows_updated": count,
                 },
             )
@@ -307,7 +306,7 @@ class SemanticMemoryService:
             logger.error(
                 "Failed to flag stale embeddings",
                 extra={
-                    "current_model_version": current_model_version,
+                    "current_embedding_model": current_embedding_model,
                     "error": str(e),
                 },
             )
