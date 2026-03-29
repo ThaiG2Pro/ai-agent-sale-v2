@@ -161,6 +161,7 @@ def export_mermaid_to_file(path: str) -> None:
 async def astream_agent(
     message: str,
     session_id: str,
+    customer_id: str,
     db=None,
     checkpointer=None,
     graph=None,
@@ -173,6 +174,7 @@ async def astream_agent(
     Args:
         message: User message to process
         session_id: Session identifier for thread config
+        customer_id: Cross-session customer identifier (required for memory scoping)
         db: Optional AsyncSession — passed to retrieval/answer nodes via configurable
         checkpointer: Optional LangGraph checkpointer
         graph: Optional already built/compiled graph
@@ -184,7 +186,7 @@ async def astream_agent(
 
     if graph is None:
         graph = build_graph(checkpointer=checkpointer)
-    initial_state = make_initial_state(message, session_id)
+    initial_state = make_initial_state(message, session_id=session_id, customer_id=customer_id)
     # Pass db through configurable so nodes can inject via RunnableConfig
     config: dict = {"configurable": {"thread_id": session_id, "db": db}}
 

@@ -8,6 +8,7 @@ What it does:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Annotated, Any
@@ -24,6 +25,7 @@ from api.dependencies import check_paused_session, get_agent_graph
 from core.agent.graph import astream_agent
 from core.agent.state import make_initial_state
 from services.database import get_db
+from services.memory.background import post_turn_tasks
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 logger = logging.getLogger(__name__)
@@ -39,6 +41,12 @@ class AgentQueryRequest(BaseModel):
     session_id: str = Field(
         default="session-default",
         description="Conversation session ID (for multi-turn, Week 5+)",
+    )
+    customer_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Cross-session customer identifier (required for memory scoping, Week 5+)",
     )
 
 
@@ -141,7 +149,11 @@ async def post_agent_query(
 
     try:
         config = {"configurable": {"thread_id": request.session_id, "db": db}}
-        initial_state = make_initial_state(request.message, session_id=request.session_id)
+        initial_state = make_initial_state(
+            request.message,
+            session_id=request.session_id,
+            customer_id=request.customer_id,
+        )
 
         # Invoke the agent
         final_state = await graph.ainvoke(initial_state, config=config)
@@ -186,7 +198,7 @@ async def post_agent_query(
             answer = final_state.get("response") or ""
 
         # Build response
-        return AgentQueryResponse(
+        response = AgentQueryResponse(
             session_id=request.session_id,
             message=request.message,
             answer=answer,
@@ -209,6 +221,49 @@ async def post_agent_query(
             hitl_paused=is_hitl_paused,
             hitl_pause_id=str(pause_id) if pause_id else None,
         )
+
+        # T083: Dispatch background tasks (FR-013) without blocking response
+        # Use asyncio.create_task to run in background
+        from services.database import AsyncSessionLocal
+
+        # Only dispatch background tasks if not HITL paused (HITL shouldn't trigger memory updates)
+        if not is_hitl_paused:
+            try:
+                # Store task reference to prevent garbage collection
+                # (asyncio.create_task alone may let the task be collected if not awaited)
+                task = asyncio.create_task(
+                    post_turn_tasks(
+                        customer_id=request.customer_id,
+                        thread_id=request.session_id,
+                        state=final_state,
+                        db_factory=AsyncSessionLocal,
+                    )
+                )
+                # Add callback to log if task fails (for observability)
+                task.add_done_callback(
+                    lambda t: (
+                        logger.debug(
+                            "Background task completed: customer=%s, thread=%s",
+                            request.customer_id,
+                            request.session_id,
+                        )
+                        if t.exception() is None
+                        else logger.error(
+                            "Background task failed: %s",
+                            t.exception(),
+                        )
+                    )
+                )
+            except Exception as e:
+                # Log but don't block response if background task dispatch fails
+                logger.error(
+                    "Failed to dispatch background tasks: %s (customer=%s, thread=%s)",
+                    e,
+                    request.customer_id,
+                    request.session_id,
+                )
+
+        return response
 
     except GraphInterrupt:
         # Defensive catch: LangGraph normally suppresses GraphInterrupt inside ainvoke,
@@ -301,6 +356,7 @@ async def post_agent_stream(
             async for event in astream_agent(
                 request.message,
                 session_id=request.session_id,
+                customer_id=request.customer_id,
                 db=db,
                 graph=graph,
             ):

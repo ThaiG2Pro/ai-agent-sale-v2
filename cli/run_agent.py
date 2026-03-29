@@ -24,7 +24,11 @@ from core.logging import setup_logging
 
 
 async def main(
-    message: str, stream: bool = False, session: str = "debug-session", api: bool = False
+    message: str,
+    stream: bool = False,
+    session: str = "debug-session",
+    customer_id: str = "cli-debug-user",
+    api: bool = False,
 ):
     """Run agent with user message (T053, T082).
 
@@ -32,11 +36,12 @@ async def main(
         message: User query
         stream: Whether to stream per-node events (T082)
         session: Session ID for checkpointer
+        customer_id: Customer ID for memory scoping (defaults to cli-debug-user for testing)
         api: Whether to call via HTTP API instead of direct invocation
     """
     # API mode: call via HTTP
     if api:
-        await _call_api(message, stream, session)
+        await _call_api(message, stream, session, customer_id)
         return
 
     # Direct mode: invoke graph in-process
@@ -49,7 +54,11 @@ async def main(
             print("-" * 60)
             try:
                 async for event in astream_agent(
-                    message, session, db=db, checkpointer=MemorySaver()
+                    message,
+                    session_id=session,
+                    customer_id=customer_id,
+                    db=db,
+                    checkpointer=MemorySaver(),
                 ):
                     summary = json.dumps(event.state_snapshot, default=str)[:120]
                     print(f"[{event.node_name}] {summary}")
@@ -67,7 +76,7 @@ async def main(
         graph = build_graph(checkpointer=MemorySaver())
         # Pass db via configurable for retrieval_node and answer_node injection
         config = {"configurable": {"thread_id": session, "db": db}}
-        initial_state = make_initial_state(message, session_id=session)
+        initial_state = make_initial_state(message, session_id=session, customer_id=customer_id)
 
         try:
             final_state = await graph.ainvoke(initial_state, config=config)
@@ -99,13 +108,19 @@ async def main(
             sys.exit(1)
 
 
-async def _call_api(message: str, stream: bool = False, session: str = "debug-session"):
+async def _call_api(
+    message: str,
+    stream: bool = False,
+    session: str = "debug-session",
+    customer_id: str = "cli-debug-user",
+):
     """Call the agent via HTTP API (new Week 3 endpoint).
 
     Args:
         message: User query
         stream: Whether to use streaming SSE endpoint
         session: Session ID
+        customer_id: Customer ID for memory scoping
     """
     import httpx
 
@@ -120,7 +135,7 @@ async def _call_api(message: str, stream: bool = False, session: str = "debug-se
                 async with client.stream(
                     "POST",
                     f"{api_base}/agent/stream",
-                    json={"message": message, "session_id": session},
+                    json={"message": message, "session_id": session, "customer_id": customer_id},
                 ) as response:
                     if response.status_code != 200:
                         print(f"[ERROR] API returned {response.status_code}")
@@ -138,7 +153,7 @@ async def _call_api(message: str, stream: bool = False, session: str = "debug-se
                 # Non-stream mode: POST /agent/query
                 response = await client.post(
                     f"{api_base}/agent/query",
-                    json={"message": message, "session_id": session},
+                    json={"message": message, "session_id": session, "customer_id": customer_id},
                 )
                 if response.status_code != 200:
                     print(f"[ERROR] API returned {response.status_code}: {response.text}")
@@ -198,6 +213,11 @@ if __name__ == "__main__":
         help="Session ID (UUID). Defaults to a new UUID.",
     )
     parser.add_argument(
+        "--customer-id",
+        default="cli-debug-user",
+        help="Customer ID for memory scoping. Defaults to 'cli-debug-user'.",
+    )
+    parser.add_argument(
         "--api",
         action="store_true",
         help="Call via HTTP API instead of direct invocation",
@@ -206,4 +226,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     setup_logging()  # OTEL → Phoenix + instrumentors (same as API)
-    asyncio.run(main(args.message, stream=args.stream, session=args.session, api=args.api))
+    asyncio.run(
+        main(
+            args.message,
+            stream=args.stream,
+            session=args.session,
+            customer_id=args.customer_id,
+            api=args.api,
+        )
+    )
