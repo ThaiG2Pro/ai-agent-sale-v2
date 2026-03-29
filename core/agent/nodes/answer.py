@@ -148,11 +148,20 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
                 f"Lý do: {state['hitl_rejection_reason']}. "
                 "Nếu khách hỏi về lý do từ chối, hãy giải thích rõ ràng và đề xuất hỗ trợ."
             )
+
+        # T086: Add memory context from previous conversations if available
+        memory_note = ""
+        if state.get("memory_context") and len(state["memory_context"]) > 0:
+            memory_context_text = "\n".join(
+                f"- {ctx.get('summary', ctx.get('text', ''))}" for ctx in state["memory_context"]
+            )
+            memory_note = f"\n[Ngữ cảnh từ các cuộc hội thoại trước]:\n{memory_context_text}"
+
         system_prompt = (
             "Bạn là trợ lý bán hàng AI chuyên nghiệp. "
             "Trả lời bằng tiếng Việt, thân thiện và hữu ích. "
             "Chỉ dùng thông tin từ context được cung cấp. "
-            f"Nếu không có thông tin phù hợp, nói rõ điều đó.{rejection_note}"
+            f"Nếu không có thông tin phù hợp, nói rõ điều đó.{rejection_note}{memory_note}"
         )
 
     if state.get("intent") == "SMALLTALK":
