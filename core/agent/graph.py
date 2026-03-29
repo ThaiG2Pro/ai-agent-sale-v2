@@ -22,6 +22,7 @@ from core.agent.nodes.confidence import _route_after_confidence, confidence_node
 from core.agent.nodes.customer_support import customer_support_node
 from core.agent.nodes.escalation import escalation_node
 from core.agent.nodes.hitl_guard import hitl_guard_node
+from core.agent.nodes.memory_retrieval import memory_retrieval_node
 from core.agent.nodes.order_execution import order_execution_node
 from core.agent.nodes.queue_consumer import queue_consumer_node
 from core.agent.nodes.retrieval import retrieval_node
@@ -33,6 +34,7 @@ from core.agent.state import AgentState, NodeStreamEvent
 GRAPH_NODES = {
     "router_node",
     "retrieval_node",
+    "memory_retrieval_node",
     "confidence_node",
     "escalation_node",
     "answer_node",
@@ -77,6 +79,7 @@ def build_graph(checkpointer=None):
     # Add all nodes
     builder.add_node("router_node", router_node)
     builder.add_node("retrieval_node", retrieval_node)
+    builder.add_node("memory_retrieval_node", memory_retrieval_node)
     builder.add_node("confidence_node", confidence_node)
     builder.add_node("escalation_node", escalation_node)
     builder.add_node("answer_node", answer_node)
@@ -97,14 +100,18 @@ def build_graph(checkpointer=None):
         _route_after_router,
         {
             "retrieval_node": "retrieval_node",
+            "memory_retrieval_node": "memory_retrieval_node",
             "escalation_node": "escalation_node",
             "answer_node": "answer_node",
             "hitl_guard_node": "hitl_guard_node",
         },
     )
 
-    # retrieval_node → confidence_node
-    builder.add_edge("retrieval_node", "confidence_node")
+    # retrieval_node → memory_retrieval_node (T136: inject past context before confidence)
+    builder.add_edge("retrieval_node", "memory_retrieval_node")
+
+    # memory_retrieval_node → confidence_node (T136: continue to confidence scoring)
+    builder.add_edge("memory_retrieval_node", "confidence_node")
 
     # confidence_node → escalation_node OR hitl_guard_node OR answer_node (conditional, T051)
     builder.add_conditional_edges(

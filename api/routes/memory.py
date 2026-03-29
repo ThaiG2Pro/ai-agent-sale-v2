@@ -3,6 +3,7 @@
 Why this exists: Expose intent tracking for human operators to manage leads.
 What it does: GET single intent, LIST intents with filters, UPDATE status.
 Admin-only: Requires X-Admin-Key header (FR-008a).
+Phase 7d (T138-T139): Semantic memory endpoint for cross-session retrieval.
 """
 
 from __future__ import annotations
@@ -10,7 +11,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import and_, func, select
 
 from models.schema import IntentTracking
 from services.database import get_db
@@ -58,6 +60,29 @@ class PaginatedIntentList(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class SemanticMemoryResult(BaseModel):
+    """Single semantic memory result (T139)."""
+
+    summary_id: str
+    summary_text: str
+    thread_id: str
+    similarity_score: float = Field(..., ge=0.0, le=1.0)
+
+
+class SemanticMemoryResponse(BaseModel):
+    """Response schema for semantic memory endpoint (T139).
+
+    Includes active/stale counts and top-K results for dashboard.
+    """
+
+    customer_id: str
+    active_count: int = Field(..., ge=0, description="Number of active embeddings")
+    stale_count: int = Field(..., ge=0, description="Number of stale embeddings")
+    results: list[SemanticMemoryResult] = Field(
+        default_factory=list, description="Top-K semantic memory results"
+    )
 
 
 # === Dependencies ===
@@ -146,7 +171,7 @@ async def list_intents(
         401: Unauthorized (missing/invalid admin key)
         400: Invalid filter values
     """
-    from sqlalchemy import and_, func, select
+    from sqlalchemy import func, select
 
     # Build filter conditions
     conditions = []
@@ -232,3 +257,225 @@ async def update_intent_status(
             status_code=409,
             detail="Version conflict: stale expected_version",
         ) from err
+
+
+@router.get("/semantic/{customer_id}", response_model=SemanticMemoryResponse)
+async def get_semantic_memory(
+    customer_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SemanticMemoryResponse:
+    """Get semantic memory for customer (T138-T139).
+
+    Retrieve active semantic memory (summaries) and embeddings for a customer.
+    Includes counts of active/stale embeddings.
+
+    Functional Requirements:
+    - FR-009: Retrieve semantic memory for context injection
+    - FR-008b: Strict customer_id isolation (no cross-customer leakage)
+
+    Args:
+        customer_id: Customer identifier (must start with "cust_")
+        db: Async database session
+
+    Returns:
+        Semantic memory response with active/stale counts and top results
+
+    Raises:
+        HTTPException: 400 if customer_id invalid, 500 if DB error
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        if not customer_id or not customer_id.startswith("cust_"):
+            raise HTTPException(status_code=400, detail="Invalid customer_id format")
+
+        from models.memory import SemanticMemory
+        from services.memory.semantic_memory import SemanticMemoryService
+
+        service = SemanticMemoryService()
+
+        # Retrieve semantic memory for customer (T123)
+        results = await service.retrieve(
+            customer_id=customer_id,
+            query="",  # Empty query to get all active embeddings
+            db=db,
+            top_k=10,  # Return top 10 for dashboard visibility
+            min_score=0.0,  # No threshold for listing
+        )
+
+        # T139: Count active/stale embeddings
+        stmt_active = select(func.count(SemanticMemory.id)).where(
+            SemanticMemory.customer_id == customer_id, SemanticMemory.status == "ACTIVE"
+        )
+        result_active = await db.execute(stmt_active)
+        active_count = result_active.scalar() or 0
+
+        # Count stale
+        stmt_stale = select(func.count(SemanticMemory.id)).where(
+            SemanticMemory.customer_id == customer_id, SemanticMemory.status == "STALE"
+        )
+        result_stale = await db.execute(stmt_stale)
+        stale_count = result_stale.scalar() or 0
+
+        # Map results to response schema
+        response_results = [
+            SemanticMemoryResult(
+                summary_id=r.summary_id,
+                summary_text=r.summary_text,
+                thread_id=r.session_id,
+                similarity_score=r.similarity_score,
+            )
+            for r in results
+        ]
+
+        logger.debug(
+            "Semantic memory retrieved",
+            extra={
+                "customer_id": customer_id,
+                "active_count": active_count,
+                "stale_count": stale_count,
+                "results_count": len(response_results),
+            },
+        )
+
+        return SemanticMemoryResponse(
+            customer_id=customer_id,
+            active_count=active_count,
+            stale_count=stale_count,
+            results=response_results,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "Semantic memory retrieval failed",
+            extra={
+                "customer_id": customer_id,
+                "error": str(e),
+            },
+        )
+        raise HTTPException(status_code=500, detail="Semantic memory retrieval failed") from e
+
+
+@router.delete("/customer/{customer_id}")
+async def delete_customer_memory(
+    customer_id: str,
+    confirm: Annotated[bool, Query()] = False,
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
+    _admin: Annotated[bool, Depends(require_admin_key)] = True,
+) -> dict:
+    """Delete all customer memory (RTBF - Right to be Forgotten) (T144-T145).
+
+    Cascade delete: IntentTracking → ConversationSummaries → SemanticMemory.
+    Requires confirm=true to proceed (safety check for accidental deletes).
+    Audit trail via structured logging.
+
+    Functional Requirements:
+    - FR-019: Right to be forgotten / data deletion
+    - FR-001b: Audit trail of deletions (via observability/logging)
+
+    Args:
+        customer_id: Customer identifier
+        confirm: Safety confirmation flag (must be true)
+        db: Async database session
+        _admin: Admin authorization check
+
+    Returns:
+        Deletion report with counts of deleted records
+
+    Raises:
+        HTTPException: 400 if confirm=false, 401 if unauthorized, 500 if DB error
+    """
+    import logging
+    from datetime import datetime
+
+    from models.schema import ConversationSummary, IntentTracking, SemanticMemory
+
+    logger = logging.getLogger(__name__)
+
+    if not confirm:
+        raise HTTPException(
+            status_code=400, detail="confirm=true required to delete customer memory (RTBF)"
+        )
+
+    if not customer_id or not customer_id.startswith("cust_"):
+        raise HTTPException(status_code=400, detail="Invalid customer_id format")
+
+    try:
+        # T145: Transactional cascade delete
+        deleted_counts = {
+            "intent_tracking": 0,
+            "conversation_summaries": 0,
+            "semantic_memory": 0,
+        }
+
+        # Delete IntentTracking
+        stmt_intent = select(func.count(IntentTracking.id)).where(
+            IntentTracking.customer_id == customer_id
+        )
+        result = await db.execute(stmt_intent)
+        deleted_counts["intent_tracking"] = result.scalar() or 0
+
+        stmt = select(IntentTracking).where(IntentTracking.customer_id == customer_id)
+        rows = (await db.execute(stmt)).scalars().all()
+        for row in rows:
+            await db.delete(row)
+
+        # Delete ConversationSummaries
+        stmt_summary = select(func.count(ConversationSummary.id)).where(
+            ConversationSummary.customer_id == customer_id
+        )
+        result = await db.execute(stmt_summary)
+        deleted_counts["conversation_summaries"] = result.scalar() or 0
+
+        stmt = select(ConversationSummary).where(ConversationSummary.customer_id == customer_id)
+        rows = (await db.execute(stmt)).scalars().all()
+        for row in rows:
+            await db.delete(row)
+
+        # Delete SemanticMemory
+        stmt_semantic = select(func.count(SemanticMemory.id)).where(
+            SemanticMemory.customer_id == customer_id
+        )
+        result = await db.execute(stmt_semantic)
+        deleted_counts["semantic_memory"] = result.scalar() or 0
+
+        stmt = select(SemanticMemory).where(SemanticMemory.customer_id == customer_id)
+        rows = (await db.execute(stmt)).scalars().all()
+        for row in rows:
+            await db.delete(row)
+
+        # Commit transaction
+        await db.commit()
+
+        logger.info(
+            "Customer memory deleted (RTBF)",
+            extra={
+                "customer_id": customer_id,
+                "deleted_counts": deleted_counts,
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+
+        return {
+            "customer_id": customer_id,
+            "deleted": deleted_counts,
+            "status": "success",
+        }
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(
+            "Customer memory deletion failed",
+            extra={
+                "customer_id": customer_id,
+                "error": str(e),
+            },
+        )
+        raise HTTPException(status_code=500, detail="Customer memory deletion failed") from e

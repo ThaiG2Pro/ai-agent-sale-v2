@@ -20,7 +20,9 @@ async def test_router_node_info_query():
     Verify Command.goto == "retrieval_node" and state update.
     """
     # Create initial state
-    initial_state = make_initial_state("Giá sản phẩm X là bao nhiêu?", "test-session-001")
+    initial_state = make_initial_state(
+        "Giá sản phẩm X là bao nhiêu?", "test-session-001", "cust_001"
+    )
 
     # Mock litellm.acompletion
     with patch("litellm.acompletion") as mock_completion:
@@ -57,7 +59,7 @@ async def test_router_node_complaint():
     Mock litellm to return COMPLAINT classification.
     Verify Command.goto == "escalation_node".
     """
-    initial_state = make_initial_state("Tôi muốn khiếu nại", "test-session-002")
+    initial_state = make_initial_state("Tôi muốn khiếu nại", "test-session-002", "cust_001")
 
     with patch("litellm.acompletion") as mock_completion:
         mock_message = AsyncMock()
@@ -89,7 +91,7 @@ async def test_router_node_smalltalk():
     Mock litellm to return SMALLTALK.
     Verify Command.goto == "answer_node" (no retrieval).
     """
-    initial_state = make_initial_state("Xin chào!", "test-session-003")
+    initial_state = make_initial_state("Xin chào!", "test-session-003", "cust_001")
 
     with patch("litellm.acompletion") as mock_completion:
         mock_message = AsyncMock()

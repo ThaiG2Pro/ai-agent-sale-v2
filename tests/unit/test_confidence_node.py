@@ -27,7 +27,7 @@ async def test_confidence_node_fused_score_with_reranker(mock_config):
     Expected: confidence_score ≈ (1-a)*0.8 + a*0.9 = 0.87
     where a=0.7 (AGENT_ALPHA): (1-0.7)*0.8 + 0.7*0.9 = 0.24 + 0.63 = 0.87
     """
-    state = make_initial_state("Test query", "session-001")
+    state = make_initial_state("Test query", "session-001", "cust_001")
     state["similarity_score"] = 0.8
     state["rerank_score"] = 0.9
     state["declined"] = False
@@ -47,7 +47,7 @@ async def test_confidence_node_fused_score_no_reranker(mock_config):
     Given: similarity_score=0.75, rerank_score=None
     Expected: confidence_score == 0.75 (fallback to similarity)
     """
-    state = make_initial_state("Test query", "session-002")
+    state = make_initial_state("Test query", "session-002", "cust_001")
     state["similarity_score"] = 0.75
     state["rerank_score"] = None
     state["declined"] = False
@@ -66,7 +66,7 @@ async def test_confidence_node_layer1_fast_path(mock_config):
     Given: declined=True (from retrieval node, Layer 1)
     Expected: Return immediately without fusion computation
     """
-    state = make_initial_state("Test query", "session-003")
+    state = make_initial_state("Test query", "session-003", "cust_001")
     state["similarity_score"] = 0.5
     state["rerank_score"] = 0.9
     state["declined"] = True  # Already declined at Layer 1
@@ -85,7 +85,7 @@ async def test_confidence_node_layer2_threshold(mock_config):
     Given: similarity=0.60, rerank=None, no previous decline
     Expected: confidence_score=0.60, but declined=True (below 0.70 threshold)
     """
-    state = make_initial_state("Test query", "session-004")
+    state = make_initial_state("Test query", "session-004", "cust_001")
     state["similarity_score"] = 0.60
     state["rerank_score"] = None
     state["declined"] = False
@@ -102,7 +102,7 @@ def test_route_after_confidence_info_query_borderline():
     Given: intent=INFO_QUERY, similarity=0.6 (< 0.70 threshold), not pre-declined
     Expected: Route to escalation_node (FR-007 borderline escalation)
     """
-    state = make_initial_state("Test query", "session-005")
+    state = make_initial_state("Test query", "session-005", "cust_001")
     state["intent"] = "INFO_QUERY"
     state["similarity_score"] = 0.6
     state["declined"] = False
@@ -118,7 +118,7 @@ def test_route_after_confidence_accepted():
     Given: intent=PRICING, similarity=0.85 (high)
     Expected: Route to answer_node (proceed with response)
     """
-    state = make_initial_state("Test query", "session-006")
+    state = make_initial_state("Test query", "session-006", "cust_001")
     state["intent"] = "PRICING"
     state["similarity_score"] = 0.85
     state["declined"] = False
@@ -134,7 +134,7 @@ def test_route_after_confidence_declined():
     Given: declined=True (Layer 1 or Layer 2)
     Expected: Route to answer_node (return decline message)
     """
-    state = make_initial_state("Test query", "session-007")
+    state = make_initial_state("Test query", "session-007", "cust_001")
     state["declined"] = True
 
     route = _route_after_confidence(state)
@@ -148,7 +148,7 @@ def test_route_after_confidence_info_query_high_confidence():
     Given: intent=INFO_QUERY, similarity=0.8 (high)
     Expected: Route to answer_node (not borderline)
     """
-    state = make_initial_state("Test query", "session-008")
+    state = make_initial_state("Test query", "session-008", "cust_001")
     state["intent"] = "INFO_QUERY"
     state["similarity_score"] = 0.8
     state["declined"] = False
@@ -164,7 +164,7 @@ def test_route_after_confidence_info_query_high_confidence():
 @pytest.mark.asyncio
 async def test_confidence_node_layer2_guard_fires(mock_config):
     """T073: Layer 2 guard fires for similarity=0.55 (below 0.70 threshold)."""
-    state = make_initial_state("Test query", "session-009")
+    state = make_initial_state("Test query", "session-009", "cust_001")
     state["similarity_score"] = 0.55
     state["rerank_score"] = None
     state["declined"] = False
@@ -178,7 +178,7 @@ async def test_confidence_node_layer2_guard_fires(mock_config):
 @pytest.mark.asyncio
 async def test_confidence_node_accepted(mock_config):
     """T074: similarity=0.85 → accepted (above 0.70 threshold)."""
-    state = make_initial_state("Test query", "session-010")
+    state = make_initial_state("Test query", "session-010", "cust_001")
     state["similarity_score"] = 0.85
     state["rerank_score"] = None
     state["declined"] = False

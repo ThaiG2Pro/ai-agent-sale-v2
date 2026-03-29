@@ -12,7 +12,7 @@ from core.agent.state import EscalationReasonEnum, make_initial_state
 
 
 def _state(intent: str, secondary_intents: list[str] | None = None, **extra) -> dict:
-    s = make_initial_state("test-session", "test message")
+    s = make_initial_state("test-session", "test message", "cust_001")
     s["intent"] = intent
     s["secondary_intents"] = secondary_intents or []
     s.update(extra)
