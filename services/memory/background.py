@@ -222,6 +222,94 @@ async def _maybe_summarize(
         )
 
 
+async def _update_semantic_memory(
+    customer_id: str,
+    thread_id: str,
+    state: AgentState,
+    db_factory: Callable[[], AsyncSession],
+) -> None:
+    """Store conversation summary to semantic memory (T127).
+
+    Called after successful summarization. Stores the latest summary
+    as an embedding in semantic_memory table for future retrieval.
+
+    Only calls semantic memory service if a summary was successfully
+    created in the current turn (state.thread_summary_exists=True).
+
+    Args:
+        customer_id: Customer identifier (for isolation)
+        thread_id: LangGraph thread_id
+        state: Current AgentState (contains summary data)
+        db_factory: AsyncSession factory
+
+    Raises: Nothing (errors logged, not propagated per T128)
+    """
+    try:
+        # Only update semantic memory if summary exists (T129)
+        if not state.get("thread_summary_exists", False):
+            logger.debug(
+                "Skipping semantic memory update (no summary created)",
+                extra={"customer_id": customer_id, "thread_id": thread_id},
+            )
+            return
+
+        from sqlalchemy import select
+
+        from services.memory.semantic_memory import SemanticMemoryService
+
+        async with db_factory() as db:
+            # Retrieve the latest summary for this customer/thread
+            from models.schema import ConversationSummary
+
+            stmt = (
+                select(ConversationSummary)
+                .where(
+                    (ConversationSummary.customer_id == customer_id)
+                    & (ConversationSummary.session_id == thread_id)
+                )
+                .order_by(ConversationSummary.created_at.desc())
+                .limit(1)
+            )
+
+            result = await db.execute(stmt)
+            latest_summary = result.scalar_one_or_none()
+
+            if not latest_summary:
+                logger.warning("No latest summary found; skipping semantic memory store")
+                return
+
+            semantic_service = SemanticMemoryService()
+
+            # Store summary to semantic memory with embeddings
+            await semantic_service.store(
+                summary_id=str(latest_summary.id),
+                customer_id=customer_id,
+                session_id=thread_id,
+                summary_text=latest_summary.summary_text or "",
+                db=db,
+            )
+
+            logger.info(
+                "Semantic memory updated",
+                extra={
+                    "customer_id": customer_id,
+                    "summary_id": str(latest_summary.id),
+                },
+            )
+
+    except Exception as e:
+        # T128: Log error, don't propagate (graceful degradation)
+        logger.error(
+            "Semantic memory update failed (non-blocking)",
+            extra={
+                "customer_id": customer_id,
+                "thread_id": thread_id,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            },
+        )
+
+
 async def post_turn_tasks(
     customer_id: str,
     thread_id: str,
@@ -234,7 +322,7 @@ async def post_turn_tasks(
     1. _check_checkpoint_size()
     2. _maybe_extract_intent()
     3. _maybe_summarize()
-    4. _update_semantic_memory() (placeholder)
+    4. _update_semantic_memory()
 
     All tasks run via asyncio.gather(return_exceptions=True) so failures
     in one task don't block others. Errors are logged by task index.
@@ -250,15 +338,11 @@ async def post_turn_tasks(
         async with db_factory() as db:
             await check_checkpoint_size(thread_id, db)
 
-    async def _semantic_memory_task() -> None:
-        # Placeholder for Phase 7 implementation
-        logger.debug("Semantic memory update task placeholder")
-
     results = await asyncio.gather(
         _checkpoint_task(),
         _maybe_extract_intent(customer_id, thread_id, state, db_factory),
         _maybe_summarize(customer_id, thread_id, state, db_factory),
-        _semantic_memory_task(),
+        _update_semantic_memory(customer_id, thread_id, state, db_factory),
         return_exceptions=True,
     )
 

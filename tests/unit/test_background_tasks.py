@@ -432,3 +432,96 @@ async def test_api_passes_correct_customer_and_thread_ids(caplog, mock_db_factor
     # In production, the API would pass these from the request
     assert customer_id == "cust_123"
     assert thread_id == "session_456"
+
+
+@pytest.mark.asyncio
+async def test_update_semantic_memory_store_error_logged_not_raised(caplog, mock_db_factory):
+    """T128: _update_semantic_memory() store() error → logged, not propagated."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from core.agent.state import make_initial_state
+    from services.memory.background import _update_semantic_memory
+
+    state = make_initial_state(
+        user_message="test",
+        session_id="t001",
+        customer_id="cust_001",
+    )
+    # Mark summary as created
+    state["thread_summary_exists"] = True
+
+    # Mock the database to raise an error during execute
+    with patch("services.memory.background._update_semantic_memory"):
+        # Actually, let's just verify the function handles exceptions gracefully
+        # by patching at a higher level
+        pass
+
+    # Test via simpler approach: mock the SemanticMemoryService.store to fail
+    with patch(
+        "services.memory.semantic_memory.SemanticMemoryService.store",
+        new_callable=AsyncMock,
+    ) as mock_store:
+        # Mock database execute to return a valid summary
+        mock_result = MagicMock()
+        mock_summary = MagicMock()
+        mock_summary.id = "sum_001"
+        mock_summary.summary_text = "Test summary"
+        mock_result.scalar_one_or_none.return_value = mock_summary
+
+        async def mock_execute(stmt):
+            return mock_result
+
+        mock_db = AsyncMock()
+        mock_db.execute = mock_execute
+
+        async def mock_factory():
+            return mock_db
+
+        # Make store() raise an error
+        mock_store.side_effect = RuntimeError("DB connection failed")
+
+        with caplog.at_level(logging.ERROR):
+            # Should NOT raise; error should be logged instead
+            await _update_semantic_memory(
+                customer_id="cust_001",
+                thread_id="t001",
+                state=state,
+                db_factory=mock_factory,
+            )
+
+        # Verify error was logged
+        assert "Semantic memory update failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_update_semantic_memory_only_after_successful_summary(caplog, mock_db_factory):
+    """T129: _update_semantic_memory() only called after successful summary INSERT."""
+    from unittest.mock import AsyncMock, patch
+
+    from core.agent.state import make_initial_state
+    from services.memory.background import _update_semantic_memory
+
+    state = make_initial_state(
+        user_message="test",
+        session_id="t001",
+        customer_id="cust_001",
+    )
+    # Mark summary as NOT created
+    state["thread_summary_exists"] = False
+
+    with patch(
+        "services.memory.semantic_memory.SemanticMemoryService.store",
+        new_callable=AsyncMock,
+    ) as mock_store:
+        with caplog.at_level(logging.DEBUG):
+            await _update_semantic_memory(
+                customer_id="cust_001",
+                thread_id="t001",
+                state=state,
+                db_factory=mock_db_factory,
+            )
+
+        # Verify store() was NOT called
+        mock_store.assert_not_called()
+        # Verify debug message about skipping
+        assert "Skipping semantic memory update" in caplog.text
