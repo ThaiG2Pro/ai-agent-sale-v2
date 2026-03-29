@@ -27,6 +27,23 @@ class IntentEnum(StrEnum):
     SMALLTALK = "SMALLTALK"
     AVAILABILITY = "AVAILABILITY"
     ORDER_PLACEMENT = "ORDER_PLACEMENT"
+    FOLLOW_UP = "FOLLOW_UP"  # Week 5: low-signal follow-up (e.g., "Ok")
+    OTHER = "OTHER"  # Week 5: unclassified intent
+
+
+# Week 5: Intent extraction signal gating (FR-011)
+SKIP_INTENT_EXTRACTION: frozenset[IntentEnum] = frozenset(
+    {IntentEnum.FOLLOW_UP, IntentEnum.OTHER, IntentEnum.SMALLTALK}
+)
+
+
+class UrgencyLevel(StrEnum):
+    """Customer urgency levels extracted from conversation (FR-011b)."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    UNKNOWN = "UNKNOWN"
 
 
 class HITLReasonEnum(StrEnum):
@@ -84,6 +101,31 @@ class EscalationDecision(BaseModel):
     selected_model: str
 
 
+# Week 5: Pydantic models for memory (FR-004, FR-011b)
+class ConversationSummaryOutput(BaseModel):
+    """Structured summary of a conversation thread (FR-004, FR-011b)."""
+
+    products_discussed: list[str] = Field(default_factory=list)
+    customer_preference: str | None = None
+    budget_stated: str | None = None
+    open_questions: list[str] = Field(default_factory=list)
+    summary_model: str  # e.g., "ollama/qwen3:0.6b" for audit trail
+
+    model_config = ConfigDict(strict=True)
+
+
+class SalesIntentExtraction(BaseModel):
+    """Extracted sales intent fields from conversation (FR-011b)."""
+
+    budget_range: str | None = None
+    urgency_level: UrgencyLevel = UrgencyLevel.UNKNOWN
+    product_interest: list[str] = Field(default_factory=list)
+    decision_timeline: str | None = None
+    contact_preference: str | None = None
+
+    model_config = ConfigDict(strict=True)
+
+
 class TraceMetadata(BaseModel):
     """Metadata structure for model_trace.metadata_ JSONB (audit trail)."""
 
@@ -136,6 +178,12 @@ class AgentState(TypedDict):
     cached_answer: str | None  # Pre-generated answer from L1/L2 cache hit (skip LLM)
     canonical_query: str | None  # Normalized query text for cache write
     query_vector: list | None  # Embedded query vector for L2 cache write
+    # Week 5: Memory fields (FR-001, FR-008, FR-011b)
+    customer_id: str  # Cross-session customer identifier (e.g., telegram_user_id)
+    memory_context: list[dict]  # Top-K retrieved past summaries [{summary, score, thread_id}, ...]
+    memory_retrieval_scores: list[float]  # Cosine similarity scores for each retrieved summary
+    thread_summary_exists: bool  # True if a summary exists for this session_id
+    sales_intent_skipped: bool  # True if intent extraction was skipped (low-signal turn)
 
 
 class NodeStreamEvent(BaseModel):
@@ -150,12 +198,24 @@ class NodeStreamEvent(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-def make_initial_state(user_message: str, session_id: str) -> AgentState:
+def make_initial_state(user_message: str, session_id: str, customer_id: str) -> AgentState:
     """Factory for creating initial AgentState with safe defaults (T054).
 
     All boolean flags MUST be explicitly False (not None or falsy).
     Ensures no undefined state fields reach the graph.
+
+    Args:
+        user_message: Customer's input message
+        session_id: LangGraph thread_id (e.g., "telegram:12345")
+        customer_id: Cross-session customer identifier (e.g., "12345")
+
+    Raises:
+        TypeError: If customer_id is not provided (required for memory scoping)
+        ValueError: If customer_id is empty string (no blank identifiers)
     """
+    if not customer_id:
+        raise ValueError("customer_id cannot be empty (must be non-blank)")
+
     return {
         "session_id": session_id,
         "user_message": user_message,
@@ -187,4 +247,10 @@ def make_initial_state(user_message: str, session_id: str) -> AgentState:
         "cached_answer": None,
         "canonical_query": None,
         "query_vector": None,
+        # Week 5: Memory defaults
+        "customer_id": customer_id,
+        "memory_context": [],
+        "memory_retrieval_scores": [],
+        "thread_summary_exists": False,
+        "sales_intent_skipped": False,
     }

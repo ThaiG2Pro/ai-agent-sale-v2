@@ -70,6 +70,16 @@ class Settings(BaseSettings):
     HITL_COST_THRESHOLD_TOKENS: int = Field(default=8000, ge=100)
     SUPPORT_CONTACT_LINK: str = "https://t.me/support_bot"
 
+    # Week 5: Memory & Persistence Configuration
+    MEMORY_SUMMARY_THRESHOLD: int = Field(default=20, ge=1)
+    MEMORY_RELEVANCE_THRESHOLD: float = Field(default=0.75, ge=0.0, le=1.0)
+    MEMORY_TOP_K: int = Field(default=3, ge=1, le=100)
+    CHECKPOINT_SIZE_WARN_BYTES: int = Field(default=1_048_576, ge=65536)  # 1MB default
+    CHECKPOINT_RETENTION_DAYS: int = Field(default=90, ge=1, le=365)
+    MEMORY_MERGE_PLATFORMS: bool = True  # One customer across Telegram + Web uses merged memory
+    INTENT_LOCK_MAX_RETRIES: int = Field(default=3, ge=1, le=10)
+    INTENT_LOCK_RETRY_BACKOFF_MS: list[int] = [50, 100, 200]  # Exponential backoff sequence
+
     # Telegram Configuration
     TELEGRAM_BOT_TOKEN: str = "your_bot_token_here"
     TELEGRAM_CHAT_ID: str = "your_chat_id_here"

@@ -7,6 +7,7 @@ from __future__ import annotations
 import uuid  # noqa: TC003
 from datetime import UTC, datetime
 from decimal import Decimal  # noqa: TC003
+from enum import StrEnum
 from typing import Any, ClassVar
 
 from pgvector.sqlalchemy import Vector
@@ -16,6 +17,25 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from uuid_utils import uuid7
 
 from core.config import settings
+
+
+# Week 5: Enums for memory (FR-008, FR-011b, FR-001b)
+class EmbeddingStatus(StrEnum):
+    """Status of semantic memory embeddings (FR-001b, ADR-005)."""
+
+    ACTIVE = "ACTIVE"  # Current embeddings, used for retrieval
+    STALE = "STALE"  # Embeddings from deprecated model version; marked for re-embedding
+
+
+class IntentStatus(StrEnum):
+    """Status of sales intent tracking (FR-011, FR-011b)."""
+
+    NEW = "NEW"  # Intent extracted but not yet tracked
+    ENGAGED = "ENGAGED"  # Customer actively discussing
+    AWAITING_QUOTE = "AWAITING_QUOTE"  # Customer waiting for pricing
+    CONTACTED = "CONTACTED"  # Follow-up contact attempted
+    CONVERTED = "CONVERTED"  # Customer moved to order
+    LOST = "LOST"  # No further engagement
 
 
 # Article II: Simplicity - Declarative Models
@@ -198,6 +218,132 @@ class ModelTrace(Base):
     )
 
     message: Mapped[ConversationMessage] = relationship(back_populates="traces")
+
+
+# Week 5: Memory Models (Async Persistence & Memory)
+
+
+class ConversationSummary(Base):
+    """Persist thread-level summary of customer intent & context (FR-004, FR-011b)."""
+
+    __tablename__ = "conversation_summaries"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        UniqueConstraint("customer_id", "thread_id", name="uq_summary_customer_thread"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    customer_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    products_discussed: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    customer_preference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    budget_stated: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    open_questions: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    summary_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    summary_version: Mapped[int] = mapped_column(default=1, nullable=False)
+    checkpoint_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class SemanticMemory(Base):
+    """Why this exists: Vectorized storage of past summaries for retrieval (FR-009, ADR-005)."""
+
+    __tablename__ = "semantic_memory"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        Index(
+            "idx_semantic_memory_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
+        ),
+        UniqueConstraint("summary_id", "embedding_model", name="uq_semantic_memory_summary_model"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    customer_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    summary_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.conversation_summaries.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    embedding: Mapped[Vector] = mapped_column(Vector(settings.EMBED_DIMENSION))
+    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    embedding_dimension: Mapped[int] = mapped_column(
+        nullable=False, default=settings.EMBED_DIMENSION
+    )
+    status: Mapped[EmbeddingStatus] = mapped_column(
+        String(20), default=EmbeddingStatus.ACTIVE, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+
+
+class SalesIntentLog(Base):
+    """Why this exists: Audit trail for all intent extraction (FR-011, FR-011b, Article III)."""
+
+    __tablename__ = "sales_intent_logs"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        Index("ix_sales_intent_logs_customer_thread", "customer_id", "thread_id"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    customer_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    primary_intent: Mapped[str] = mapped_column(String(50), nullable=False)
+    secondary_intents: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    urgency_level: Mapped[str] = mapped_column(String(20), nullable=True)
+    budget_range: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    product_interest: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    decision_timeline: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    contact_preference: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    extraction_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    confidence: Mapped[float] = mapped_column(default=0.0, nullable=False)
+    was_skipped: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+
+
+class IntentTracking(Base):
+    """Optimistic locking for intent extraction state (FR-011, FR-011c, Risk U2)."""
+
+    __tablename__ = "intent_tracking"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        UniqueConstraint("customer_id", "thread_id", name="uq_intent_tracking_customer_thread"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    customer_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    status: Mapped[IntentStatus] = mapped_column(
+        String(20), default=IntentStatus.NEW, nullable=False
+    )
+    version: Mapped[int] = mapped_column(
+        default=0, nullable=False
+    )  # Optimistic lock (FR-011c): increment on each update
+    last_updated_by: Mapped[str] = mapped_column(String(50), nullable=False)  # "agent" or "admin"
+    last_intent_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
 
 # Week 4: HITL & Order Models

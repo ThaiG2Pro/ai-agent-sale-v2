@@ -17,7 +17,7 @@ def test_agent_state_imports():
 
 
 def test_intent_enum_values():
-    """Verify IntentEnum has all 8 required values."""
+    """Verify IntentEnum has all 10 required values (Week 4 + Week 5)."""
     required = {
         "INFO_QUERY",
         "PRICING",
@@ -27,6 +27,8 @@ def test_intent_enum_values():
         "SMALLTALK",
         "AVAILABILITY",
         "ORDER_PLACEMENT",
+        "FOLLOW_UP",  # Week 5
+        "OTHER",  # Week 5
     }
     actual = {e.value for e in IntentEnum}
     assert required == actual
@@ -103,6 +105,12 @@ def test_agent_state_fields_complete():
         "canonical_query",
         "query_vector",
         "pending_info_questions",
+        # Week 5 fields
+        "customer_id",
+        "memory_context",
+        "memory_retrieval_scores",
+        "thread_summary_exists",
+        "sales_intent_skipped",
     }
     actual_fields = set(AgentState.__annotations__.keys())
     assert required_fields == actual_fields, (
@@ -124,7 +132,7 @@ def test_intent_enum_serialization():
 
 def test_make_initial_state():
     """Verify make_initial_state() factory creates valid initial state (T054)."""
-    state = make_initial_state("Test query", "test-session-123")
+    state = make_initial_state("Test query", "test-session-123", customer_id="test-cust-1")
 
     # Check type
     assert isinstance(state, dict)
@@ -152,3 +160,40 @@ def test_make_initial_state():
     assert state["rerank_score"] is None
     assert state["model_used"] is None
     assert state["response"] is None
+
+
+def test_make_initial_state_missing_customer_id():
+    """T019: Raises TypeError when customer_id is missing (required positional arg)."""
+    import pytest
+
+    with pytest.raises(TypeError):
+        # Missing required customer_id positional argument
+        make_initial_state(user_message="Hello", session_id="session_1")  # type: ignore
+
+
+def test_make_initial_state_empty_customer_id():
+    """T019: Raises ValueError when customer_id is empty string."""
+    import pytest
+
+    with pytest.raises(ValueError, match="customer_id cannot be empty"):
+        make_initial_state(
+            user_message="Hello",
+            session_id="session_1",
+            customer_id="",
+        )
+
+
+def test_week5_fields_initialized():
+    """T020: All 5 new Week 5 fields initialized with correct defaults."""
+    state = make_initial_state(
+        user_message="Hello",
+        session_id="telegram:12345",
+        customer_id="12345",
+    )
+
+    # Verify 5 new Week 5 fields exist and have correct defaults
+    assert state["customer_id"] == "12345", "customer_id not set correctly"
+    assert state["memory_context"] == [], "memory_context not initialized to empty list"
+    assert state["memory_retrieval_scores"] == [], "memory_retrieval_scores not initialized"
+    assert state["thread_summary_exists"] is False, "thread_summary_exists not False"
+    assert state["sales_intent_skipped"] is False, "sales_intent_skipped not False"

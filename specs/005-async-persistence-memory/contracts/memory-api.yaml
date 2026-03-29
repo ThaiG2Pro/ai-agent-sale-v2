@@ -1,0 +1,388 @@
+openapi: "3.1.0"
+info:
+  title: Memory & Intent API
+  description: |
+    Admin endpoints for inspecting customer memory, sales intent records,
+    and managing customer data deletion (Right to be Forgotten).
+
+    All endpoints require X-Admin-Key authentication.
+    All writes use standard REST semantics.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+
+security:
+  - AdminKeyAuth: []
+
+paths:
+
+  # ─── Intent Tracking ────────────────────────────────────────────────────
+
+  /memory/intent/{customer_id}:
+    get:
+      summary: Get current intent record for a customer
+      description: |
+        Returns the latest IntentTracking record for the given customer_id.
+        Includes all structured sales signals and current CRM status.
+        Used by sales staff before calling a lead (User Story 2).
+      operationId: get_intent_by_customer
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Customer identifier (e.g., Telegram user_id as string)
+      responses:
+        "200":
+          description: Intent record found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentTrackingResponse"
+        "404":
+          description: No intent record for this customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid X-Admin-Key
+
+  /memory/intent/{customer_id}/status:
+    patch:
+      summary: Update CRM status for a customer
+      description: |
+        Admin updates the intent_status (e.g., mark as CONTACTED after calling).
+        Uses optimistic locking — client must provide current version.
+        Records status_change_trigger as "admin" with timestamp (FR-016).
+      operationId: update_intent_status
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntentStatusUpdateRequest"
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentTrackingResponse"
+        "409":
+          description: Optimistic lock conflict — version mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Customer not found
+        "401":
+          description: Missing or invalid X-Admin-Key
+
+  /memory/intents:
+    get:
+      summary: List intent records with filters (admin lead list)
+      description: |
+        Returns paginated list of IntentTracking records.
+        Sortable by urgency + recency. Used by sales managers (User Story 2).
+      operationId: list_intents
+      parameters:
+        - name: urgency_level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [LOW, MEDIUM, HIGH, UNKNOWN]
+          description: Filter by urgency level
+        - name: intent_status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [NEW, ENGAGED, AWAITING_QUOTE, CONTACTED, CONVERTED, LOST]
+          description: Filter by CRM status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of intent records sorted by urgency DESC, last_updated DESC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentListResponse"
+        "401":
+          description: Missing or invalid X-Admin-Key
+
+  # ─── Semantic Memory (debug/admin) ──────────────────────────────────────
+
+  /memory/semantic/{customer_id}:
+    get:
+      summary: List semantic memory entries for a customer
+      description: |
+        Returns stored summary embeddings for a customer. Used for debugging
+        memory retrieval and verifying embedding model governance.
+        Results are ordered by created_at DESC.
+      operationId: list_semantic_memory
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ACTIVE, STALE]
+          description: Filter by embedding status (STALE = pending re-embed after model change)
+      responses:
+        "200":
+          description: List of semantic memory entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SemanticMemoryListResponse"
+        "401":
+          description: Missing or invalid X-Admin-Key
+
+  # ─── Right to be Forgotten (FR-019) ─────────────────────────────────────
+
+  /memory/customer/{customer_id}:
+    delete:
+      summary: Delete all memory data for a customer (Right to be Forgotten)
+      description: |
+        Permanently and transactionally deletes ALL data for the customer:
+        conversation_summaries, semantic_memory, sales_intent_log, intent_tracking.
+        Does NOT delete LangGraph checkpoints or hitl_metadata by default
+        (those require explicit confirm_delete_pending_hitl=true if HITL is pending).
+
+        If any paused HITL session exists for this customer, returns HTTP 409
+        with the list of pending pause_ids.
+        To proceed, re-call with ?confirm_delete_pending_hitl=true.
+
+        Response body includes count of deleted rows per table (audit log).
+      operationId: delete_customer_memory
+      parameters:
+        - name: customer_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: confirm_delete_pending_hitl
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: |
+            Set to true to confirm deletion even if HITL sessions are pending.
+            Abandons all pending HITL pauses before deletion.
+      responses:
+        "200":
+          description: Deletion successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerDeletionResponse"
+        "409":
+          description: Pending HITL sessions found — requires explicit confirmation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingHITLConflictResponse"
+        "404":
+          description: Customer not found (no data to delete)
+        "401":
+          description: Missing or invalid X-Admin-Key
+
+# ─── Components ─────────────────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    AdminKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+
+  schemas:
+
+    IntentTrackingResponse:
+      type: object
+      required: [customer_id, intent_status, urgency_level, version, last_updated]
+      properties:
+        customer_id:
+          type: string
+        session_id:
+          type: string
+          description: Most recent thread_id
+        intent_status:
+          type: string
+          enum: [NEW, ENGAGED, AWAITING_QUOTE, CONTACTED, CONVERTED, LOST]
+        budget_range:
+          type: string
+          nullable: true
+        urgency_level:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, UNKNOWN]
+        product_interest:
+          type: array
+          items:
+            type: string
+        decision_timeline:
+          type: string
+          nullable: true
+        contact_preference:
+          type: string
+          nullable: true
+        version:
+          type: integer
+          description: Current optimistic lock version — required for status updates
+        last_updated:
+          type: string
+          format: date-time
+        status_changed_at:
+          type: string
+          format: date-time
+          nullable: true
+        status_change_trigger:
+          type: string
+          nullable: true
+          enum: [agent, admin, system, null]
+
+    IntentStatusUpdateRequest:
+      type: object
+      required: [new_status, expected_version]
+      properties:
+        new_status:
+          type: string
+          enum: [NEW, ENGAGED, AWAITING_QUOTE, CONTACTED, CONVERTED, LOST]
+        expected_version:
+          type: integer
+          description: Must match current record version (optimistic lock)
+        reason:
+          type: string
+          nullable: true
+
+    IntentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntentTrackingResponse"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    SemanticMemoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+        session_id:
+          type: string
+        model_version:
+          type: string
+          description: e.g. "bge-m3@1024"
+        status:
+          type: string
+          enum: [ACTIVE, STALE]
+        products_discussed:
+          type: array
+          items:
+            type: string
+        budget_stated:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    SemanticMemoryListResponse:
+      type: object
+      properties:
+        customer_id:
+          type: string
+        active_count:
+          type: integer
+        stale_count:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SemanticMemoryEntry"
+
+    CustomerDeletionResponse:
+      type: object
+      properties:
+        customer_id:
+          type: string
+        deleted:
+          type: object
+          properties:
+            conversation_summaries:
+              type: integer
+            semantic_memory:
+              type: integer
+            sales_intent_log:
+              type: integer
+            intent_tracking:
+              type: integer
+        hitl_abandoned_count:
+          type: integer
+          description: Number of pending HITL pauses abandoned before deletion (if confirmed)
+        deleted_at:
+          type: string
+          format: date-time
+
+    PendingHITLConflictResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Cannot delete: pending HITL sessions found"
+        pending_pause_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of pause_ids that must be resolved or explicitly confirmed
+        hint:
+          type: string
+          example: "Re-call with ?confirm_delete_pending_hitl=true to force deletion"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+          nullable: true
