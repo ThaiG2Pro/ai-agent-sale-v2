@@ -117,6 +117,9 @@ async def test_answer_node_with_empty_memory_context():
     state["retrieved_chunks"] = []
     state["model_used"] = "economy-chat"
     state["memory_context"] = []  # Empty — cold start
+    state["declined"] = False
+    state["response"] = None  # Explicitly set to None
+    state["cached_answer"] = None  # Explicitly set to None
 
     config = {"configurable": {}}
     with patch("services.ai.AIGateway.complete", new_callable=AsyncMock) as mock_llm:
@@ -125,8 +128,12 @@ async def test_answer_node_with_empty_memory_context():
         mock_llm.return_value = mock_response
 
         with patch("core.agent.nodes.answer._write_model_trace", new_callable=AsyncMock):
-            await answer_node(state, config)
+            result = await answer_node(state, config)
 
+    # Verify response was generated
+    assert result.get("response") == "Cold start answer"
+    # Verify LLM was called
+    assert mock_llm.called
     # Verify the system prompt does NOT include memory context
     call_args = mock_llm.call_args
     messages = call_args.kwargs.get("messages", [])
@@ -171,3 +178,84 @@ async def test_answer_node_with_multiple_memory_entries():
     assert "monitor" in system_content
     assert "keyboard latency" in system_content
     assert "mechanical switches" in system_content
+
+
+# Week 5: Context Compression Tests (T109-T110)
+
+
+@pytest.mark.asyncio
+async def test_answer_node_compression_with_summary_exists():
+    """T109: thread_summary_exists=True → compress to summary + last 5 messages."""
+    state = make_initial_state(
+        user_message="Any updates?",
+        session_id="t001",
+        customer_id="cust_001",
+    )
+    state["intent"] = "PRICING"
+    state["retrieved_chunks"] = []
+    state["model_used"] = "economy-chat"
+    state["thread_summary_exists"] = True
+    # Simulate 25 memory entries (summary + 24 recent messages)
+    state["memory_context"] = (
+        [{"summary": "Overall conversation summary: customer interested in laptops"}]
+        + [{"text": f"Old message {i}"} for i in range(1, 20)]
+        + [{"text": f"Recent message {i}"} for i in range(20, 26)]
+    )
+
+    config = {"configurable": {}}
+    with patch("services.ai.AIGateway.complete", new_callable=AsyncMock) as mock_llm:
+        mock_response = AsyncMock()
+        mock_response.choices = [AsyncMock(message=AsyncMock(content="Compressed answer"))]
+        mock_llm.return_value = mock_response
+
+        with patch("core.agent.nodes.answer._write_model_trace", new_callable=AsyncMock):
+            await answer_node(state, config)
+
+    # Verify LLM was called with compressed context (≤ 6 items: 1 summary + 5 recent)
+    call_args = mock_llm.call_args
+    messages = call_args.kwargs.get("messages", [])
+    system_content = next((m["content"] for m in messages if m.get("role") == "system"), None)
+
+    assert system_content is not None
+    # Count context items - should have summary + last 5 messages only
+    context_lines = [
+        line
+        for line in system_content.split("\n")
+        if line.strip().startswith("📋") or line.strip().startswith("-")
+    ]
+    assert len(context_lines) <= 6, f"Expected ≤ 6 context items, got {len(context_lines)}"
+    # Verify recent messages are included
+    assert "Recent message" in system_content
+
+
+@pytest.mark.asyncio
+async def test_answer_node_no_compression_without_summary():
+    """T110: thread_summary_exists=False → include all 5 memory entries (no compression)."""
+    state = make_initial_state(
+        user_message="What do you have?",
+        session_id="t001",
+        customer_id="cust_001",
+    )
+    state["intent"] = "INFO_QUERY"
+    state["retrieved_chunks"] = []
+    state["model_used"] = "economy-chat"
+    state["thread_summary_exists"] = False
+    state["memory_context"] = [{"text": f"Memory entry {i}"} for i in range(1, 6)]  # 5 entries
+
+    config = {"configurable": {}}
+    with patch("services.ai.AIGateway.complete", new_callable=AsyncMock) as mock_llm:
+        mock_response = AsyncMock()
+        mock_response.choices = [AsyncMock(message=AsyncMock(content="No compression answer"))]
+        mock_llm.return_value = mock_response
+
+        with patch("core.agent.nodes.answer._write_model_trace", new_callable=AsyncMock):
+            await answer_node(state, config)
+
+    # Verify all 5 memory entries are in system prompt (no compression)
+    call_args = mock_llm.call_args
+    messages = call_args.kwargs.get("messages", [])
+    system_content = next((m["content"] for m in messages if m.get("role") == "system"), None)
+
+    assert system_content is not None
+    for i in range(1, 6):
+        assert f"Memory entry {i}" in system_content
