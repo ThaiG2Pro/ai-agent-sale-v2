@@ -44,6 +44,9 @@ GRAPH_NODES = {
     "customer_support_node",
 }
 
+# Week 5: Graph schema version for checkpoint compatibility (FR-018)
+GRAPH_SCHEMA_VERSION = "005"
+
 
 def build_graph(checkpointer=None):
     """Build LangGraph StateGraph for sales agent (T050).

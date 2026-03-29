@@ -12,8 +12,10 @@ from typing import TYPE_CHECKING, Any
 from fastapi import HTTPException
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
+from pydantic import ValidationError
 from sqlalchemy import select, update
 
+from core.agent.graph import GRAPH_SCHEMA_VERSION
 from models.schema import HITLMetadata, InterruptedSession, QueuedMessage, ReviewAction
 from services.hitl.schemas import ApprovalPayload, ReviewActionCreate
 
@@ -25,6 +27,45 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# ─── Week 5: Checkpoint Durability Helpers (FR-018) ───
+
+
+async def _mark_incompatible(session_id: str, error: Exception, db: AsyncSession) -> None:
+    """Mark checkpoint as INCOMPATIBLE due to schema mismatch (FR-018, T033).
+
+    Logs error details and updates HITLMetadata.status to INCOMPATIBLE
+    if a paused entry exists for this session.
+
+    Args:
+        session_id: Session ID with mismatched checkpoint
+        error: Original deserialization/validation error
+        db: Database session for metadata update
+    """
+    logger.error(
+        "Checkpoint schema mismatch detected",
+        extra={
+            "session_id": session_id,
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+            "graph_schema_version": GRAPH_SCHEMA_VERSION,
+        },
+    )
+
+    # Update HITLMetadata status to INCOMPATIBLE if paused entry exists
+    stmt = (
+        update(HITLMetadata)
+        .where(HITLMetadata.session_id == session_id)
+        .values(status="INCOMPATIBLE")
+    )
+    result = await db.execute(stmt)
+    if result.rowcount > 0:
+        await db.commit()
+        logger.info(
+            "HITLMetadata updated to INCOMPATIBLE",
+            extra={"session_id": session_id, "rows_updated": result.rowcount},
+        )
+
+
 class HITLService:
     @staticmethod
     async def get_session_state(
@@ -33,8 +74,21 @@ class HITLService:
         config: dict[str, Any],
         db: AsyncSession,
     ) -> dict[str, Any]:
-        """Retrieves paused session state and operational metadata (T042)."""
-        state = await graph.aget_state(config)
+        """Retrieves paused session state and operational metadata (T042).
+
+        Wraps aget_state() with error handling for checkpoint schema mismatches
+        (FR-018, T032: KeyError, ValidationError, TypeError → INCOMPATIBLE marked).
+        """
+        # Try to retrieve checkpoint state; catch schema mismatch errors
+        try:
+            state = await graph.aget_state(config)
+        except (KeyError, ValidationError, TypeError) as e:
+            # Schema mismatch detected (e.g., from graph version change)
+            await _mark_incompatible(session_id, e, db)
+            raise HTTPException(
+                status_code=410,  # Gone: checkpoint exists but is incompatible
+                detail=f"Checkpoint schema incompatible (graph version {GRAPH_SCHEMA_VERSION})",
+            ) from e
 
         # Query InterruptedSession for version and escalation_count
         stmt = select(InterruptedSession).where(InterruptedSession.session_id == session_id)

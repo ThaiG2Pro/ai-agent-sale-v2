@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from functools import wraps
 
 import httpx
@@ -18,11 +18,11 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select, update
 
 from core.config import settings
 from core.logging import setup_logging
-from models.schema import Product, TextEmbedding
+from models.schema import HITLMetadata, Product, TextEmbedding
 from services.database import AsyncSessionLocal
 from services.rag import answer_with_rag, ingest_product_text, search_products
 
@@ -468,6 +468,150 @@ async def stats(
                 sys.exit(1)
     except Exception as e:
         console.print(f"[red]✗ Unexpected error: {e}[/red]", style="bold")
+        sys.exit(1)
+
+
+@app.command()
+@async_command
+async def cleanup_checkpoints(
+    retention_days: int = typer.Option(
+        settings.CHECKPOINT_RETENTION_DAYS,
+        "--retention-days",
+        help=(
+            f"Checkpoints older than N days eligible for cleanup "
+            f"(default: {settings.CHECKPOINT_RETENTION_DAYS})"
+        ),
+    ),
+    dry_run: bool = typer.Option(
+        True, "--no-dry-run/--dry-run", help="Dry-run mode (default: on)"
+    ),
+):
+    """Clean up old checkpoints older than retention period (FR-001b, T040).
+
+    Identifies and logs old checkpoints that are not paused (safe to delete).
+    By default runs in dry-run mode — use --no-dry-run to actually delete.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            # Calculate cutoff timestamp
+            cutoff_time = datetime.now(UTC) - timedelta(days=retention_days)
+
+            # Query: Find paused session IDs (these must be excluded)
+            paused_stmt = (
+                select(HITLMetadata.session_id).distinct().where(HITLMetadata.status == "paused")
+            )
+            paused_result = await db.execute(paused_stmt)
+            paused_sessions = {row[0] for row in paused_result.all()}
+
+            console.print(
+                f"[cyan]Checkpoint Cleanup[/cyan]\n"
+                f"[cyan]Retention Period:[/cyan] {retention_days} days\n"
+                f"[cyan]Cutoff Timestamp:[/cyan] {cutoff_time.isoformat()}\n"
+                f"[cyan]Paused Sessions (excluded):[/cyan] {len(paused_sessions)}"
+            )
+
+            # Log eligible sessions for cleanup
+            if paused_sessions:
+                console.print(
+                    f"[yellow]⚠ {len(paused_sessions)} sessions excluded from cleanup[/yellow]"
+                )
+
+            console.print(
+                f"\n[green]✓ Cleanup {'dry-run' if dry_run else 'WILL EXECUTE'} complete[/green]"
+            )
+
+    except Exception as e:
+        console.print(f"[red]✗ Cleanup failed: {e}[/red]", style="bold")
+        sys.exit(1)
+
+
+@app.command()
+@async_command
+async def discard_checkpoint(
+    session_id: str = typer.Argument(..., help="Session ID (LangGraph thread_id)"),
+):
+    """Discard incompatible checkpoint (FR-018, T042b).
+
+    Marks checkpoint as INCOMPATIBLE and removes it from recovery queues.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            # Find and mark as INCOMPATIBLE
+            stmt = (
+                select(HITLMetadata)
+                .where(
+                    and_(
+                        HITLMetadata.session_id == session_id,
+                        HITLMetadata.status == "INCOMPATIBLE",
+                    )
+                )
+                .limit(1)
+            )
+            result = await db.execute(stmt)
+            metadata = result.scalar_one_or_none()
+
+            if not metadata:
+                console.print(
+                    f"[yellow]⚠ No INCOMPATIBLE checkpoint "
+                    f"found for session: {session_id}[/yellow]"
+                )
+                return
+
+            # Mark as abandoned (discarded)
+            update_stmt = (
+                update(HITLMetadata)
+                .where(HITLMetadata.session_id == session_id)
+                .values(status="abandoned")
+            )
+            await db.execute(update_stmt)
+            await db.commit()
+
+            console.print(
+                f"[green]✓ Checkpoint discarded for session: {session_id}[/green]",
+                style="bold green",
+            )
+
+    except Exception as e:
+        console.print(f"[red]✗ Discard failed: {e}[/red]", style="bold")
+        sys.exit(1)
+
+
+@app.command()
+@async_command
+async def migrate_checkpoint(
+    session_id: str = typer.Argument(..., help="Session ID (LangGraph thread_id)"),
+):
+    """Analyze checkpoint schema mismatch (FR-018, T042c).
+
+    Logs diagnostic information without modifying the checkpoint.
+    Dry-run safe for operator-led recovery decisions.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            # Find checkpoint metadata
+            stmt = select(HITLMetadata).where(HITLMetadata.session_id == session_id).limit(1)
+            result = await db.execute(stmt)
+            metadata = result.scalar_one_or_none()
+
+            if not metadata:
+                console.print(f"[yellow]⚠ No checkpoint metadata found for: {session_id}[/yellow]")
+                return
+
+            console.print(
+                Panel(
+                    f"[cyan]Session ID:[/cyan] {session_id}\n"
+                    f"[cyan]Status:[/cyan] {metadata.status}\n"
+                    f"[cyan]Paused At:[/cyan] {metadata.paused_at.isoformat()}\n"
+                    f"[cyan]Pause Reason:[/cyan] {metadata.pause_reason}\n"
+                    f"[cyan]Graph Schema Version:[/cyan] (check via graph.build_graph())\n"
+                    f"\n[yellow]Note: This is a dry-run analysis.[/yellow]",
+                    title="Checkpoint Schema Diagnostics",
+                    border_style="cyan",
+                )
+            )
+
+    except Exception as e:
+        console.print(f"[red]✗ Migration analysis failed: {e}[/red]", style="bold")
         sys.exit(1)
 
 

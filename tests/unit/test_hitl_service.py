@@ -5,9 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from services.hitl.schemas import ReviewActionCreate
-from services.hitl.service import HITLService
+from services.hitl.service import HITLService, _mark_incompatible
 
 
 @pytest.fixture
@@ -89,3 +90,70 @@ async def test_hitl_service_request_edit_no_resume(mock_db, mock_graph, sample_p
     assert result["status"] == "edit_applied"
     assert mock_graph.aupdate_state.called
     assert not mock_graph.ainvoke.called
+
+
+# Week 5: Checkpoint Durability Tests (T034-T035)
+
+
+@pytest.mark.asyncio
+async def test_mark_incompatible_updates_status(mock_db):
+    """T034: _mark_incompatible() sets HITLMetadata.status = INCOMPATIBLE (FR-018)."""
+    session_id = "session-123"
+    error = KeyError("missing_field")
+
+    # Mock the update result
+    mock_result = MagicMock()
+    mock_result.rowcount = 1
+    mock_db.execute.return_value = mock_result
+
+    await _mark_incompatible(session_id, error, mock_db)
+
+    # Verify execute was called with UPDATE statement
+    assert mock_db.execute.called
+    # Verify commit was called (row was updated)
+    assert mock_db.commit.called
+
+
+@pytest.mark.asyncio
+async def test_deserialization_error_marks_incompatible(mock_db, mock_graph):
+    """T035: aget_state() KeyError → INCOMPATIBLE logged, HTTPException raised (FR-018)."""
+    session_id = "session-123"
+
+    # Mock aget_state to raise KeyError (schema mismatch)
+    mock_graph.aget_state.side_effect = KeyError("missing_field_in_checkpoint")
+
+    # Mock database execute for _mark_incompatible update
+    mock_result = MagicMock()
+    mock_result.rowcount = 1
+    mock_db.execute.return_value = mock_result
+
+    with pytest.raises(HTTPException) as exc_info:
+        await HITLService.get_session_state(session_id, mock_graph, {}, mock_db)
+
+    # Verify HTTPException was raised with 410 Gone status
+    assert exc_info.value.status_code == 410
+    # Verify _mark_incompatible was called (via db.execute)
+    assert mock_db.execute.called
+    assert mock_db.commit.called
+
+
+@pytest.mark.asyncio
+async def test_validation_error_marks_incompatible(mock_db, mock_graph):
+    """T035: aget_state() ValidationError → INCOMPATIBLE marked (FR-018)."""
+    session_id = "session-456"
+
+    # Mock aget_state to raise ValidationError
+    mock_graph.aget_state.side_effect = ValidationError.from_exception_data(
+        "AgentState", [{"type": "value_error", "loc": ("field",), "msg": "Invalid state"}]
+    )
+
+    # Mock database execute
+    mock_result = MagicMock()
+    mock_result.rowcount = 1
+    mock_db.execute.return_value = mock_result
+
+    with pytest.raises(HTTPException) as exc_info:
+        await HITLService.get_session_state(session_id, mock_graph, {}, mock_db)
+
+    assert exc_info.value.status_code == 410
+    assert mock_db.execute.called

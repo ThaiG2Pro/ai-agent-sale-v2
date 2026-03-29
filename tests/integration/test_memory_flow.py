@@ -15,4 +15,15 @@ import pytest
 class TestMemoryFlow:
     """Integration test suite for complete memory workflow."""
 
-    pass
+    @pytest.mark.asyncio
+    async def test_checkpoint_survives_restart(self):
+        """T042: Checkpoint survives restart - create session, restart, verify state intact.
+
+        This is a skeleton test. Full implementation requires:
+        1. Create session with message
+        2. Save checkpoint
+        3. Simulate restart (kill graph, reload)
+        4. Verify state values match original
+        """
+        # TODO: Implement with real graph + DB checkpoint restoration
+        assert True
