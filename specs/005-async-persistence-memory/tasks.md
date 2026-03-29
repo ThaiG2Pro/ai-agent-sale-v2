@@ -192,23 +192,23 @@
 
 ### 6a. Summarizer Service
 
-- [ ] T091 [US5] Create `services/memory/summarizer.py` with class `ConversationSummarizer` and docstring (FR-004, Article XI)
-- [ ] T092 [US5] Implement `ConversationSummarizer.should_summarize(message_count: int, has_existing_summary: bool, messages_since_last_summary: int) -> bool` — returns True if `message_count >= MEMORY_SUMMARY_THRESHOLD` AND no summary exists, OR `messages_since_last_summary >= 10`
-- [ ] T093 [US5] Write test in `tests/unit/test_summarizer.py`: `should_summarize(19, False, 19)` → `False`
-- [ ] T094 [US5] Write test: `should_summarize(20, False, 20)` → `True` (first summary at threshold)
-- [ ] T095 [US5] Write test: `should_summarize(30, True, 9)` → `False` (summary exists, not enough new messages)
-- [ ] T096 [US5] Write test: `should_summarize(30, True, 10)` → `True` (re-summarize trigger)
-- [ ] T097 [US5] Implement `ConversationSummarizer.summarize(messages: list, session_id: str) -> ConversationSummaryOutput` in `services/memory/summarizer.py` — LiteLLM call with `model=settings.LIGHT_CHAT_MODEL`, `response_format=ConversationSummaryOutput`
-- [ ] T098 [US5] Write test: `summarize()` mock LiteLLM → `summary_model` field equals `settings.LIGHT_CHAT_MODEL` in returned output (Article XII: assert economy model used)
-- [ ] T099 [US5] Write test: `summarize()` with mock conversation mentioning "máy lạnh" → `products_discussed` contains that product
-- [ ] T100 [US5] Write test: `summarize()` with mock conversation where customer asked "giá bao nhiêu?" (unanswered) → `open_questions` not empty
-- [ ] T101 [US5] Write test: `summarize()` with empty messages list → raises `ValueError` (guard against empty input)
-- [ ] T102 [US5] Implement `ConversationSummarizer.save_summary(summary: ConversationSummaryOutput, session_id: str, customer_id: str, turn_count: int, db: AsyncSession)` — INSERT to `conversation_summaries`
-- [ ] T103 [US5] Write test: `save_summary()` — inserted row has correct `session_id`, `customer_id`, `turn_count_at_summary`, `summary_model`
-- [ ] T104 [US5] Implement `_maybe_summarize(session_id, customer_id, state, db_factory)` async helper in `services/memory/background.py`: orchestrates `should_summarize` → `summarize` → `save_summary` → chain `_update_semantic_memory`
-- [ ] T105 [US5] Write test: `_maybe_summarize()` — message count below threshold → neither `summarize()` nor `save_summary()` called
-- [ ] T106 [US5] Write test: `_maybe_summarize()` — LiteLLM raises `ConnectionError` → error logged, function returns `None`, no exception propagated (FR-006 graceful degradation)
-- [ ] T107 [US5] Write test: `_maybe_summarize()` — DB INSERT fails → error logged, `_update_semantic_memory` NOT called (no dangling embedding)
+- [x] T091 [US5] Create `services/memory/summarizer.py` with class `ConversationSummarizer` and docstring (FR-004, Article XI)
+- [x] T092 [US5] Implement `ConversationSummarizer.should_summarize(message_count: int, has_existing_summary: bool, messages_since_last_summary: int) -> bool` — returns True if `message_count >= MEMORY_SUMMARY_THRESHOLD` AND no summary exists, OR `messages_since_last_summary >= 10`
+- [x] T093 [US5] Write test in `tests/unit/test_summarizer.py`: `should_summarize(19, False, 19)` → `False`
+- [x] T094 [US5] Write test: `should_summarize(20, False, 20)` → `True` (first summary at threshold)
+- [x] T095 [US5] Write test: `should_summarize(30, True, 9)` → `False` (summary exists, not enough new messages)
+- [x] T096 [US5] Write test: `should_summarize(30, True, 10)` → `True` (re-summarize trigger)
+- [x] T097 [US5] Implement `ConversationSummarizer.summarize(messages: list, session_id: str) -> ConversationSummaryOutput` in `services/memory/summarizer.py` — LiteLLM call with `model=settings.LIGHT_CHAT_MODEL`, `response_format=ConversationSummaryOutput`
+- [x] T098 [US5] Write test: `summarize()` mock LiteLLM → `summary_model` field equals `settings.LIGHT_CHAT_MODEL` in returned output (Article XII: assert economy model used)
+- [x] T099 [US5] Write test: `summarize()` with mock conversation mentioning "máy lạnh" → `products_discussed` contains that product
+- [x] T100 [US5] Write test: `summarize()` with mock conversation where customer asked "giá bao nhiêu?" (unanswered) → `open_questions` not empty
+- [x] T101 [US5] Write test: `summarize()` with empty messages list → raises `ValueError` (guard against empty input)
+- [x] T102 [US5] Implement `ConversationSummarizer.save_summary(summary: ConversationSummaryOutput, session_id: str, customer_id: str, turn_count: int, db: AsyncSession)` — INSERT to `conversation_summaries`
+- [x] T103 [US5] Write test: `save_summary()` — inserted row has correct `session_id`, `customer_id`, `turn_count_at_summary`, `summary_model`
+- [x] T104 [US5] Implement `_maybe_summarize(session_id, customer_id, state, db_factory)` async helper in `services/memory/background.py`: orchestrates `should_summarize` → `summarize` → `save_summary` → chain `_update_semantic_memory`
+- [x] T105 [US5] Write test: `_maybe_summarize()` — message count below threshold → neither `summarize()` nor `save_summary()` called
+- [x] T106 [US5] Write test: `_maybe_summarize()` — LiteLLM raises `ConnectionError` → error logged, function returns `None`, no exception propagated (FR-006 graceful degradation)
+- [x] T107 [US5] Write test: `_maybe_summarize()` — DB INSERT fails → error logged, `_update_semantic_memory` NOT called (no dangling embedding)
 
 ### 6b. Answer Node — Context Compression
 
