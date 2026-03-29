@@ -9,7 +9,7 @@ Tests cover:
 """
 
 import logging
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,7 +22,203 @@ class TestPostTurnTasks:
     pass
 
 
-# Week 5: Checkpoint Size Tests (T037-T039)
+# Week 5: Intent Extraction Tests (T076-T078)
+
+
+@pytest.mark.asyncio
+async def test_maybe_extract_intent_follow_up_skips(caplog, mock_db_factory):
+    """T076: FOLLOW_UP intent → extractor NOT called."""
+    from core.agent.state import IntentEnum, make_initial_state
+    from services.memory.background import _maybe_extract_intent
+
+    state = make_initial_state(user_message="Test", session_id="t001", customer_id="cust_001")
+    state["primary_intent"] = IntentEnum.FOLLOW_UP
+
+    with caplog.at_level(logging.DEBUG):
+        await _maybe_extract_intent(
+            customer_id="cust_001",
+            thread_id="t001",
+            state=state,
+            db_factory=mock_db_factory,
+        )
+
+    # Verify skip was logged
+    assert any("extraction skipped" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_maybe_extract_intent_pricing_calls_extractor(caplog, mock_db_factory):
+    """T077: PRICING intent → extractor IS called with correct conversation text."""
+    from core.agent.state import IntentEnum, UrgencyLevel, make_initial_state
+    from services.memory.background import _maybe_extract_intent
+
+    state = make_initial_state(
+        user_message="Giá của sản phẩm A bao nhiêu?",
+        session_id="t002",
+        customer_id="cust_002",
+    )
+    state["primary_intent"] = IntentEnum.PRICING
+    state["messages"] = [{"role": "user", "content": "Giá của sản phẩm A bao nhiêu?"}]
+
+    with patch(
+        "services.memory.background.SalesIntentExtractor.should_extract",
+        return_value=True,
+    ):
+        with patch(
+            "services.memory.background.SalesIntentExtractor.extract",
+            new_callable=AsyncMock,
+        ) as mock_extract:
+            with patch(
+                "services.memory.background.IntentTracker.upsert_with_lock",
+                new_callable=AsyncMock,
+            ) as mock_upsert:
+                from core.agent.state import SalesIntentExtraction
+
+                # Setup mocks
+                mock_extract.return_value = SalesIntentExtraction(
+                    urgency_level=UrgencyLevel.MEDIUM,
+                    product_interest=["sản phẩm A"],
+                )
+                mock_upsert.return_value = MagicMock(id="intent-123")
+
+                with caplog.at_level(logging.DEBUG):
+                    await _maybe_extract_intent(
+                        customer_id="cust_002",
+                        thread_id="t002",
+                        state=state,
+                        db_factory=mock_db_factory,
+                    )
+
+                # Verify extractor was called
+                assert mock_extract.called
+
+
+@pytest.mark.asyncio
+async def test_maybe_extract_intent_exception_logged_not_raised(caplog):
+    """T078: extractor raises exception → logged not re-raised."""
+    from core.agent.state import IntentEnum, make_initial_state
+    from services.memory.background import _maybe_extract_intent
+
+    state = make_initial_state(user_message="Test", session_id="t003", customer_id="cust_003")
+    state["primary_intent"] = IntentEnum.PRICING
+    state["messages"] = [{"role": "user", "content": "Test message"}]
+
+    # Create a proper async db factory
+    async def mock_db_factory():
+        db = AsyncMock()
+        db.commit = AsyncMock()
+        db.__aenter__ = AsyncMock(return_value=db)
+        db.__aexit__ = AsyncMock(return_value=None)
+        return db
+
+    with patch(
+        "services.memory.background.SalesIntentExtractor.should_extract",
+        return_value=True,
+    ):
+        with patch(
+            "services.memory.background.SalesIntentExtractor.extract",
+            side_effect=ValueError("Test error"),
+        ):
+            with caplog.at_level(logging.ERROR):
+                # Should not raise exception
+                await _maybe_extract_intent(
+                    customer_id="cust_003",
+                    thread_id="t003",
+                    state=state,
+                    db_factory=mock_db_factory,
+                )
+
+    # Verify error was logged
+    assert any("failed (non-blocking)" in r.message for r in caplog.records)
+
+
+# Week 5: Post-Turn Task Orchestration (T079-T082)
+
+
+@pytest.mark.asyncio
+async def test_post_turn_tasks_calls_all_four(mock_db_factory):
+    """T080: post_turn_tasks() calls all 4 task functions once."""
+    from core.agent.state import make_initial_state
+    from services.memory.background import post_turn_tasks
+
+    state = make_initial_state(user_message="Test", session_id="t004", customer_id="cust_004")
+
+    with patch(
+        "services.memory.background.check_checkpoint_size", new_callable=AsyncMock
+    ) as mock_checkpoint:
+        with patch(
+            "services.memory.background._maybe_extract_intent",
+            new_callable=AsyncMock,
+        ) as mock_extract:
+            # Run post_turn_tasks
+            await post_turn_tasks(
+                customer_id="cust_004",
+                thread_id="t004",
+                state=state,
+                db_factory=mock_db_factory,
+            )
+
+            # Verify tasks were called
+            assert mock_checkpoint.called
+            assert mock_extract.called
+
+
+@pytest.mark.asyncio
+async def test_post_turn_tasks_continues_on_failure(mock_db_factory):
+    """T081: Task failure doesn't block other tasks."""
+    from core.agent.state import make_initial_state
+    from services.memory.background import post_turn_tasks
+
+    state = make_initial_state(user_message="Test", session_id="t005", customer_id="cust_005")
+
+    with patch(
+        "services.memory.background.check_checkpoint_size",
+        side_effect=RuntimeError("DB failed"),
+    ):
+        with patch(
+            "services.memory.background._maybe_extract_intent",
+            new_callable=AsyncMock,
+        ) as mock_extract:
+            # Should not raise even though checkpoint task fails
+            await post_turn_tasks(
+                customer_id="cust_005",
+                thread_id="t005",
+                state=state,
+                db_factory=mock_db_factory,
+            )
+
+            # Extract task should still have been attempted
+            assert mock_extract.called
+
+
+@pytest.mark.asyncio
+async def test_post_turn_tasks_handles_all_exceptions(caplog, mock_db_factory):
+    """T082: All 4 tasks raise → no exception propagated."""
+    from core.agent.state import make_initial_state
+    from services.memory.background import post_turn_tasks
+
+    state = make_initial_state(user_message="Test", session_id="t006", customer_id="cust_006")
+
+    with patch(
+        "services.memory.background.check_checkpoint_size",
+        side_effect=ValueError("Error 1"),
+    ):
+        with patch(
+            "services.memory.background._maybe_extract_intent",
+            side_effect=ValueError("Error 2"),
+        ):
+            with caplog.at_level(logging.ERROR):
+                # Should not raise any exception
+                await post_turn_tasks(
+                    customer_id="cust_006",
+                    thread_id="t006",
+                    state=state,
+                    db_factory=mock_db_factory,
+                )
+
+            # Verify errors were logged
+            error_logs = [r for r in caplog.records if r.levelname == "ERROR"]
+            assert len(error_logs) > 0
 
 
 @pytest.mark.asyncio
@@ -83,6 +279,28 @@ def mock_db():
     mock_result = MagicMock()
     db.execute.return_value = mock_result
     return db
+
+
+@pytest.fixture
+def mock_db_factory():
+    """Fixture for mocking AsyncSession factory."""
+
+    class MockAsyncContextManager:
+        def __init__(self, db):
+            self.db = db
+
+        async def __aenter__(self):
+            return self.db
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def factory():
+        db = AsyncMock()
+        db.commit = AsyncMock()
+        return MockAsyncContextManager(db)
+
+    return factory
 
 
 # Week 5: Checkpoint Management CLI Tests (T042d-T042e)

@@ -6,13 +6,21 @@ What: Implements FR-013 lightweight background tasks, checkpoint size warnings (
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from core.agent.state import IntentEnum
 from core.config import settings
+from services.memory.intent_extractor import SalesIntentExtractor
+from services.memory.intent_tracker import IntentTracker
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from core.agent.state import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -44,3 +52,145 @@ async def check_checkpoint_size(session_id: str, db: AsyncSession) -> None:
             "Checkpoint size check failed (non-blocking)",
             extra={"session_id": session_id, "error": str(e)},
         )
+
+
+async def _maybe_extract_intent(
+    customer_id: str,
+    thread_id: str,
+    state: AgentState,
+    db_factory: Callable[[], AsyncSession],
+) -> None:
+    """Conditionally extract and track sales intent (FR-011, T075).
+
+    Checks if primary intent should skip extraction. If not, calls extractor
+    and persists via tracker with optimistic locking.
+
+    Args:
+        customer_id: Customer identifier
+        thread_id: LangGraph thread_id
+        state: Current AgentState with primary_intent and messages
+        db_factory: AsyncSession factory for DB operations
+    """
+    try:
+        primary_intent = state.get("primary_intent", IntentEnum.OTHER)
+
+        # Check skip list (FR-011: skip FOLLOW_UP, OTHER, SMALLTALK)
+        extractor = SalesIntentExtractor()
+        if not extractor.should_extract(primary_intent):
+            logger.debug(
+                "Intent extraction skipped",
+                extra={
+                    "customer_id": customer_id,
+                    "thread_id": thread_id,
+                    "reason": f"primary_intent={primary_intent} in skip list",
+                },
+            )
+            return
+
+        # Extract intent from conversation
+        conversation_text = "\n".join(
+            [
+                f"{msg.get('role', 'unknown')}: {msg.get('content', '')}"
+                for msg in state.get("messages", [])
+            ]
+        )
+
+        async with db_factory() as db:
+            extraction = await extractor.extract(conversation_text, db)
+
+            # Track the extraction (with optimistic locking)
+            tracker = IntentTracker()
+            intent_row = await tracker.upsert_with_lock(
+                customer_id=customer_id,
+                thread_id=thread_id,
+                db=db,
+                last_intent_model=settings.LIGHT_CHAT_MODEL,
+            )
+            await db.commit()
+
+            logger.debug(
+                "Intent extracted and tracked",
+                extra={
+                    "customer_id": customer_id,
+                    "thread_id": thread_id,
+                    "urgency_level": extraction.urgency_level,
+                    "intent_tracking_id": str(intent_row.id),
+                },
+            )
+
+    except Exception as e:
+        # FR-013: Graceful degradation - log error, do not re-raise
+        logger.error(
+            "Intent extraction failed (non-blocking)",
+            extra={
+                "customer_id": customer_id,
+                "thread_id": thread_id,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            },
+        )
+
+
+async def post_turn_tasks(
+    customer_id: str,
+    thread_id: str,
+    state: AgentState,
+    db_factory: Callable[[], AsyncSession],
+) -> None:
+    """Coordinator for all post-turn background tasks (FR-013, T079).
+
+    Executes all 4 memory tasks in parallel:
+    1. _check_checkpoint_size()
+    2. _maybe_extract_intent()
+    3. _maybe_summarize() (placeholder)
+    4. _update_semantic_memory() (placeholder)
+
+    All tasks run via asyncio.gather(return_exceptions=True) so failures
+    in one task don't block others. Errors are logged by task index.
+
+    Args:
+        customer_id: Customer identifier
+        thread_id: LangGraph thread_id
+        state: Current AgentState
+        db_factory: AsyncSession factory
+    """
+
+    async def _checkpoint_task() -> None:
+        async with db_factory() as db:
+            await check_checkpoint_size(thread_id, db)
+
+    async def _maybe_summarize() -> None:
+        # Placeholder for Phase 6 implementation
+        logger.debug("Summarization task placeholder")
+
+    async def _update_semantic_memory() -> None:
+        # Placeholder for Phase 7 implementation
+        logger.debug("Semantic memory update task placeholder")
+
+    results = await asyncio.gather(
+        _checkpoint_task(),
+        _maybe_extract_intent(customer_id, thread_id, state, db_factory),
+        _maybe_summarize(),
+        _update_semantic_memory(),
+        return_exceptions=True,
+    )
+
+    # Log any exceptions by task index
+    task_names = [
+        "checkpoint_size",
+        "intent_extraction",
+        "summarization",
+        "semantic_memory",
+    ]
+    for task_idx, result in enumerate(results):
+        if isinstance(result, Exception):
+            logger.error(
+                f"Background task {task_names[task_idx]} failed",
+                extra={
+                    "customer_id": customer_id,
+                    "thread_id": thread_id,
+                    "task_index": task_idx,
+                    "error": str(result),
+                    "error_type": type(result).__name__,
+                },
+            )
