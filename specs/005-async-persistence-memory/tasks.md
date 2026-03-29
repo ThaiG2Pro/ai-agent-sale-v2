@@ -159,28 +159,28 @@
 
 ### 5a. Background Task Coordinator
 
-- [ ] T075 [US1] Implement `_maybe_extract_intent(customer_id, state, db_factory)` async helper in `services/memory/background.py`: checks `SKIP_INTENT_EXTRACTION`, calls extractor + tracker, logs skip or success
-- [ ] T076 [US1] Write test in `tests/unit/test_background_tasks.py`: `_maybe_extract_intent()` — FOLLOW_UP intent → extractor NOT called, `sales_intent_skipped=True` logged
-- [ ] T077 [US1] Write test: `_maybe_extract_intent()` — PRICING intent → extractor IS called with correct conversation text
-- [ ] T078 [US1] Write test: `_maybe_extract_intent()` — extractor raises exception → exception logged, nothing re-raised
-- [ ] T079 [US1] Implement `post_turn_tasks(session_id, customer_id, state, db_factory)` in `services/memory/background.py`: `asyncio.gather(_check_checkpoint_size(), _maybe_extract_intent(), _maybe_summarize(), return_exceptions=True)`; log each exception by task index
-- [ ] T080 [US1] Write test: `post_turn_tasks()` — all 4 task functions called once (mock each, assert call count)
-- [ ] T081 [US1] Write test: `post_turn_tasks()` — Task 2 raises `Exception` → Tasks 1, 3 still complete (return_exceptions isolation)
-- [ ] T082 [US1] Write test: `post_turn_tasks()` — all 4 tasks raise exceptions → no exception propagated to caller, all logged
+- [X] T075 [US1] Implement `_maybe_extract_intent(customer_id, state, db_factory)` async helper in `services/memory/background.py`: checks `SKIP_INTENT_EXTRACTION`, calls extractor + tracker, logs skip or success
+- [X] T076 [US1] Write test in `tests/unit/test_background_tasks.py`: `_maybe_extract_intent()` — FOLLOW_UP intent → extractor NOT called, `sales_intent_skipped=True` logged
+- [X] T077 [US1] Write test: `_maybe_extract_intent()` — PRICING intent → extractor IS called with correct conversation text
+- [X] T078 [US1] Write test: `_maybe_extract_intent()` — extractor raises exception → exception logged, nothing re-raised
+- [X] T079 [US1] Implement `post_turn_tasks(session_id, customer_id, state, db_factory)` in `services/memory/background.py`: `asyncio.gather(_check_checkpoint_size(), _maybe_extract_intent(), _maybe_summarize(), return_exceptions=True)`; log each exception by task index
+- [X] T080 [US1] Write test: `post_turn_tasks()` — all 4 task functions called once (mock each, assert call count)
+- [X] T081 [US1] Write test: `post_turn_tasks()` — Task 2 raises `Exception` → Tasks 1, 3 still complete (return_exceptions isolation)
+- [X] T082 [US1] Write test: `post_turn_tasks()` — all 4 tasks raise exceptions → no exception propagated to caller, all logged
 
 ### 5b. API Layer — `asyncio.create_task` Integration
 
-- [ ] T083 [US1] Add `asyncio.create_task(post_turn_tasks(...))` call in `api/routes/chat.py` (or equivalent) immediately after `graph.ainvoke()` returns, before `return` statement
-- [ ] T084 [US1] Write test in `tests/unit/test_background_tasks.py`: API handler returns response while `post_turn_tasks` is still "pending" — mock `post_turn_tasks` with `asyncio.sleep(1)` and assert response arrives in < 100ms
-- [ ] T085 [US1] Write test: `asyncio.create_task` is called with correct `session_id` and `customer_id` from state
+- [X] T083 [US1] Add `asyncio.create_task(post_turn_tasks(...))` call in `api/routes/chat.py` (or equivalent) immediately after `graph.ainvoke()` returns, before `return` statement
+- [X] T084 [US1] Write test in `tests/unit/test_background_tasks.py`: API handler returns response while `post_turn_tasks` is still "pending" — mock `post_turn_tasks` with `asyncio.sleep(1)` and assert response arrives in < 100ms
+- [X] T085 [US1] Write test: `asyncio.create_task` is called with correct `session_id` and `customer_id` from state
 
 ### 5c. Answer Node — Memory Context Injection
 
-- [ ] T086 [US1] Update `core/agent/nodes/answer.py` to include `memory_context` from state in the system prompt when `len(state["memory_context"]) > 0` — format as "Past context from previous conversations:" block
-- [ ] T087 [US1] Write test in `tests/unit/test_answer_node.py`: `answer_node` with non-empty `memory_context` → system prompt contains "Past context" block with summary text
-- [ ] T088 [US1] Write test: `answer_node` with empty `memory_context` → system prompt does NOT contain "Past context" block (cold start)
-- [ ] T089 [US1] Write test: `answer_node` with `memory_context` containing 2 entries → both entries appear in system prompt
-- [ ] T090 [US1] Write integration test `test_restart_session_continues` in `tests/integration/test_memory_flow.py`: send message with budget info → restart `build_graph()` → send follow-up → verify state `messages` contains original message (checkpoint preserved)
+- [X] T086 [US1] Update `core/agent/nodes/answer.py` to include `memory_context` from state in the system prompt when `len(state["memory_context"]) > 0` — format as "Past context from previous conversations:" block
+- [X] T087 [US1] Write test in `tests/unit/test_answer_node.py`: `answer_node` with non-empty `memory_context` → system prompt contains "Past context" block with summary text
+- [X] T088 [US1] Write test: `answer_node` with empty `memory_context` → system prompt does NOT contain "Past context" block (cold start)
+- [X] T089 [US1] Write test: `answer_node` with `memory_context` containing 2 entries → both entries appear in system prompt
+- [X] T090 [US1] Write integration test `test_restart_session_continues` in `tests/integration/test_memory_flow.py`: send message with budget info → restart `build_graph()` → send follow-up → verify state `messages` contains original message (checkpoint preserved)
 
 ---
 
