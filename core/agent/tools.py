@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.tools.models import ToolResult  # noqa: TC001
+from core.tools.timeout_guard import wrap_tool_with_timeout
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -200,22 +203,34 @@ def make_retrieval_tool(db):
 
 
 @tool
-async def inventory_lookup(input: InventoryLookupInput) -> InventoryLookupOutput:
+async def inventory_lookup(input: InventoryLookupInput) -> ToolResult:
     """Look up product stock levels (Week 3 stub).
 
     Args:
         input: InventoryLookupInput with SKU and optional warehouse
 
     Returns:
-        InventoryLookupOutput with stock level and availability
+        ToolResult containing InventoryLookupOutput on success
 
     Note:
         Real ERP integration deferred to Week 6.
     """
-    return InventoryLookupOutput(
-        sku=input.sku,
-        stock_level=99,
-        warehouse_id=input.warehouse_id,
-        available=True,
-        error=None,
+
+    async def _inventory_impl() -> InventoryLookupOutput:
+        return InventoryLookupOutput(
+            sku=input.sku,
+            stock_level=99,
+            warehouse_id=input.warehouse_id,
+            available=True,
+            error=None,
+        )
+
+    return await wrap_tool_with_timeout(
+        _inventory_impl(),
+        tool_name="inventory_check",
     )
+
+
+async def execute_inventory_lookup(sku: str) -> ToolResult:
+    """Execute inventory lookup tool and return ToolResult."""
+    return await inventory_lookup.ainvoke({"input": {"sku": sku}})

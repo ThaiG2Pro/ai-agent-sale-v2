@@ -2,6 +2,28 @@
 
 This is a high-performance, asynchronous AI Sales Agent designed for SMEs, following a "Zero-Cost-First" and "Offline-First" philosophy.
 
+## Telegram Bot Setup
+
+The project supports Telegram webhook integration via `POST /webhooks/telegram`.
+
+1. Create a bot using `@BotFather` and copy `TELEGRAM_BOT_TOKEN`.
+2. Set `TELEGRAM_WEBHOOK_SECRET` (minimum 20 chars) and `TELEGRAM_WEBHOOK_URL` in `.env`.
+3. Start services with Docker:
+
+```bash
+docker compose up -d --build
+```
+
+4. Configure webhook:
+
+```bash
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d "{\"url\":\"${TELEGRAM_WEBHOOK_URL}\",\"secret_token\":\"${TELEGRAM_WEBHOOK_SECRET}\"}"
+```
+
+For full deployment instructions, see `docs/deployment.md`.
+
 ## Hardware Requirements
 
 To run the system locally with AI capabilities (via Ollama), the following minimum hardware is required:

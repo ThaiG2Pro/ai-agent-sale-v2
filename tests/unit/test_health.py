@@ -1,6 +1,8 @@
-"""Why this exists: Verifies the health check logic independently.
-What it does: Tests the /health endpoint response and performance baseline.
-"""
+"""Unit tests for health endpoints."""
+
+from __future__ import annotations
+
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -46,3 +48,48 @@ async def test_health_endpoint():
     # Non-blocking check for latency target (SC-002)
     # Note: In CI/Container environments, first run might be slightly slower.
     assert data["latency_ms"] < 200.0  # Loose check for unit test.
+
+
+@pytest.mark.asyncio
+async def test_liveness_endpoint_returns_alive() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/health/liveness")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "alive"
+    assert isinstance(payload["timestamp"], (int, float))
+
+
+@pytest.mark.asyncio
+async def test_readiness_endpoint_returns_checks() -> None:
+    from services import database as dbmod
+
+    async def _fake_get_db():
+        class _DummySession:
+            async def execute(self, stmt):
+                return None
+
+            async def close(self):
+                return None
+
+        yield _DummySession()
+
+    class _Pool:
+        def checkedout(self) -> int:
+            return 0
+
+    with patch("api.routes.health.engine.sync_engine.pool", _Pool()):
+        app.dependency_overrides[dbmod.get_db] = _fake_get_db
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.get("/health/readiness")
+        app.dependency_overrides.pop(dbmod.get_db, None)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] in {"ready", "degraded"}
+    assert payload["checks"]["database"]["status"] == "ok"
+    assert payload["checks"]["event_loop"]["status"] == "ok"
+    assert payload["checks"]["connection_pool"]["status"] == "ok"

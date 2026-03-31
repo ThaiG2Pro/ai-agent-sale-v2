@@ -80,9 +80,41 @@ class Settings(BaseSettings):
     INTENT_LOCK_MAX_RETRIES: int = Field(default=3, ge=1, le=10)
     INTENT_LOCK_RETRY_BACKOFF_MS: list[int] = [50, 100, 200]  # Exponential backoff sequence
 
-    # Telegram Configuration
-    TELEGRAM_BOT_TOKEN: str = "your_bot_token_here"
-    TELEGRAM_CHAT_ID: str = "your_chat_id_here"
+    # Week 6: Telegram Bot Configuration
+    TELEGRAM_BOT_TOKEN: str = Field(
+        default="your_bot_token_from_botfather",
+        min_length=30,
+        description="Telegram bot token from @BotFather",
+    )
+    TELEGRAM_WEBHOOK_SECRET: str = Field(
+        default="",
+        min_length=20,
+        description="Secret token for webhook verification (min 20 chars)",
+    )
+    TELEGRAM_WEBHOOK_URL: str = Field(
+        default="https://your-domain.com/webhooks/telegram",
+        description="Public URL where Telegram sends webhook updates",
+    )
+
+    # Week 6: Tool Timeout Configuration
+    TOOL_TIMEOUT_DEFAULT: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        description="Default timeout in seconds for tool calls",
+    )
+    TOOL_TIMEOUT_INVENTORY_CHECK: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        description="Timeout for inventory check tool",
+    )
+    TOOL_TIMEOUT_ORDER_PROCESSING: int = Field(
+        default=10,
+        ge=1,
+        le=120,
+        description="Timeout for order processing tool",
+    )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

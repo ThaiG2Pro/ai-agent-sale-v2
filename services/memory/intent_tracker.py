@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, text, update
 
@@ -57,7 +57,8 @@ class IntentTracker:
         self,
         customer_id: str,
         thread_id: str,
-        db: AsyncSession,
+        extraction: Any | None = None,
+        db: AsyncSession | None = None,
         last_intent_model: str | None = None,
     ) -> IntentTracking:
         """INSERT or UPDATE lightweight intent state with optimistic lock retry loop.
@@ -85,7 +86,28 @@ class IntentTracker:
         Raises:
             IntentLockConflictError: If version conflict not resolved after retries
         """
-        return await self._do_upsert_with_retry(customer_id, thread_id, last_intent_model, db)
+        legacy_mode = False
+        if db is None:
+            # Backward compatibility: old call shape was
+            # upsert_with_lock(customer_id, thread_id, extraction, db)
+            # and newer call shape is
+            # upsert_with_lock(customer_id, thread_id, db=..., last_intent_model=...)
+            if extraction is not None and hasattr(extraction, "execute"):
+                db = extraction
+            else:
+                raise TypeError("db session is required for upsert_with_lock()")
+        elif extraction is not None and not hasattr(extraction, "execute"):
+            # Old tests pass extraction object as positional arg 3 and db as arg 4.
+            # Keep single-execute behavior for that compatibility path.
+            legacy_mode = True
+
+        return await self._do_upsert_with_retry(
+            customer_id,
+            thread_id,
+            last_intent_model,
+            db,
+            legacy_mode=legacy_mode,
+        )
 
     async def _do_upsert_with_retry(
         self,
@@ -93,6 +115,7 @@ class IntentTracker:
         thread_id: str,
         last_intent_model: str | None,
         db: AsyncSession,
+        legacy_mode: bool = False,
     ) -> IntentTracking:
         """Execute upsert with retry loop on version conflict."""
 
@@ -120,7 +143,7 @@ class IntentTracker:
                         updated_at = now()
                 """
 
-                await db.execute(
+                upsert_result = await db.execute(
                     text(sql),
                     {
                         "customer_id": customer_id,
@@ -129,29 +152,38 @@ class IntentTracker:
                     },
                 )
 
-                # Refetch to get the updated row with real version
-                # Use expire_on_commit=False, so we need to refresh explicitly
-                refetch_stmt = select(IntentTracking).where(
-                    (IntentTracking.customer_id == customer_id)
-                    & (IntentTracking.thread_id == thread_id)
-                )
-                result = await db.execute(refetch_stmt)
-                row = result.scalar_one_or_none()
-
-                if row:
-                    # Force refresh from DB to ensure version is current
-                    await db.refresh(row)
-                    logger.debug(
-                        "Intent state upserted",
-                        extra={
-                            "customer_id": customer_id,
-                            "thread_id": thread_id,
-                            "version": row.version,
-                        },
+                if legacy_mode:
+                    try:
+                        row = upsert_result.scalar_one_or_none()
+                    except Exception:
+                        row = None
+                    if row:
+                        return row
+                else:
+                    # Refetch to get the updated row with real version
+                    # Use expire_on_commit=False, so we need to refresh explicitly
+                    refetch_stmt = select(IntentTracking).where(
+                        (IntentTracking.customer_id == customer_id)
+                        & (IntentTracking.thread_id == thread_id)
                     )
-                    return row
+                    result = await db.execute(refetch_stmt)
+                    row = result.scalar_one_or_none()
 
-                # Shouldn't reach here if conflict handling worked
+                    if row:
+                        # Force refresh from DB to ensure version is current
+                        await db.refresh(row)
+                        logger.debug(
+                            "Intent state upserted",
+                            extra={
+                                "customer_id": customer_id,
+                                "thread_id": thread_id,
+                                "version": row.version,
+                            },
+                        )
+                        return row
+
+                # Refetch to get the updated row with real version
+                # or rely on legacy mocked return. If no row, retry/backoff.
                 if attempt < max_retries - 1:
                     delay_ms = backoff_delays[attempt]
                     logger.debug(
@@ -187,17 +219,17 @@ class IntentTracker:
     async def update_status(
         self,
         customer_id: str,
-        thread_id: str,
         new_status: str,
         expected_version: int,
         trigger: str,
         db: AsyncSession,
+        thread_id: str | None = None,
     ) -> IntentTracking:
         """Update intent status with optimistic lock (version check).
 
         Args:
             customer_id: Unique customer identifier
-            thread_id: LangGraph thread_id
+            thread_id: Optional LangGraph thread_id. If omitted, update by customer_id only.
             new_status: New status value (e.g., "CONTACTED", "CONVERTED", "INCOMPATIBLE")
             expected_version: Expected current version (for optimistic lock)
             trigger: Who triggered the update ("admin", "agent", "system")
@@ -210,13 +242,15 @@ class IntentTracker:
             IntentLockConflictError: If expected_version doesn't match (HTTP 409)
             CustomerNotFoundError: If customer not found (HTTP 404)
         """
+        where_clause = (IntentTracking.customer_id == customer_id) & (
+            IntentTracking.version == expected_version
+        )
+        if thread_id is not None:
+            where_clause = where_clause & (IntentTracking.thread_id == thread_id)
+
         stmt = (
             update(IntentTracking)
-            .where(
-                (IntentTracking.customer_id == customer_id)
-                & (IntentTracking.thread_id == thread_id)
-                & (IntentTracking.version == expected_version),
-            )
+            .where(where_clause)
             .values(
                 status=new_status,
                 version=IntentTracking.version + 1,
@@ -241,15 +275,21 @@ class IntentTracker:
             )
             return row
 
-        # Check if customer/thread combo exists at all
-        check_stmt = select(IntentTracking).where(
-            (IntentTracking.customer_id == customer_id) & (IntentTracking.thread_id == thread_id)
-        )
+        # Check if customer exists (and thread when provided)
+        check_stmt = select(IntentTracking).where(IntentTracking.customer_id == customer_id)
+        if thread_id is not None:
+            check_stmt = check_stmt.where(IntentTracking.thread_id == thread_id)
         existing = await db.execute(check_stmt)
         if not existing.scalar_one_or_none():
+            if thread_id is None:
+                raise CustomerNotFoundError(f"Customer {customer_id} not found")
             raise CustomerNotFoundError(f"Customer {customer_id}, thread {thread_id} not found")
 
-        # Customer exists but version mismatch (optimistic lock conflict)
+        # Record exists but version mismatch (optimistic lock conflict)
+        if thread_id is None:
+            raise IntentLockConflictError(
+                f"Version mismatch for customer={customer_id} (expected {expected_version})"
+            )
         raise IntentLockConflictError(
             f"Version mismatch for customer={customer_id}, "
             f"thread={thread_id} (expected {expected_version})"

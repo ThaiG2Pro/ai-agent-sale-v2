@@ -1,0 +1,313 @@
+openapi: 3.1.0
+info:
+  title: Health Check API
+  description: |
+    Health check endpoints for Docker container orchestration.
+    
+    Implements both shallow (liveness) and deep (readiness) health checks
+    to support Kubernetes-style probes for reliable deployments.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Container internal endpoint
+
+paths:
+  /health/liveness:
+    get:
+      summary: Liveness probe (shallow check)
+      description: |
+        Fast health check that confirms the process is running and responsive.
+        
+        Used by Docker/Kubernetes liveness probes to detect hung processes.
+        If this fails repeatedly, the container should be restarted.
+        
+        Checks:
+        - Process is running (HTTP server responding)
+        - Event loop is not deadlocked
+        
+        Response time: <10ms
+      operationId: livenessProbe
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Process is alive and responsive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+              example:
+                status: "alive"
+                timestamp: 1711766400.123
+
+    '500':
+          description: Process is hung or critically degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health/readiness:
+    get:
+      summary: Readiness probe (deep check)
+      description: |
+        Comprehensive health check that verifies the system is ready to serve traffic.
+        
+        Used by Docker/Kubernetes readiness probes to control traffic routing.
+        If this fails, the container should be removed from load balancer but NOT restarted.
+        
+        Checks:
+        1. Database connectivity (PostgreSQL connection pool)
+        2. Event loop responsiveness (async task scheduling)
+        3. Connection pool status (not exhausted)
+        
+        Response time: <100ms (includes database ping)
+        Timeout: 5s (configurable in Docker health check)
+      operationId: readinessProbe
+      tags:
+        - Health
+      responses:
+        '200':
+          description: System is ready to serve requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              example:
+                status: "ready"
+                checks:
+                  database:
+                    status: "ok"
+                    latency_ms: 3.45
+                  event_loop:
+                    status: "ok"
+                    latency_ms: 0.12
+                  connection_pool:
+                    status: "ok"
+                    size: 5
+                    max_size: 20
+                timestamp: 1711766400.123
+        
+        '503':
+          description: |
+            System is not ready (service unavailable).
+            One or more checks failed. Container should not receive traffic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              example:
+                status: "not_ready"
+                checks:
+                  database:
+                    status: "timeout"
+                    latency_ms: 5000
+                    reason: "Connection timeout after 5s"
+                  event_loop:
+                    status: "ok"
+                    latency_ms: 0.15
+                  connection_pool:
+                    status: "degraded"
+                    size: 20
+                    max_size: 20
+                    reason: "Connection pool exhausted"
+                timestamp: 1711766405.678
+
+  /health:
+    get:
+      summary: Basic health check (legacy)
+      description: |
+        Simple health check endpoint (for backwards compatibility).
+        Returns basic status without detailed checks.
+        
+        Prefer /health/liveness or /health/readiness for production.
+      operationId: basicHealthCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+components:
+  schemas:
+    LivenessResponse:
+      type: object
+      description: Liveness probe response (minimal data)
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          const: "alive"
+          description: Always "alive" if HTTP 200 returned
+        
+        timestamp:
+          type: number
+          format: double
+          description: Unix timestamp (seconds with millisecond precision)
+          example: 1711766400.123
+
+    ReadinessResponse:
+      type: object
+      description: Readiness probe response with detailed checks
+      required:
+        - status
+        - checks
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready, degraded]
+          description: |
+            ready: All checks passed, accept traffic
+            not_ready: Critical checks failed, do not accept traffic
+            degraded: Non-critical warnings, may still accept traffic
+          example: "ready"
+        
+        checks:
+          type: object
+          description: Individual health check results
+          required:
+            - database
+            - event_loop
+          properties:
+            database:
+              $ref: '#/components/schemas/HealthCheck'
+            
+            event_loop:
+              $ref: '#/components/schemas/HealthCheck'
+            
+            connection_pool:
+              $ref: '#/components/schemas/ConnectionPoolCheck'
+        
+        timestamp:
+          type: number
+          format: double
+          description: Unix timestamp when checks were performed
+          example: 1711766400.123
+
+    HealthCheck:
+      type: object
+      description: Individual health check result
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, timeout, error]
+          description: |
+            ok: Check passed
+            degraded: Check passed but with warnings
+            timeout: Check timed out
+            error: Check failed
+          example: "ok"
+        
+        latency_ms:
+          type: number
+          format: double
+          description: Time taken to perform check (milliseconds)
+          example: 3.45
+        
+        reason:
+          type: string
+          description: Human-readable explanation (present if status != ok)
+          example: "Connection timeout after 5s"
+
+    ConnectionPoolCheck:
+      allOf:
+        - $ref: '#/components/schemas/HealthCheck'
+        - type: object
+          properties:
+            size:
+              type: integer
+              description: Current number of active connections
+              example: 5
+            
+            max_size:
+              type: integer
+              description: Maximum allowed connections
+              example: 20
+
+    ErrorResponse:
+      type: object
+      description: Error response for failed health checks
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: "internal_error"
+        
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Health check failed"
+
+  examples:
+    ReadyWithAllChecks:
+      summary: All checks passed (ready)
+      value:
+        status: "ready"
+        checks:
+          database:
+            status: "ok"
+            latency_ms: 2.34
+          event_loop:
+            status: "ok"
+            latency_ms: 0.08
+          connection_pool:
+            status: "ok"
+            size: 3
+            max_size: 20
+        timestamp: 1711766400.123
+
+    NotReadyDatabaseDown:
+      summary: Database check failed (not ready)
+      value:
+        status: "not_ready"
+        checks:
+          database:
+            status: "error"
+            latency_ms: 100
+            reason: "Connection refused: PostgreSQL not reachable"
+          event_loop:
+            status: "ok"
+            latency_ms: 0.12
+          connection_pool:
+            status: "error"
+            reason: "Cannot establish connection pool without database"
+        timestamp: 1711766500.456
+
+    DegradedConnectionPool:
+      summary: Connection pool near limit (degraded)
+      value:
+        status: "degraded"
+        checks:
+          database:
+            status: "ok"
+            latency_ms: 4.56
+          event_loop:
+            status: "ok"
+            latency_ms: 0.15
+          connection_pool:
+            status: "degraded"
+            size: 18
+            max_size: 20
+            reason: "Connection pool is 90% utilized (18/20)"
+        timestamp: 1711766600.789
+
+tags:
+  - name: Health
+    description: Health check and readiness probe endpoints

@@ -211,7 +211,6 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
         customer_id: Cross-session customer identifier (e.g., "12345")
 
     Raises:
-        TypeError: If customer_id is not provided (required for memory scoping)
         ValueError: If customer_id is empty string (no blank identifiers)
     """
     if not customer_id:

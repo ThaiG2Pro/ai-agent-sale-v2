@@ -21,6 +21,7 @@ htmlcov/
 .env
 .env.*
 .envrc
+tests/
 .vscode/
 .idea/
 .cursor/

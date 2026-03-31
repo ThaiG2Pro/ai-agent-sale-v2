@@ -64,6 +64,10 @@ def _setup_test_database() -> None:  # type: ignore[return]
     ``asyncio.run()`` freely without conflicting with pytest-asyncio's
     per-function event-loop management.
     """
+    if os.getenv("RUN_DOCKER_INTEGRATION_TESTS") == "1":
+        print("[conftest] Skipping test database bootstrap for Docker integration tests")
+        return
+
     # Import after env override so Settings() picks up DB_NAME=ai_agent_test
     from core.config import settings
 
@@ -131,6 +135,10 @@ def _setup_test_database() -> None:  # type: ignore[return]
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def override_get_db(db_session):
     """Overrides the get_db dependency for all tests to use the isolated db_session."""
+    if os.getenv("RUN_DOCKER_INTEGRATION_TESTS") == "1":
+        yield
+        return
+
     from api.main import app
     from services.database import get_db
 
@@ -193,3 +201,9 @@ async def db_session():
         await session.commit()
 
     await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_session_test_db(db_session):
+    """Backward-compatible alias used by older integration tests."""
+    yield db_session

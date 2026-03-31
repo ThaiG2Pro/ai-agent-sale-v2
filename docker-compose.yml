@@ -1,4 +1,37 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-agent-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER:-user}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      DB_NAME: ${DB_NAME:-ai_agent}
+      DB_PORT: ${DB_PORT:-5432}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-1234567890:telegram_bot_token_for_local_testing_12345}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-local_webhook_secret_1234567890}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-https://example.local/webhooks/telegram}
+      DB_POOL_SIZE: ${DATABASE_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/readiness', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    secrets:
+      - db_password
+    networks:
+      - ai_agent_net
+
   db:
     image: pgvector/pgvector:pg17
     container_name: ai-agent-postgres
@@ -21,9 +54,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d:ro
-    restart: always
+    restart: unless-stopped
     secrets:
       - db_password
+    networks:
+      - ai_agent_net
     command:
       - postgres
       - -c
@@ -44,7 +79,9 @@ services:
       - "6006:6006" # Phoenix UI
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
-    restart: always
+    restart: unless-stopped
+    networks:
+      - ai_agent_net
 
 secrets:
   db_password:
@@ -52,3 +89,7 @@ secrets:
 
 volumes:
   postgres_data:
+
+networks:
+  ai_agent_net:
+    driver: bridge

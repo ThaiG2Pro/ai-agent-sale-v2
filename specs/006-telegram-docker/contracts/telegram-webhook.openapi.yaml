@@ -1,0 +1,384 @@
+openapi: 3.1.0
+info:
+  title: Telegram Webhook API
+  description: |
+    Telegram Bot webhook endpoint for receiving updates from Telegram servers.
+    
+    This contract defines the webhook interface between Telegram and the AI Sales Agent.
+    Implements security verification, deduplication, and async processing.
+  version: 1.0.0
+  contact:
+    name: AI Sales Agent Team
+
+servers:
+  - url: https://your-domain.com
+    description: Production server
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /webhooks/telegram:
+    post:
+      summary: Receive Telegram webhook update
+      description: |
+        Endpoint called by Telegram servers when a user interacts with the bot.
+        
+        Security:
+        - Verifies X-Telegram-Bot-Api-Secret-Token header
+        - Checks message timestamp (reject if >5 minutes old)
+        - Deduplicates via update_id (database UNIQUE constraint)
+        
+        Processing:
+        - Acknowledges receipt within 200ms (returns 200 OK)
+        - Processes message asynchronously (LangGraph agent)
+        - Handles concurrent webhooks without blocking
+      operationId: receiveTelegramWebhook
+      security:
+        - TelegramSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelegramUpdate'
+            examples:
+              text_message:
+                summary: User sends text message
+                value:
+                  update_id: 123456789
+                  message:
+                    message_id: 987
+                    from:
+                      id: 1234567890
+                      is_bot: false
+                      first_name: "John"
+                      username: "johndoe"
+                    chat:
+                      id: 1234567890
+                      type: "private"
+                    date: 1711766400
+                    text: "What products do you have?"
+              
+              callback_query:
+                summary: User clicks inline button (retry)
+                value:
+                  update_id: 123456790
+                  callback_query:
+                    id: "callback123"
+                    from:
+                      id: 1234567890
+                      is_bot: false
+                      first_name: "John"
+                    message:
+                      message_id: 988
+                      chat:
+                        id: 1234567890
+                        type: "private"
+                      date: 1711766410
+                      text: "Inventory check timed out. Please try again."
+                    data: "retry_inventory_12345"
+      
+      responses:
+        '200':
+          description: |
+            Webhook received and queued for processing.
+            This response is sent within 200ms to prevent Telegram retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAck'
+              example:
+                status: "ok"
+                update_id: 123456789
+        
+        '401':
+          description: |
+            Unauthorized - Invalid or missing X-Telegram-Bot-Api-Secret-Token header.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "unauthorized"
+                message: "Invalid webhook secret"
+        
+        '403':
+          description: |
+            Forbidden - Message timestamp too old (replay attack prevention).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "forbidden"
+                message: "Message timestamp outside acceptable window (>5 minutes old)"
+        
+        '409':
+          description: |
+            Conflict - Duplicate update_id (already processed).
+            Returns 200-equivalent to Telegram (idempotent success).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAck'
+              example:
+                status: "duplicate"
+                update_id: 123456789
+                message: "Update already processed"
+        
+        '500':
+          description: |
+            Internal server error - Webhook processing failed.
+            Telegram will retry delivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        
+        '503':
+          description: |
+            Service unavailable - Database or critical dependency down.
+            Telegram will retry delivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    TelegramSecret:
+      type: apiKey
+      in: header
+      name: X-Telegram-Bot-Api-Secret-Token
+      description: |
+        Static secret token configured in .env file.
+        Telegram includes this header when calling the webhook.
+        Server validates it matches TELEGRAM_WEBHOOK_SECRET env var.
+
+  schemas:
+    TelegramUpdate:
+      type: object
+      description: |
+        Telegram Update object as defined in Telegram Bot API.
+        Contains one of: message, edited_message, callback_query, etc.
+      required:
+        - update_id
+      properties:
+        update_id:
+          type: integer
+          format: int64
+          description: |
+            Unique identifier for this update.
+            Monotonically increasing (but may have gaps).
+          example: 123456789
+        
+        message:
+          $ref: '#/components/schemas/TelegramMessage'
+        
+        edited_message:
+          $ref: '#/components/schemas/TelegramMessage'
+        
+        callback_query:
+          $ref: '#/components/schemas/TelegramCallbackQuery'
+        
+        # Add other update types as needed (inline_query, etc.)
+
+    TelegramMessage:
+      type: object
+      description: Telegram message object
+      required:
+        - message_id
+        - date
+        - chat
+      properties:
+        message_id:
+          type: integer
+          format: int64
+          example: 987
+        
+        from:
+          $ref: '#/components/schemas/TelegramUser'
+        
+        chat:
+          $ref: '#/components/schemas/TelegramChat'
+        
+        date:
+          type: integer
+          format: int64
+          description: Unix timestamp (seconds since epoch)
+          example: 1711766400
+        
+        text:
+          type: string
+          description: Message text (for text messages)
+          example: "What products do you have?"
+        
+        reply_markup:
+          $ref: '#/components/schemas/TelegramReplyMarkup'
+
+    TelegramUser:
+      type: object
+      required:
+        - id
+        - is_bot
+        - first_name
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique user identifier
+          example: 1234567890
+        
+        is_bot:
+          type: boolean
+          example: false
+        
+        first_name:
+          type: string
+          example: "John"
+        
+        last_name:
+          type: string
+          example: "Doe"
+        
+        username:
+          type: string
+          example: "johndoe"
+
+    TelegramChat:
+      type: object
+      required:
+        - id
+        - type
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique chat identifier
+          example: 1234567890
+        
+        type:
+          type: string
+          enum: [private, group, supergroup, channel]
+          example: "private"
+        
+        title:
+          type: string
+          description: Chat title (for groups/channels)
+
+    TelegramCallbackQuery:
+      type: object
+      description: Callback query from inline keyboard button
+      required:
+        - id
+        - from
+      properties:
+        id:
+          type: string
+          description: Unique callback query identifier
+          example: "callback123"
+        
+        from:
+          $ref: '#/components/schemas/TelegramUser'
+        
+        message:
+          $ref: '#/components/schemas/TelegramMessage'
+        
+        data:
+          type: string
+          description: Data associated with the callback button
+          example: "retry_inventory_12345"
+
+    TelegramReplyMarkup:
+      type: object
+      description: Inline keyboard markup
+      properties:
+        inline_keyboard:
+          type: array
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/TelegramInlineKeyboardButton'
+
+    TelegramInlineKeyboardButton:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: Button label
+          example: "Retry"
+        
+        callback_data:
+          type: string
+          description: Data to send in callback_query
+          example: "retry_inventory_12345"
+
+    WebhookAck:
+      type: object
+      description: Webhook acknowledgment response
+      required:
+        - status
+        - update_id
+      properties:
+        status:
+          type: string
+          enum: [ok, duplicate]
+          description: |
+            ok: Update received and queued for processing
+            duplicate: Update already processed (idempotent)
+          example: "ok"
+        
+        update_id:
+          type: integer
+          format: int64
+          description: Echo of the received update_id
+          example: 123456789
+        
+        message:
+          type: string
+          description: Optional human-readable message
+          example: "Update queued for processing"
+
+    ErrorResponse:
+      type: object
+      description: Error response schema
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          enum: 
+            - unauthorized
+            - forbidden
+            - conflict
+            - internal_error
+            - service_unavailable
+          example: "unauthorized"
+        
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid webhook secret"
+        
+        details:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+
+  examples:
+    RetryButton:
+      summary: Inline keyboard with retry button
+      value:
+        inline_keyboard:
+          - - text: "🔄 Retry"
+              callback_data: "retry_inventory_12345"
+          - - text: "❌ Cancel"
+              callback_data: "cancel_12345"
+
+tags:
+  - name: Webhooks
+    description: Telegram webhook endpoints

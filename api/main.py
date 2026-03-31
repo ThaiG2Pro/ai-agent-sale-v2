@@ -17,6 +17,7 @@ from api.middleware import (
     http_exception_handler,
 )
 from api.routes import admin, agent, health, hitl, memory, query
+from api.webhooks import telegram as telegram_webhook
 from core.agent.checkpointer import create_checkpointer
 from core.config import settings
 from core.logging import instrument_fastapi, instrument_sqlalchemy, setup_logging
@@ -57,9 +58,25 @@ async def lifespan(app: FastAPI):
     # Initialize background task storage
     app.state.background_tasks = set()
 
-    # Verify Telegram Configuration (T073)
-    if not settings.TELEGRAM_BOT_TOKEN or settings.TELEGRAM_BOT_TOKEN == "your_bot_token_here":
-        logfire.warn("TELEGRAM_BOT_TOKEN not configured. Administrative alerts will be disabled.")
+    # Verify Telegram Configuration (T015 - Week 6 validation)
+    if (
+        not settings.TELEGRAM_BOT_TOKEN
+        or settings.TELEGRAM_BOT_TOKEN == "your_bot_token_from_botfather"
+    ):
+        logfire.warn(
+            "TELEGRAM_BOT_TOKEN not configured. Telegram bot integration will be disabled."
+        )
+
+    if not settings.TELEGRAM_WEBHOOK_SECRET or len(settings.TELEGRAM_WEBHOOK_SECRET) < 20:
+        logfire.error(
+            "TELEGRAM_WEBHOOK_SECRET missing or too short (min 20 chars). "
+            "Webhook security validation will fail. Set TELEGRAM_WEBHOOK_SECRET in .env"
+        )
+        if settings.TELEGRAM_WEBHOOK_SECRET and len(settings.TELEGRAM_WEBHOOK_SECRET) < 20:
+            secret_len = len(settings.TELEGRAM_WEBHOOK_SECRET)
+            raise ValueError(
+                f"TELEGRAM_WEBHOOK_SECRET must be at least 20 characters (got {secret_len})"
+            )
 
     # Start HITL Timeout Scheduler (Phase 15)
     import asyncio
@@ -190,6 +207,7 @@ app.include_router(query.router)
 app.include_router(agent.router)
 app.include_router(hitl.router)
 app.include_router(memory.router, prefix="/memory", tags=["memory"])
+app.include_router(telegram_webhook.router)  # Week 6: Telegram webhook
 
 
 @app.get("/")

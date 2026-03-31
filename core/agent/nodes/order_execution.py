@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, cast
 from langgraph.types import Command
 from sqlalchemy import insert, update
 
+from core.tools.timeout_guard import wrap_tool_with_timeout
 from models.schema import Order, Product
 
 if TYPE_CHECKING:
@@ -54,7 +55,16 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
             .where(Product.id == product_id, Product.stock_quantity >= quantity)
             .values(stock_quantity=Product.stock_quantity - quantity)
         )
-        stock_result = await db.execute(stock_stmt)
+        stock_result_wrapper = await wrap_tool_with_timeout(
+            db.execute(stock_stmt),
+            tool_name="order_processing",
+        )
+        if not stock_result_wrapper.success:
+            return Command(
+                goto="answer_node",
+                update={"error": stock_result_wrapper.error or "Order processing timed out"},
+            )
+        stock_result = stock_result_wrapper.data
 
         if stock_result.rowcount == 0:
             # Stock was insufficient or product missing
@@ -71,12 +81,28 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
             order_info=order_info,
             status="confirmed",
         )
-        await db.execute(order_stmt)
+        order_insert_wrapper = await wrap_tool_with_timeout(
+            db.execute(order_stmt),
+            tool_name="order_processing",
+        )
+        if not order_insert_wrapper.success:
+            return Command(
+                goto="answer_node",
+                update={"error": order_insert_wrapper.error or "Order processing timed out"},
+            )
 
         # Flush to DB (the graph caller or checkpointer might handle commit,
         # but for business data we should be explicit if we are not sharing tx)
         # Spec says "within a single DB transaction".
-        await db.flush()
+        flush_wrapper = await wrap_tool_with_timeout(
+            db.flush(),
+            tool_name="order_processing",
+        )
+        if not flush_wrapper.success:
+            return Command(
+                goto="answer_node",
+                update={"error": flush_wrapper.error or "Order processing timed out"},
+            )
 
         # 3. Compose confirmation message (SC5: append pending INFO answers if any)
         confirmation_msg = (

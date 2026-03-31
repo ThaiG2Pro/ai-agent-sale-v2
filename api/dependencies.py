@@ -4,6 +4,7 @@ What it does: Implements X-Admin-Key security check for administrative endpoints
 
 from __future__ import annotations
 
+from secrets import compare_digest
 from typing import TYPE_CHECKING, Any
 
 import logfire
@@ -29,6 +30,29 @@ async def verify_admin_key(x_admin_key: str = Header(None)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-Admin-Key",
+        )
+
+
+async def verify_telegram_secret(
+    x_telegram_bot_api_secret_token: str | None = Header(
+        default=None,
+        alias="X-Telegram-Bot-Api-Secret-Token",
+    ),
+) -> None:
+    """Validate Telegram webhook secret token using constant-time comparison."""
+    expected_secret = settings.TELEGRAM_WEBHOOK_SECRET
+    provided_secret = x_telegram_bot_api_secret_token or ""
+    if not provided_secret:
+        logfire.warn("Telegram webhook rejected: missing secret header")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook secret",
+        )
+    if not expected_secret or not compare_digest(provided_secret, expected_secret):
+        logfire.warn("Telegram webhook rejected: invalid secret token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook secret",
         )
 
 

@@ -74,3 +74,5 @@ GEMINI.md
 
 
 db_password.txt   
+# Secrets directory
+secrets/
