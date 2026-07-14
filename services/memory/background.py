@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from core.agent.state import IntentEnum
 from core.config import settings
+from models.schema import SalesIntentLog
 from services.memory.intent_extractor import SalesIntentExtractor
 from services.memory.intent_tracker import IntentTracker
 
@@ -72,7 +73,10 @@ async def _maybe_extract_intent(
         db_factory: AsyncSession factory for DB operations
     """
     try:
-        primary_intent = state.get("primary_intent", IntentEnum.OTHER)
+        # NOTE: AgentState's field is "intent" (plain str), not "primary_intent" —
+        # using the wrong key here always fell back to IntentEnum.OTHER, which is
+        # in the skip list, so extraction never actually ran for any real intent.
+        primary_intent = state.get("intent") or IntentEnum.OTHER
 
         # Check skip list (FR-011: skip FOLLOW_UP, OTHER, SMALLTALK)
         extractor = SalesIntentExtractor()
@@ -106,6 +110,27 @@ async def _maybe_extract_intent(
                 db=db,
                 last_intent_model=settings.LIGHT_CHAT_MODEL,
             )
+
+            # Persist the extracted signal detail for audit/reporting (FR-011b).
+            # IntentTracking only stores lightweight state (status/version); the
+            # actual extracted fields belong in sales_intent_logs, which the
+            # GET /memory/intent* endpoints read from.
+            db.add(
+                SalesIntentLog(
+                    customer_id=customer_id,
+                    thread_id=thread_id,
+                    primary_intent=str(primary_intent),
+                    secondary_intents=state.get("secondary_intents") or [],
+                    urgency_level=str(extraction.urgency_level),
+                    budget_range=extraction.budget_range,
+                    product_interest=extraction.product_interest,
+                    decision_timeline=extraction.decision_timeline,
+                    contact_preference=extraction.contact_preference,
+                    extraction_model=settings.LIGHT_CHAT_MODEL,
+                    was_skipped=False,
+                )
+            )
+
             await db.commit()
 
             logger.debug(

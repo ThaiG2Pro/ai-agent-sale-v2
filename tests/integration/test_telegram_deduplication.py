@@ -30,7 +30,7 @@ async def test_duplicate_update_acknowledged_but_not_reprocessed(
     processed: list[int] = []
     webhook_secret = "test_webhook_secret_1234567890"
 
-    async def fake_process(update, _: int) -> None:
+    async def fake_process(update, _: int, **__) -> None:
         processed.append(update.update_id)
 
     monkeypatch.setattr(telegram_webhook, "process_telegram_message", fake_process)

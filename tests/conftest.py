@@ -156,11 +156,13 @@ async def db_session():
     from core.config import settings
     from models.schema import (
         HITLMetadata,
+        IntentTracking,
         InterruptedSession,
         Order,
         Product,
         QueuedMessage,
         ReviewAction,
+        SalesIntentLog,
         SemanticCache,
         SupportQueue,
         TextEmbedding,
@@ -187,6 +189,8 @@ async def db_session():
             TextEmbedding,
             Product,
             SemanticCache,
+            SalesIntentLog,
+            IntentTracking,
         ]
         for table in tables:
             await session.execute(delete(table))

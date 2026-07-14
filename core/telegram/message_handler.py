@@ -2,42 +2,64 @@
 
 Handles incoming Telegram messages and callback queries by:
 1. Extracting chat_id and message text
-2. Creating LangGraph thread_id from chat_id
-3. Invoking the agent with message input
-4. Extracting response text
+2. Creating LangGraph session_id from chat_id
+3. Invoking the agent with proper AgentState (session_id/customer_id/user_message)
+4. Extracting response text (including HITL-paused acknowledgement)
 5. Sending response back to Telegram
+6. Dispatching post-turn memory background tasks
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from langgraph.errors import GraphInterrupt
 
 from core.agent.graph import build_graph
+from core.agent.state import make_initial_state
 from core.agent.tools import execute_inventory_lookup
+from services.database import AsyncSessionLocal
 from services.telegram_service import create_retry_keyboard, send_telegram_message
 
 if TYPE_CHECKING:
-    from core.agent.state import AgentState
+    from langgraph.graph.state import CompiledStateGraph
+
     from core.telegram.models import TelegramUpdate
 
 logger = logging.getLogger(__name__)
 
+_HITL_PENDING_MESSAGE = (
+    "Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên. "
+    "Chúng tôi sẽ phản hồi sớm nhất có thể. Cảm ơn bạn đã kiên nhẫn!"
+)
 
-async def process_telegram_message(update: TelegramUpdate, chat_id: int) -> None:
+
+async def process_telegram_message(
+    update: TelegramUpdate,
+    chat_id: int,
+    graph: CompiledStateGraph | None = None,
+) -> None:
     """Process Telegram message with LangGraph agent (T037-T042).
 
     Args:
         update: Telegram update payload
         chat_id: Telegram chat/user ID
+        graph: Compiled agent graph with checkpointer (shared, stateless — see
+            api.dependencies.get_agent_graph). If omitted (e.g. called directly
+            in tests), a fresh uncheckpointed graph is built; HITL pause/resume
+            across separate calls will not work on that fallback path.
 
     Flow:
         1. Extract message text (T038)
-        2. Create thread_id: telegram_{chat_id} (T038)
-        3. Invoke LangGraph agent (T039)
-        4. Extract response text (T040)
-        5. Send response to Telegram (T041)
-        6. Log processing (T042)
+        2. Create session_id: telegram_{chat_id} (T038)
+        3. Check for an in-flight HITL pause (queue message instead of re-invoking)
+        4. Invoke LangGraph agent with proper AgentState (T039)
+        5. Extract response text, including HITL-paused acknowledgement (T040)
+        6. Send response to Telegram (T041)
+        7. Dispatch post-turn memory background tasks
+        8. Log processing (T042)
     """
     logger.info(
         "Starting Telegram message processing",
@@ -81,54 +103,91 @@ async def process_telegram_message(update: TelegramUpdate, chat_id: int) -> None
                 )
             return
 
-        thread_id = f"telegram_{chat_id}"
+        session_id = f"telegram_{chat_id}"
+        customer_id = str(chat_id)
 
         logger.info(
             "Processing message",
             extra={
                 "chat_id": chat_id,
-                "thread_id": thread_id,
+                "session_id": session_id,
                 "text_length": len(text),
             },
         )
 
-        graph = build_graph()
-        config = {"configurable": {"thread_id": thread_id}}
+        is_hitl_paused = False
+        success = False
 
-        initial_state: AgentState = {
-            "messages": [{"role": "user", "content": text}],
-            "chat_id": chat_id,
-            "update_id": update.update_id,
-        }
+        async with AsyncSessionLocal() as db:
+            # Paused-session gateway — queue the message instead of re-invoking
+            # a thread that's currently interrupted awaiting admin review.
+            from api.dependencies import check_paused_session
 
-        result = await graph.ainvoke(initial_state, config)
+            pause_info = await check_paused_session(session_id, text, db)
+            if pause_info["queued"]:
+                await send_telegram_message(chat_id, pause_info["message"])
+                return
 
-        response_text = _extract_response_from_state(result)
-
-        if not response_text:
-            logger.error(
-                "No response from agent",
-                extra={"chat_id": chat_id, "state": result},
+            active_graph = graph if graph is not None else build_graph()
+            config = {"configurable": {"thread_id": session_id, "db": db}}
+            initial_state = make_initial_state(
+                text,
+                session_id=session_id,
+                customer_id=customer_id,
             )
-            response_text = "Sorry, I couldn't process your request. Please try again."
 
-        success = await send_telegram_message(chat_id, response_text)
+            final_state = await active_graph.ainvoke(initial_state, config=config)
 
-        if not success:
-            logger.error(
-                "Failed to send response to Telegram",
-                extra={"chat_id": chat_id, "response_length": len(response_text)},
-            )
+            # Detect HITL pause: aget_state().next is non-empty when interrupt() fired.
+            snapshot = await active_graph.aget_state(config)
+            is_hitl_paused = bool(snapshot.next)
+
+            if is_hitl_paused:
+                response_text = _HITL_PENDING_MESSAGE
+            else:
+                response_text = final_state.get("response") or (
+                    "Sorry, I couldn't process your request. Please try again."
+                )
+
+            success = await send_telegram_message(chat_id, response_text)
+
+            if not success:
+                logger.error(
+                    "Failed to send response to Telegram",
+                    extra={"chat_id": chat_id, "response_length": len(response_text)},
+                )
+
+            if not is_hitl_paused:
+                from services.memory.background import post_turn_tasks
+
+                task = asyncio.create_task(
+                    post_turn_tasks(
+                        customer_id=customer_id,
+                        thread_id=session_id,
+                        state=final_state,
+                        db_factory=AsyncSessionLocal,
+                    )
+                )
+                task.add_done_callback(
+                    lambda t: logger.error("Post-turn background tasks failed: %s", t.exception())
+                    if t.exception()
+                    else None
+                )
 
         logger.info(
             "Telegram message processing complete",
             extra={
                 "chat_id": chat_id,
-                "thread_id": thread_id,
+                "session_id": session_id,
                 "success": success,
-                "response_length": len(response_text) if success else 0,
+                "hitl_paused": is_hitl_paused,
             },
         )
+
+    except GraphInterrupt:
+        # Defensive catch: LangGraph normally suppresses GraphInterrupt inside
+        # ainvoke, but in rare edge cases it may propagate here instead.
+        await send_telegram_message(chat_id, _HITL_PENDING_MESSAGE)
 
     except Exception as e:
         logger.error(
@@ -151,30 +210,3 @@ async def process_telegram_message(update: TelegramUpdate, chat_id: int) -> None
                 "Failed to send error message to user",
                 extra={"chat_id": chat_id, "error": str(send_error)},
             )
-
-
-def _extract_response_from_state(state: dict[str, Any]) -> str:
-    """Extract final response text from LangGraph state (T040).
-
-    Args:
-        state: LangGraph agent state after execution
-
-    Returns:
-        Response text to send to user
-    """
-    messages = state.get("messages", [])
-
-    if not messages:
-        return ""
-
-    for message in reversed(messages):
-        if isinstance(message, dict):
-            role = message.get("role")
-            content = message.get("content")
-            if role == "assistant" and content:
-                return str(content)
-        elif hasattr(message, "role") and hasattr(message, "content"):
-            if message.role == "assistant" and message.content:
-                return str(message.content)
-
-    return ""

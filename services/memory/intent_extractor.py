@@ -17,6 +17,7 @@ from core.agent.state import (
     SKIP_INTENT_EXTRACTION,
     IntentEnum,
     SalesIntentExtraction,
+    UrgencyLevel,
 )
 from core.config import settings
 
@@ -104,12 +105,24 @@ class SalesIntentExtractor:
             if hasattr(response, "choices") and len(response.choices) > 0:
                 content = response.choices[0].message.content
                 if isinstance(content, dict):
-                    extraction = SalesIntentExtraction(**content)
+                    parsed = dict(content)
                 else:
                     # Fallback: Parse JSON string if needed
                     import json
 
-                    extraction = SalesIntentExtraction(**json.loads(content))
+                    parsed = json.loads(content)
+
+                # SalesIntentExtraction is strict=True, so it rejects a plain
+                # JSON string for the urgency_level enum field — coerce it
+                # explicitly here (raw LiteLLM/JSON output is always a str).
+                raw_urgency = parsed.get("urgency_level")
+                if raw_urgency is not None and not isinstance(raw_urgency, UrgencyLevel):
+                    try:
+                        parsed["urgency_level"] = UrgencyLevel(raw_urgency)
+                    except ValueError:
+                        parsed["urgency_level"] = UrgencyLevel.UNKNOWN
+
+                extraction = SalesIntentExtraction(**parsed)
 
                 logger.debug(
                     "Intent extraction successful",

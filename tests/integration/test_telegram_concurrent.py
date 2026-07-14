@@ -19,7 +19,7 @@ async def test_concurrent_webhooks_ack_without_blocking(monkeypatch) -> None:
     processed: list[int] = []
     webhook_secret = "test_webhook_secret_1234567890"
 
-    async def fake_process(update, _: int) -> None:
+    async def fake_process(update, _: int, **__) -> None:
         await asyncio.sleep(0)
         processed.append(update.update_id)
 

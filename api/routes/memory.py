@@ -16,8 +16,9 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,  # noqa: TC002 - NEEDED: for Pydantic schema resolution
 )
+from sqlalchemy.orm import aliased
 
-from models.schema import IntentTracking
+from models.schema import IntentTracking, SalesIntentLog
 from services.database import get_db
 from services.memory.intent_tracker import (
     CustomerNotFoundError,
@@ -85,6 +86,48 @@ class SemanticMemoryResponse(BaseModel):
     )
 
 
+# === Helpers ===
+#
+# IntentTracking only stores lightweight state (status/version, optimistic
+# lock). The actual extracted signal detail (urgency, budget, product
+# interest...) lives in SalesIntentLog, written once per turn by
+# services.memory.background._maybe_extract_intent. The public response
+# combines both: state from IntentTracking, latest extracted signal from
+# SalesIntentLog (a customer may have no log yet — extraction is skipped for
+# low-signal turns, so all detail fields degrade to safe defaults).
+
+
+def _latest_sales_intent_log_join(stmt, latest_log: type[SalesIntentLog]):
+    """Outer-join `stmt` (must select FROM IntentTracking) with each row's
+    most recent SalesIntentLog, via a correlated subquery."""
+    latest_log_id = (
+        select(SalesIntentLog.id)
+        .where(SalesIntentLog.customer_id == IntentTracking.customer_id)
+        .order_by(SalesIntentLog.created_at.desc())
+        .limit(1)
+        .correlate(IntentTracking)
+        .scalar_subquery()
+    )
+    return stmt.outerjoin(latest_log, latest_log.id == latest_log_id)
+
+
+def _build_intent_response(
+    intent: IntentTracking, log: SalesIntentLog | None
+) -> IntentTrackingResponse:
+    """Combine IntentTracking (state/version) with the latest SalesIntentLog
+    (extracted signal detail, if any) into the public response shape."""
+    return IntentTrackingResponse(
+        customer_id=intent.customer_id,
+        budget_range=log.budget_range if log else None,
+        urgency_level=(log.urgency_level if log and log.urgency_level else "UNKNOWN"),
+        product_interest=list(log.product_interest) if log and log.product_interest else [],
+        decision_timeline=log.decision_timeline if log else None,
+        contact_preference=log.contact_preference if log else None,
+        version=intent.version,
+        intent_status=intent.status,
+    )
+
+
 # === Dependencies ===
 
 
@@ -130,11 +173,18 @@ async def get_intent(
     Raises:
         404: Customer not found
     """
-    from sqlalchemy import select
+    latest_log = aliased(SalesIntentLog)
+    stmt = (
+        _latest_sales_intent_log_join(
+            select(IntentTracking, latest_log).where(IntentTracking.customer_id == customer_id),
+            latest_log,
+        )
+        .order_by(IntentTracking.updated_at.desc())
+        .limit(1)
+    )
 
-    stmt = select(IntentTracking).where(IntentTracking.customer_id == customer_id)
     result = await db.execute(stmt)
-    row = result.scalar_one_or_none()
+    row = result.first()
 
     if not row:
         raise HTTPException(
@@ -142,7 +192,8 @@ async def get_intent(
             detail=f"Customer {customer_id} not found",
         )
 
-    return IntentTrackingResponse.from_orm(row)
+    intent, log = row
+    return _build_intent_response(intent, log)
 
 
 @router.get("/intents", response_model=PaginatedIntentList)
@@ -171,29 +222,32 @@ async def list_intents(
         401: Unauthorized (missing/invalid admin key)
         400: Invalid filter values
     """
-    from sqlalchemy import func, select
+    latest_log = aliased(SalesIntentLog)
 
-    # Build filter conditions
+    # Build filter conditions. urgency_level lives on SalesIntentLog (the
+    # extracted signal detail), intent_status maps to IntentTracking.status.
     conditions = []
     if urgency_level:
-        conditions.append(IntentTracking.urgency_level == urgency_level)
+        conditions.append(latest_log.urgency_level == urgency_level)
     if intent_status:
-        conditions.append(IntentTracking.intent_status == intent_status)
+        conditions.append(IntentTracking.status == intent_status)
 
     # Count total with filters
-    count_stmt = select(func.count(IntentTracking.id))
+    count_stmt = _latest_sales_intent_log_join(
+        select(func.count(IntentTracking.id)), latest_log
+    )
     if conditions:
         count_stmt = count_stmt.where(and_(*conditions))
     count_result = await db.execute(count_stmt)
     total = count_result.scalar_one()
 
     # Fetch paginated results ordered by urgency DESC, updated_at DESC
-    stmt = select(IntentTracking)
+    stmt = _latest_sales_intent_log_join(select(IntentTracking, latest_log), latest_log)
     if conditions:
         stmt = stmt.where(and_(*conditions))
     stmt = (
         stmt.order_by(
-            IntentTracking.urgency_level.desc(),
+            latest_log.urgency_level.desc(),
             IntentTracking.updated_at.desc(),
         )
         .limit(limit)
@@ -201,10 +255,10 @@ async def list_intents(
     )
 
     result = await db.execute(stmt)
-    rows = result.scalars().all()
+    rows = result.all()
 
     return PaginatedIntentList(
-        items=[IntentTrackingResponse.from_orm(row) for row in rows],
+        items=[_build_intent_response(intent, log) for intent, log in rows],
         total=total,
         limit=limit,
         offset=offset,
@@ -245,7 +299,16 @@ async def update_intent_status(
             trigger="admin",
             db=db,
         )
-        return IntentTrackingResponse.from_orm(updated_row)
+
+        log_stmt = (
+            select(SalesIntentLog)
+            .where(SalesIntentLog.customer_id == customer_id)
+            .order_by(SalesIntentLog.created_at.desc())
+            .limit(1)
+        )
+        log_row = (await db.execute(log_stmt)).scalar_one_or_none()
+
+        return _build_intent_response(updated_row, log_row)
 
     except CustomerNotFoundError as err:
         raise HTTPException(
@@ -291,7 +354,7 @@ async def get_semantic_memory(
         if not customer_id or not customer_id.startswith("cust_"):
             raise HTTPException(status_code=400, detail="Invalid customer_id format")
 
-        from models.memory import SemanticMemory
+        from models.schema import SemanticMemory
         from services.memory.semantic_memory import SemanticMemoryService
 
         service = SemanticMemoryService()

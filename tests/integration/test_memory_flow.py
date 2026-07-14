@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from api.main import app
 from core.config import settings
@@ -65,26 +65,36 @@ class TestMemoryFlow:
         app.dependency_overrides[get_db] = get_db_override
         monkeypatch.setattr(settings, "X_ADMIN_KEY", "test-admin-key-12345")
 
-        # Step 1: Insert a test intent record
+        # Step 1: Insert test records — IntentTracking holds lightweight state
+        # (status/version), SalesIntentLog holds the extracted signal detail.
+        # See api/routes/memory.py::_build_intent_response for how they join.
         customer_id = "test_customer_pricing_001"
-        from models.schema import IntentTracking
+        thread_id = f"{customer_id}_thread"
+        from models.schema import IntentTracking, SalesIntentLog
 
         test_intent = IntentTracking(
             customer_id=customer_id,
+            thread_id=thread_id,
+            status="NEW",
+            version=1,
+            last_updated_by="agent",
+        )
+        test_log = SalesIntentLog(
+            customer_id=customer_id,
+            thread_id=thread_id,
             primary_intent="PRICING",
             urgency_level="HIGH",
             budget_range="50000-100000",
             product_interest=["Product A", "Product B"],
             decision_timeline="This week",
             contact_preference="Email",
-            version=1,
-            intent_status="NEW",
+            extraction_model="test-model",
         )
-        async_session_test_db.add(test_intent)
+        async_session_test_db.add_all([test_intent, test_log])
         await async_session_test_db.commit()
 
         # Step 2: GET /memory/intent/{customer_id}
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(f"/memory/intent/{customer_id}")
 
         # Step 3: Verify response
@@ -122,40 +132,42 @@ class TestMemoryFlow:
         app.dependency_overrides[get_db] = get_db_override
         monkeypatch.setattr(settings, "X_ADMIN_KEY", "test-admin-key-12345")
 
-        # Insert test intents with different urgency levels
-        from models.schema import IntentTracking
+        # Insert test intents with different urgency levels (state in
+        # IntentTracking, extracted signal detail in SalesIntentLog).
+        from models.schema import IntentTracking, SalesIntentLog
 
-        intents = [
-            IntentTracking(
-                customer_id="cust_high_001",
-                primary_intent="COMPLAINT",
-                urgency_level="HIGH",
-                product_interest=["Service A"],
-                version=1,
-                intent_status="NEW",
-            ),
-            IntentTracking(
-                customer_id="cust_medium_001",
-                primary_intent="INFO",
-                urgency_level="MEDIUM",
-                product_interest=["Service B"],
-                version=1,
-                intent_status="NEW",
-            ),
-            IntentTracking(
-                customer_id="cust_high_002",
-                primary_intent="NEGOTIATION",
-                urgency_level="HIGH",
-                product_interest=["Service C"],
-                version=1,
-                intent_status="ENGAGED",
-            ),
+        cases = [
+            ("cust_high_001", "COMPLAINT", "HIGH", ["Service A"], "NEW"),
+            ("cust_medium_001", "INFO_QUERY", "MEDIUM", ["Service B"], "NEW"),
+            ("cust_high_002", "NEGOTIATION", "HIGH", ["Service C"], "ENGAGED"),
         ]
-        async_session_test_db.add_all(intents)
+        rows: list[object] = []
+        for customer_id, primary_intent, urgency, products, status in cases:
+            thread_id = f"{customer_id}_thread"
+            rows.append(
+                IntentTracking(
+                    customer_id=customer_id,
+                    thread_id=thread_id,
+                    status=status,
+                    version=1,
+                    last_updated_by="agent",
+                )
+            )
+            rows.append(
+                SalesIntentLog(
+                    customer_id=customer_id,
+                    thread_id=thread_id,
+                    primary_intent=primary_intent,
+                    urgency_level=urgency,
+                    product_interest=products,
+                    extraction_model="test-model",
+                )
+            )
+        async_session_test_db.add_all(rows)
         await async_session_test_db.commit()
 
         # Query with admin key and urgency filter
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/memory/intents",
                 params={"urgency_level": "HIGH", "x_admin_key": "test-admin-key-12345"},
@@ -188,7 +200,7 @@ class TestMemoryFlow:
 
         app.dependency_overrides[get_db] = get_db_override
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/memory/intents")
 
         assert response.status_code == 401
@@ -220,17 +232,16 @@ class TestMemoryFlow:
         customer_id = "cust_update_001"
         test_intent = IntentTracking(
             customer_id=customer_id,
-            primary_intent="PRICING",
-            urgency_level="MEDIUM",
-            product_interest=["Service A"],
+            thread_id=f"{customer_id}_thread",
+            status="NEW",
             version=1,
-            intent_status="NEW",
+            last_updated_by="agent",
         )
         async_session_test_db.add(test_intent)
         await async_session_test_db.commit()
 
         # Update status via API
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.patch(
                 f"/memory/intent/{customer_id}/status",
                 json={"new_status": "CONTACTED", "expected_version": 1},
@@ -268,17 +279,16 @@ class TestMemoryFlow:
         customer_id = "cust_conflict_001"
         test_intent = IntentTracking(
             customer_id=customer_id,
-            primary_intent="PRICING",
-            urgency_level="LOW",
-            product_interest=["Service A"],
+            thread_id=f"{customer_id}_thread",
+            status="NEW",
             version=2,  # Version is 2
-            intent_status="NEW",
+            last_updated_by="agent",
         )
         async_session_test_db.add(test_intent)
         await async_session_test_db.commit()
 
         # Try to update with stale version
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.patch(
                 f"/memory/intent/{customer_id}/status",
                 json={"new_status": "CONTACTED", "expected_version": 1},  # Stale
@@ -306,7 +316,7 @@ class TestMemoryFlow:
 
         app.dependency_overrides[get_db] = get_db_override
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/memory/intent/nonexistent_customer_12345")
 
         assert response.status_code == 404

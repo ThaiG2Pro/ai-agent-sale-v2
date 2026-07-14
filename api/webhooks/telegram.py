@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
-from api.dependencies import verify_telegram_secret
+from api.dependencies import get_agent_graph, verify_telegram_secret
 from core.agent.tools import execute_inventory_lookup
 from core.telegram import security as telegram_security
 from core.telegram.message_handler import process_telegram_message
@@ -34,6 +34,7 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 async def telegram_webhook(
     update: TelegramUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
+    graph: Annotated[Any, Depends(get_agent_graph)],
     _: Annotated[None, Depends(verify_telegram_secret)],
 ) -> dict:
     """Handle incoming Telegram webhook updates (T028-T033).
@@ -103,7 +104,7 @@ async def telegram_webhook(
     async def _process_with_error_handling():
         """Wrapper to catch and log background task exceptions (T044-T045)."""
         try:
-            await process_telegram_message(update, chat_id)
+            await process_telegram_message(update, chat_id, graph=graph)
         except Exception as e:
             logger.error(
                 "Background task error",

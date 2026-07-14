@@ -30,7 +30,7 @@ async def test_webhook_acknowledges_and_processes_message_in_background(
     processed: list[tuple[int, int]] = []
     webhook_secret = "test_webhook_secret_1234567890"
 
-    async def fake_process(update, incoming_chat_id: int) -> None:
+    async def fake_process(update, incoming_chat_id: int, **_) -> None:
         processed.append((update.update_id, incoming_chat_id))
 
     monkeypatch.setattr(telegram_webhook, "process_telegram_message", fake_process)

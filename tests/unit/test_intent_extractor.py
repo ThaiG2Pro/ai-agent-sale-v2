@@ -76,7 +76,7 @@ class TestSalesIntentExtractor:
                     )
                 )
             ]
-            mock_llm.return_value = AsyncMock(return_value=mock_response)
+            mock_llm.return_value = mock_response
 
             result = await self.extractor.extract(conversation, mock_db)
 
@@ -105,7 +105,7 @@ class TestSalesIntentExtractor:
                     )
                 )
             ]
-            mock_llm.return_value = AsyncMock(return_value=mock_response)
+            mock_llm.return_value = mock_response
 
             result = await self.extractor.extract(conversation, mock_db)
 
@@ -133,7 +133,7 @@ class TestSalesIntentExtractor:
                     )
                 )
             ]
-            mock_llm.return_value = AsyncMock(return_value=mock_response)
+            mock_llm.return_value = mock_response
 
             result = await self.extractor.extract(conversation, mock_db)
 
@@ -166,7 +166,7 @@ class TestSalesIntentExtractor:
                     )
                 )
             ]
-            mock_llm.return_value = AsyncMock(return_value=mock_response)
+            mock_llm.return_value = mock_response
 
             await self.extractor.extract(conversation, mock_db)
 
