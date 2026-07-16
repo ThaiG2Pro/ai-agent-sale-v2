@@ -76,7 +76,7 @@ async def test_hitl_service_optimistic_lock_conflict(mock_db, mock_graph, sample
 async def test_hitl_service_request_edit_no_resume(mock_db, mock_graph, sample_payload):
     """Test that request_edit updates state but doesn't resume graph (T063)."""
     sample_payload.action = "request_edit"
-    sample_payload.state_edits = {"price": 100}
+    sample_payload.state_edits = {"order_info": {"quantity": 2, "price": 100.0}}
 
     # 1. No idempotency hit
     mock_db.execute.return_value.scalar_one_or_none.return_value = None
@@ -90,6 +90,98 @@ async def test_hitl_service_request_edit_no_resume(mock_db, mock_graph, sample_p
     assert result["status"] == "edit_applied"
     assert mock_graph.aupdate_state.called
     assert not mock_graph.ainvoke.called
+
+
+@pytest.mark.asyncio
+async def test_request_edit_rejects_unknown_field(mock_db, mock_graph, sample_payload):
+    """request_edit validates fields for real — unknown field → 422 (T046 Part 1)."""
+    sample_payload.action = "request_edit"
+    sample_payload.state_edits = {"totally_bogus_field": 123}
+
+    mock_db.execute.return_value.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value.rowcount = 1
+
+    with pytest.raises(HTTPException) as exc:
+        await HITLService.process_request_edit(sample_payload, "key-123", mock_db, mock_graph, {})
+
+    assert exc.value.status_code == 422
+    assert "totally_bogus_field" in str(exc.value.detail)
+    assert not mock_graph.aupdate_state.called
+
+
+@pytest.mark.asyncio
+async def test_request_edit_rejects_invalid_value(mock_db, mock_graph, sample_payload):
+    """request_edit validates values — wrong type / out-of-range → 422 (T046 Part 1)."""
+    sample_payload.action = "request_edit"
+    sample_payload.state_edits = {
+        "confidence_score": "very high",  # wrong type
+        "order_info": {"quantity": -1},  # invalid quantity
+    }
+
+    mock_db.execute.return_value.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value.rowcount = 1
+
+    with pytest.raises(HTTPException) as exc:
+        await HITLService.process_request_edit(sample_payload, "key-123", mock_db, mock_graph, {})
+
+    assert exc.value.status_code == 422
+    assert not mock_graph.aupdate_state.called
+
+
+@pytest.mark.asyncio
+async def test_request_edit_synthetic_message_keyed_by_field_and_pause(
+    mock_db, mock_graph, sample_payload
+):
+    """Synthetic admin_override records carry a deterministic id (field, pause_id)
+    so add_messages REPLACES instead of stacking duplicates (T046 Part 2)."""
+    sample_payload.action = "request_edit"
+    sample_payload.state_edits = {"order_info": {"quantity": 3}}
+
+    mock_db.execute.return_value.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value.rowcount = 1
+
+    await HITLService.process_request_edit(sample_payload, "key-123", mock_db, mock_graph, {})
+
+    _config, update_arg = mock_graph.aupdate_state.call_args.args[:2]
+    synthetic_msgs = update_arg["messages"]
+    assert len(synthetic_msgs) == 1
+    assert synthetic_msgs[0]["id"] == f"admin_override:order_info:{sample_payload.pause_id}"
+    assert update_arg["order_info"] == {"quantity": 3}
+
+
+@pytest.mark.asyncio
+async def test_request_edit_invalid_acknowledged_ids(mock_db, mock_graph, sample_payload):
+    """Non-UUID acknowledged_message_ids → 422 (T046 Part 3)."""
+    sample_payload.action = "request_edit"
+    sample_payload.state_edits = {"order_info": {"quantity": 1}}
+    sample_payload.acknowledged_message_ids = ["not-a-uuid"]
+
+    mock_db.execute.return_value.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value.rowcount = 1
+
+    with pytest.raises(HTTPException) as exc:
+        await HITLService.process_request_edit(sample_payload, "key-123", mock_db, mock_graph, {})
+
+    assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_request_edit_acknowledges_messages(mock_db, mock_graph, sample_payload):
+    """Valid acknowledged_message_ids are marked processed via UPDATE (T046 Part 3)."""
+    sample_payload.action = "request_edit"
+    sample_payload.state_edits = {"order_info": {"quantity": 1}}
+    sample_payload.acknowledged_message_ids = [str(uuid.uuid4())]
+
+    mock_db.execute.return_value.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value.rowcount = 1
+
+    result = await HITLService.process_request_edit(
+        sample_payload, "key-123", mock_db, mock_graph, {}
+    )
+
+    assert result["status"] == "edit_applied"
+    # execute called for: idempotency, version lock, acknowledge UPDATE
+    assert mock_db.execute.await_count >= 3
 
 
 # Week 5: Checkpoint Durability Tests (T034-T035)
@@ -142,9 +234,19 @@ async def test_validation_error_marks_incompatible(mock_db, mock_graph):
     """T035: aget_state() ValidationError → INCOMPATIBLE marked (FR-018)."""
     session_id = "session-456"
 
-    # Mock aget_state to raise ValidationError
+    # Mock aget_state to raise ValidationError.
+    # Pydantic v2 requires value_error lines to carry the original exception
+    # in ctx["error"] instead of a plain msg string.
     mock_graph.aget_state.side_effect = ValidationError.from_exception_data(
-        "AgentState", [{"type": "value_error", "loc": ("field",), "msg": "Invalid state"}]
+        "AgentState",
+        [
+            {
+                "type": "value_error",
+                "loc": ("field",),
+                "input": None,
+                "ctx": {"error": ValueError("Invalid state")},
+            }
+        ],
     )
 
     # Mock database execute

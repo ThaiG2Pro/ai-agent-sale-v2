@@ -23,6 +23,9 @@ class ReviewActionCreate(BaseModel):
     # Merged into existing order_info rather than replacing it.
     approved_price: float | None = None
     reason_or_comment: str | None = None
+    # Queued message IDs the admin already reviewed/handled manually — they are
+    # marked processed so queue_consumer_node skips them on resume.
+    acknowledged_message_ids: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(strict=True)
 

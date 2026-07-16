@@ -26,33 +26,61 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def check_checkpoint_size(session_id: str, db: AsyncSession) -> None:
+async def check_checkpoint_size(session_id: str, db: AsyncSession) -> int | None:
     """Check checkpoint payload size and warn if excessive (FR-001b, T036).
 
-    Queries the checkpoint_blobs table for the given session_id and logs
-    a WARNING if total size exceeds CHECKPOINT_SIZE_WARN_BYTES.
+    Sums octet_length of all checkpoint_blobs rows for the given thread_id
+    (the table AsyncPostgresSaver creates in the default schema) and logs a
+    WARNING when the total exceeds CHECKPOINT_SIZE_WARN_BYTES.
 
     Args:
         session_id: LangGraph thread_id
         db: Async database session
+
+    Returns:
+        Total blob bytes for the session, or None if no rows / query failed.
     """
+    from sqlalchemy import text
+
     try:
-        # For now, log a placeholder - exact implementation depends on checkpoint table
-        # This is a safe no-op that allows testing
-        logger.debug(
-            "Checkpoint size check requested",
-            extra={
-                "session_id": session_id,
-                "warn_threshold_bytes": settings.CHECKPOINT_SIZE_WARN_BYTES,
-            },
+        result = await db.execute(
+            text("SELECT SUM(octet_length(blob)) FROM checkpoint_blobs WHERE thread_id = :tid"),
+            {"tid": session_id},
         )
+        total_bytes = result.scalar_one_or_none()
+
+        if total_bytes is None:
+            logger.debug(
+                "No checkpoint blobs found for session",
+                extra={"session_id": session_id},
+            )
+            return None
+
+        total_bytes = int(total_bytes)
+        if total_bytes > settings.CHECKPOINT_SIZE_WARN_BYTES:
+            logger.warning(
+                "Checkpoint size exceeds threshold",
+                extra={
+                    "session_id": session_id,
+                    "total_bytes": total_bytes,
+                    "warn_threshold_bytes": settings.CHECKPOINT_SIZE_WARN_BYTES,
+                },
+            )
+        else:
+            logger.debug(
+                "Checkpoint size within threshold",
+                extra={"session_id": session_id, "total_bytes": total_bytes},
+            )
+        return total_bytes
 
     except Exception as e:
-        # Graceful failure - do not block on DB query errors
+        # Graceful failure - do not block on DB query errors (e.g. checkpointer
+        # tables not yet created in this environment)
         logger.debug(
             "Checkpoint size check failed (non-blocking)",
             extra={"session_id": session_id, "error": str(e)},
         )
+        return None
 
 
 async def _maybe_extract_intent(
@@ -147,6 +175,7 @@ async def _maybe_extract_intent(
         # FR-013: Graceful degradation - log error, do not re-raise
         logger.error(
             "Intent extraction failed (non-blocking)",
+            exc_info=True,
             extra={
                 "customer_id": customer_id,
                 "thread_id": thread_id,
@@ -161,17 +190,21 @@ async def _maybe_summarize(
     thread_id: str,
     state: AgentState,
     db_factory: Callable[[], AsyncSession],
-) -> None:
+) -> bool:
     """Conditionally summarize conversation (FR-010, T104).
 
     Checks if summary should be created based on message count.
-    If yes, calls summarizer, saves to DB, and updates semantic memory.
+    If yes, calls summarizer and saves (upserts) to DB.
 
     Args:
         customer_id: Customer identifier
         thread_id: LangGraph thread_id
         state: Current AgentState with messages
         db_factory: AsyncSession factory for DB operations
+
+    Returns:
+        True if a summary was persisted this turn (drives the embed step),
+        False when skipped or failed.
     """
     try:
         from services.memory.summarizer import ConversationSummarizer
@@ -196,14 +229,14 @@ async def _maybe_summarize(
                     "message_count": message_count,
                 },
             )
-            return
+            return False
 
         # Summarize conversation (T097-T101)
         messages = state.get("messages", [])
         summarizer = ConversationSummarizer()
         summary = await summarizer.summarize(messages, session_id=thread_id)
 
-        # Save to DB (T102-T103)
+        # Save to DB — save_summary upserts and commits (T102-T103)
         async with db_factory() as db:
             await ConversationSummarizer.save_summary(
                 summary=summary,
@@ -212,7 +245,6 @@ async def _maybe_summarize(
                 turn_count=message_count,
                 db=db,
             )
-            await db.commit()
 
         logger.debug(
             "Conversation summarized",
@@ -223,6 +255,7 @@ async def _maybe_summarize(
                 "products": summary.products_discussed,
             },
         )
+        return True
 
     except ValueError as e:
         # Expected error for empty conversations
@@ -234,10 +267,12 @@ async def _maybe_summarize(
                 "error": str(e),
             },
         )
+        return False
     except Exception as e:
         # FR-013: Graceful degradation - log error, do not re-raise
         logger.error(
             "Summarization failed (non-blocking)",
+            exc_info=True,
             extra={
                 "customer_id": customer_id,
                 "thread_id": thread_id,
@@ -245,6 +280,7 @@ async def _maybe_summarize(
                 "error_type": type(e).__name__,
             },
         )
+        return False
 
 
 async def _update_semantic_memory(
@@ -255,11 +291,9 @@ async def _update_semantic_memory(
 ) -> None:
     """Store conversation summary to semantic memory (T127).
 
-    Called after successful summarization. Stores the latest summary
-    as an embedding in semantic_memory table for future retrieval.
-
-    Only calls semantic memory service if a summary was successfully
-    created in the current turn (state.thread_summary_exists=True).
+    Called by _summarize_and_embed ONLY after a summary was persisted this
+    turn (the old gate on the pre-turn ``thread_summary_exists`` flag was
+    always False, so the summarize→embed chain never ran).
 
     Args:
         customer_id: Customer identifier (for isolation)
@@ -270,14 +304,6 @@ async def _update_semantic_memory(
     Raises: Nothing (errors logged, not propagated per T128)
     """
     try:
-        # Only update semantic memory if summary exists (T129)
-        if not state.get("thread_summary_exists", False):
-            logger.debug(
-                "Skipping semantic memory update (no summary created)",
-                extra={"customer_id": customer_id, "thread_id": thread_id},
-            )
-            return
-
         from sqlalchemy import select
 
         from services.memory.semantic_memory import SemanticMemoryService
@@ -290,7 +316,7 @@ async def _update_semantic_memory(
                 select(ConversationSummary)
                 .where(
                     (ConversationSummary.customer_id == customer_id)
-                    & (ConversationSummary.session_id == thread_id)
+                    & (ConversationSummary.thread_id == thread_id)
                 )
                 .order_by(ConversationSummary.created_at.desc())
                 .limit(1)
@@ -326,6 +352,7 @@ async def _update_semantic_memory(
         # T128: Log error, don't propagate (graceful degradation)
         logger.error(
             "Semantic memory update failed (non-blocking)",
+            exc_info=True,
             extra={
                 "customer_id": customer_id,
                 "thread_id": thread_id,
@@ -333,6 +360,28 @@ async def _update_semantic_memory(
                 "error_type": type(e).__name__,
             },
         )
+
+
+async def _summarize_and_embed(
+    customer_id: str,
+    thread_id: str,
+    state: AgentState,
+    db_factory: Callable[[], AsyncSession],
+) -> None:
+    """Chain summarization → semantic memory embedding (T104 + T127).
+
+    The embed step depends on the summary row existing, so it runs
+    sequentially after _maybe_summarize instead of in parallel with it —
+    and only when a summary was actually persisted this turn.
+    """
+    summary_saved = await _maybe_summarize(customer_id, thread_id, state, db_factory)
+    if not summary_saved:
+        logger.debug(
+            "Skipping semantic memory update (no summary created)",
+            extra={"customer_id": customer_id, "thread_id": thread_id},
+        )
+        return
+    await _update_semantic_memory(customer_id, thread_id, state, db_factory)
 
 
 async def post_turn_tasks(
@@ -343,11 +392,10 @@ async def post_turn_tasks(
 ) -> None:
     """Coordinator for all post-turn background tasks (FR-013, T079).
 
-    Executes all 4 memory tasks in parallel:
-    1. _check_checkpoint_size()
+    Executes 3 memory tasks in parallel:
+    1. check_checkpoint_size()
     2. _maybe_extract_intent()
-    3. _maybe_summarize()
-    4. _update_semantic_memory()
+    3. _summarize_and_embed()  (summarize → embed, sequential chain)
 
     All tasks run via asyncio.gather(return_exceptions=True) so failures
     in one task don't block others. Errors are logged by task index.
@@ -366,8 +414,7 @@ async def post_turn_tasks(
     results = await asyncio.gather(
         _checkpoint_task(),
         _maybe_extract_intent(customer_id, thread_id, state, db_factory),
-        _maybe_summarize(customer_id, thread_id, state, db_factory),
-        _update_semantic_memory(customer_id, thread_id, state, db_factory),
+        _summarize_and_embed(customer_id, thread_id, state, db_factory),
         return_exceptions=True,
     )
 
@@ -375,13 +422,15 @@ async def post_turn_tasks(
     task_names = [
         "checkpoint_size",
         "intent_extraction",
-        "summarization",
-        "semantic_memory",
+        "summarize_and_embed",
     ]
     for task_idx, result in enumerate(results):
         if isinstance(result, Exception):
             logger.error(
                 f"Background task {task_names[task_idx]} failed",
+                # result is a collected exception object (gather), not the
+                # active exception — pass it explicitly for its traceback.
+                exc_info=result,
                 extra={
                     "customer_id": customer_id,
                     "thread_id": thread_id,

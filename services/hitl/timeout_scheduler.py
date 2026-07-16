@@ -22,6 +22,28 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# FR-016: customer-facing warning sent after HITL_TIMEOUT_WARN_MIN minutes paused.
+TIMEOUT_WARN_MESSAGE_VI = (
+    "⏳ Đơn của bạn đang chờ duyệt từ nhân viên hỗ trợ. "
+    "Chúng tôi sẽ phản hồi sớm nhất có thể — cảm ơn bạn đã kiên nhẫn! "
+    f"Nếu cần hỗ trợ gấp, vui lòng liên hệ: {settings.SUPPORT_CONTACT_LINK}"
+)
+
+
+def _telegram_chat_id_from_session(session_id: str) -> int | None:
+    """Extract Telegram chat_id from a session_id of the form 'telegram_<chat_id>'.
+
+    Sessions from other channels (API/CLI) have no Telegram delivery target.
+    Group chat ids are negative, hence the lstrip("-").
+    """
+    prefix = "telegram_"
+    if not session_id.startswith(prefix):
+        return None
+    suffix = session_id.removeprefix(prefix)
+    if suffix.lstrip("-").isdigit():
+        return int(suffix)
+    return None
+
 
 async def run_timeout_scheduler(
     session_factory: async_sessionmaker[AsyncSession],
@@ -60,6 +82,28 @@ async def _process_timeouts(db: AsyncSession) -> None:
             f"HITL Timeout Warning: Session {meta.session_id} has been paused "
             f"since {meta.paused_at}. Support link: {settings.SUPPORT_CONTACT_LINK}"
         )
+
+        # FR-016: notify the customer for real, not just the server log.
+        # Only Telegram-originated sessions carry a deliverable chat_id.
+        chat_id = _telegram_chat_id_from_session(meta.session_id)
+        notified = False
+        if chat_id is not None:
+            from services.telegram_service import send_telegram_message
+
+            notified = await send_telegram_message(chat_id, TIMEOUT_WARN_MESSAGE_VI)
+            if not notified:
+                logger.warning(
+                    "HITL timeout warning: Telegram send failed for session %s (chat_id=%s)",
+                    meta.session_id,
+                    chat_id,
+                )
+        else:
+            logger.warning(
+                "HITL timeout warning: session %s has no Telegram chat_id — "
+                "customer notification skipped (no delivery channel)",
+                meta.session_id,
+            )
+
         # Structured log for observability (T048)
         logger.info(
             "HITL event",
@@ -67,6 +111,7 @@ async def _process_timeouts(db: AsyncSession) -> None:
                 "event": "hitl_timeout_warn",
                 "session_id": meta.session_id,
                 "paused_at": meta.paused_at.isoformat(),
+                "customer_notified": notified,
             },
         )
         meta.timeout_notified_at = now

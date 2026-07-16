@@ -1,4 +1,10 @@
-"""Tests for memory_retrieval_node (Phase 7d, T132-T140)."""
+"""Tests for memory_retrieval_node (Phase 7d, T132-T140).
+
+The node follows the LangGraph node contract (state, config) — the db session
+travels in config["configurable"]["db"] (P0-1 regression: a (state, db)
+signature received the RunnableConfig instead of the session, so recall was
+always empty in the compiled graph).
+"""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,6 +18,11 @@ from core.agent.state import AgentState, IntentEnum
 def mock_db():
     """Mock async database session."""
     return AsyncMock()
+
+
+def make_config(db):
+    """RunnableConfig-shaped dict as LangGraph passes it to nodes."""
+    return {"configurable": {"db": db, "thread_id": "thread_001"}}
 
 
 @pytest.fixture
@@ -40,7 +51,7 @@ async def test_memory_retrieval_missing_customer_id(mock_db):
         conversation_history=[],
     )
 
-    result = await memory_retrieval_node(state, mock_db)
+    result = await memory_retrieval_node(state, make_config(mock_db))
 
     assert result["memory_context"] == []
     assert result["memory_retrieval_scores"] == []
@@ -56,7 +67,33 @@ async def test_memory_retrieval_smalltalk_intent(base_state, mock_db):
     """
     base_state["primary_intent"] = IntentEnum.SMALLTALK
 
-    result = await memory_retrieval_node(base_state, mock_db)
+    result = await memory_retrieval_node(base_state, make_config(mock_db))
+
+    assert result["memory_context"] == []
+    assert result["memory_retrieval_scores"] == []
+
+
+@pytest.mark.asyncio
+async def test_memory_retrieval_smalltalk_via_router_intent_key(mock_db):
+    """SMALLTALK skip also works with the "intent" key router_node actually sets."""
+    state = AgentState(
+        customer_id="cust_001",
+        thread_id="thread_001",
+        user_message="Hi",
+        intent="SMALLTALK",
+        conversation_history=[],
+    )
+
+    result = await memory_retrieval_node(state, make_config(mock_db))
+
+    assert result["memory_context"] == []
+    assert result["memory_retrieval_scores"] == []
+
+
+@pytest.mark.asyncio
+async def test_memory_retrieval_missing_db_in_config(base_state):
+    """No db in config → empty context, no exception (graceful degradation)."""
+    result = await memory_retrieval_node(base_state, {"configurable": {}})
 
     assert result["memory_context"] == []
     assert result["memory_retrieval_scores"] == []
@@ -89,7 +126,7 @@ async def test_memory_retrieval_two_results(base_state, mock_db):
         "services.memory.semantic_memory.SemanticMemoryService",
         return_value=mock_service_instance,
     ):
-        result = await memory_retrieval_node(base_state, mock_db)
+        result = await memory_retrieval_node(base_state, make_config(mock_db))
 
         assert len(result["memory_context"]) == 2
         assert len(result["memory_retrieval_scores"]) == 2
@@ -104,13 +141,15 @@ async def test_memory_retrieval_two_results(base_state, mock_db):
         assert result["memory_retrieval_scores"][0] == 0.92
         assert result["memory_retrieval_scores"][1] == 0.88
 
-        # Verify retrieve() was called with correct parameters
+        # Verify retrieve() was called with correct parameters — including the
+        # db session extracted from config["configurable"]["db"]
         mock_service_instance.retrieve.assert_called_once()
         call_args = mock_service_instance.retrieve.call_args
         assert call_args.kwargs["customer_id"] == "cust_001"
         assert call_args.kwargs["query"] == "What's the price?"
         assert call_args.kwargs["top_k"] == 3
         assert call_args.kwargs["min_score"] == 0.75
+        assert call_args.kwargs["db"] is mock_db
 
 
 @pytest.mark.asyncio
@@ -128,7 +167,7 @@ async def test_memory_retrieval_graceful_error_handling(base_state, mock_db):
         "services.memory.semantic_memory.SemanticMemoryService",
         return_value=mock_service_instance,
     ):
-        result = await memory_retrieval_node(base_state, mock_db)
+        result = await memory_retrieval_node(base_state, make_config(mock_db))
 
         # Should gracefully handle error and return empty context
         assert result["memory_context"] == []
@@ -164,7 +203,7 @@ async def test_memory_retrieval_different_intents(mock_db):
                 conversation_history=[],
             )
 
-            result = await memory_retrieval_node(state, mock_db)
+            result = await memory_retrieval_node(state, make_config(mock_db))
 
             # Should call retrieve for all non-SMALLTALK intents
             assert result["memory_context"] == []
@@ -185,10 +224,60 @@ async def test_memory_retrieval_empty_results(base_state, mock_db):
         "services.memory.semantic_memory.SemanticMemoryService",
         return_value=mock_service_instance,
     ):
-        result = await memory_retrieval_node(base_state, mock_db)
+        result = await memory_retrieval_node(base_state, make_config(mock_db))
 
         assert result["memory_context"] == []
         assert result["memory_retrieval_scores"] == []
+
+
+@pytest.mark.asyncio
+async def test_memory_retrieval_wired_through_langgraph():
+    """P0-1 regression: LangGraph invokes nodes with (state, config).
+
+    Registers the REAL memory_retrieval_node in a compiled StateGraph exactly
+    like core/agent/graph.py does, invokes it through LangGraph, and asserts
+    the db from config["configurable"]["db"] reaches the service. With the
+    old (state, db) signature this test yields empty memory_context because
+    the node received the RunnableConfig instead of the session.
+    """
+    from langgraph.graph import END, START, StateGraph
+
+    mock_db = AsyncMock()
+
+    mock_result = MagicMock()
+    mock_result.summary_id = "summ_001"
+    mock_result.summary_text = "Past conversation about laptops"
+    mock_result.session_id = "thread_old_001"
+    mock_result.similarity_score = 0.91
+
+    mock_service_instance = AsyncMock()
+    mock_service_instance.retrieve = AsyncMock(return_value=[mock_result])
+
+    builder = StateGraph(AgentState)
+    builder.add_node("memory_retrieval_node", memory_retrieval_node)
+    builder.add_edge(START, "memory_retrieval_node")
+    builder.add_edge("memory_retrieval_node", END)
+    graph = builder.compile()
+
+    with patch(
+        "services.memory.semantic_memory.SemanticMemoryService",
+        return_value=mock_service_instance,
+    ):
+        final_state = await graph.ainvoke(
+            {
+                "customer_id": "cust_001",
+                "session_id": "thread_001",
+                "user_message": "What's the price?",
+                "intent": "PRICING",
+                "messages": [],
+            },
+            config={"configurable": {"thread_id": "thread_001", "db": mock_db}},
+        )
+
+    assert final_state["memory_context"], "semantic recall must not be empty in the graph"
+    assert final_state["memory_context"][0]["summary_id"] == "summ_001"
+    assert final_state["memory_retrieval_scores"] == [0.91]
+    assert mock_service_instance.retrieve.call_args.kwargs["db"] is mock_db
 
 
 if __name__ == "__main__":

@@ -207,6 +207,7 @@ class IntentTracker:
                     raise
                 logger.error(
                     "Upsert failed with exception",
+                    exc_info=True,
                     extra={"customer_id": customer_id, "thread_id": thread_id, "error": str(e)},
                 )
                 raise
