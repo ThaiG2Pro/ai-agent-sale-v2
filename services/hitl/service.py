@@ -5,7 +5,9 @@ What it does: Orchestrates state retrieval, review processing, and message enque
 
 from __future__ import annotations
 
+import json
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +27,58 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+# ─── request_edit: editable state fields with accepted value types ───
+# Mirrors _VALID_STATE_KEYS in hitl_guard_node; unknown fields or wrong types
+# are rejected with 422 instead of being silently written into the checkpoint.
+EDITABLE_STATE_FIELDS: dict[str, tuple[type, ...]] = {
+    "order_info": (dict,),
+    "intent": (str,),
+    "confidence_score": (int, float),
+    "similarity_score": (int, float),
+    "hitl_escalation_count": (int,),
+    "response": (str,),
+    "error": (str,),
+}
+
+
+def _validate_state_edits(state_edits: dict[str, Any]) -> None:
+    """Real field/value validation for request_edit (T046 Part 1)."""
+    issues: list[str] = []
+    for field, value in state_edits.items():
+        expected = EDITABLE_STATE_FIELDS.get(field)
+        if expected is None:
+            issues.append(
+                f"unknown field '{field}' — editable fields: {sorted(EDITABLE_STATE_FIELDS)}"
+            )
+            continue
+        # bool is an int subclass; never a valid edit value here
+        if isinstance(value, bool) or not isinstance(value, expected):
+            expected_names = "/".join(t.__name__ for t in expected)
+            issues.append(
+                f"field '{field}' expects {expected_names}, got {type(value).__name__}"
+            )
+            continue
+        if field in ("confidence_score", "similarity_score") and not 0.0 <= value <= 1.0:
+            issues.append(f"field '{field}' must be within [0.0, 1.0], got {value}")
+        elif field == "hitl_escalation_count" and value < 0:
+            issues.append(f"field '{field}' must be >= 0, got {value}")
+        elif field == "order_info":
+            qty = value.get("quantity")
+            if qty is not None and (isinstance(qty, bool) or not isinstance(qty, int) or qty < 1):
+                issues.append("order_info.quantity must be a positive integer")
+            for price_key in ("price", "approved_price"):
+                price = value.get(price_key)
+                if price is not None and (
+                    isinstance(price, bool) or not isinstance(price, (int, float)) or price < 0
+                ):
+                    issues.append(f"order_info.{price_key} must be a non-negative number")
+    if issues:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "Invalid state_edits", "issues": issues},
+        )
 
 
 # ─── Week 5: Checkpoint Durability Helpers (FR-018) ───
@@ -155,6 +209,37 @@ class HITLService:
         return str(action_id) if action_id else None
 
     @staticmethod
+    async def _acknowledge_messages(
+        session_id: str, message_ids: list[str], db: AsyncSession
+    ) -> None:
+        """Marks admin-acknowledged queued messages as processed (T046 Part 3).
+
+        queue_consumer_node only drains processed == False, so acknowledged
+        messages are skipped on resume.
+        """
+        if not message_ids:
+            return
+        try:
+            parsed_ids = [uuid.UUID(mid) for mid in message_ids]
+        except (ValueError, AttributeError, TypeError) as e:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid acknowledged_message_ids (must be UUIDs): {e}",
+            ) from e
+        await db.execute(
+            update(QueuedMessage)
+            .where(
+                QueuedMessage.session_id == session_id,
+                QueuedMessage.message_id.in_(parsed_ids),
+            )
+            .values(processed=True)
+        )
+        logger.info(
+            "HITL acknowledged queued messages",
+            extra={"session_id": session_id, "acknowledged_count": len(parsed_ids)},
+        )
+
+    @staticmethod
     async def _increment_version(session_id: str, expected_version: int, db: AsyncSession) -> None:
         """Increments version for optimistic locking (T044)."""
         stmt = (
@@ -213,7 +298,13 @@ class HITLService:
         # Instead, state_edits are forwarded inside ApprovalPayload and applied
         # by hitl_guard_node via Command(update={...}) after interrupt() returns.
 
-        # 5. Set status="resuming"
+        # 5. Mark admin-acknowledged queued messages before resume so
+        # queue_consumer_node skips them (T046 Part 3).
+        await HITLService._acknowledge_messages(
+            payload.session_id, payload.acknowledged_message_ids, db
+        )
+
+        # 6. Set status="resuming"
         await db.execute(
             update(HITLMetadata)
             .where(HITLMetadata.pause_id == payload.pause_id)
@@ -221,7 +312,7 @@ class HITLService:
         )
         await db.flush()
 
-        # 6. Resume with exception handling
+        # 7. Resume with exception handling
         try:
             resume_payload = ApprovalPayload(
                 action=payload.action,
@@ -229,12 +320,13 @@ class HITLService:
                 state_edits=payload.state_edits,
                 approved_price=payload.approved_price,
                 reason_or_comment=payload.reason_or_comment,
+                acknowledged_message_ids=payload.acknowledged_message_ids,
             )
             result_state = await graph.ainvoke(
                 Command(resume=resume_payload.model_dump()), config=config
             )
 
-            # 7. Success: set old pause to "approved" (hitl_guard_node may have already done this
+            # 8. Success: set old pause to "approved" (hitl_guard_node may have already done this
             # internally, but we ensure consistency here in case it didn't).
             await db.execute(
                 update(HITLMetadata)
@@ -242,7 +334,7 @@ class HITLService:
                 .values(status="approved")
             )
 
-            # 8. Detect if queue processing triggered a NEW HITL pause (e.g. customer
+            # 9. Detect if queue processing triggered a NEW HITL pause (e.g. customer
             # changed order during pause — MODIFY → new order → new approval needed).
             new_hitl: dict[str, Any] | None = None
             if isinstance(result_state, dict):
@@ -378,11 +470,11 @@ class HITLService:
         # 2. Lock
         await HITLService._increment_version(payload.session_id, payload.expected_version, db)
 
-        # 3. Validation (T046 Part 1)
-        # Generic validation against downstream schema is complex
-        # For now, we perform a basic presence check.
+        # 3. Validation (T046 Part 1): real field/value checks against the
+        # editable-state whitelist, not just a presence check.
         if not payload.state_edits:
             raise HTTPException(status_code=422, detail="state_edits required for request_edit")
+        _validate_state_edits(payload.state_edits)
 
         # 4. Insert ReviewAction
         new_action = ReviewAction(
@@ -397,38 +489,43 @@ class HITLService:
         )
         db.add(new_action)
 
-        # 5. Pattern B: Structured synthetic message (T046 Part 2-4)
-        state = await graph.aget_state(config)
-        messages = list(state.values.get("messages", []))
+        # 5. Mark admin-acknowledged queued messages so queue_consumer skips them
+        # (T046 Part 3).
+        await HITLService._acknowledge_messages(
+            payload.session_id, payload.acknowledged_message_ids, db
+        )
 
-        # Find last human message to insert AFTER it
-        insertion_idx = len(messages)
-        for i in range(len(messages) - 1, -1, -1):
-            if hasattr(messages[i], "type") and messages[i].type == "human":
-                insertion_idx = i + 1
-                break
-            # Fallback for dict-based messages if any
-            if isinstance(messages[i], dict) and messages[i].get("role") == "user":
-                insertion_idx = i + 1
-                break
+        # 6. Pattern B: one synthetic admin_override record per edited field
+        # (T046 Part 2-4). The messages channel uses the add_messages reducer,
+        # so a deterministic id keyed by (field, pause_id) makes a repeated edit
+        # of the same field REPLACE the earlier synthetic record in place
+        # instead of inserting a duplicate on every request_edit call.
+        timestamp = datetime.now(UTC).isoformat()
+        synthetic_messages = [
+            {
+                "role": "system",
+                "id": f"admin_override:{field}:{payload.pause_id}",
+                "content": json.dumps(
+                    {
+                        "type": "admin_override",
+                        "field": field,
+                        "value": value,
+                        "pause_id": str(payload.pause_id),
+                        "admin_id": payload.admin_user_id,
+                        "timestamp": timestamp,
+                        "reason": payload.reason_or_comment or "",
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                ),
+            }
+            for field, value in payload.state_edits.items()
+        ]
 
-        # Build structured synthetic record
-        synthetic = {
-            "type": "admin_override",
-            "pause_id": str(payload.pause_id),
-            "admin_id": payload.admin_user_id,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "reason": payload.reason_or_comment or "",
-            "edits": payload.state_edits,
-        }
-
-        # Update state with edits AND history record
+        # Update state with edits AND history records
         await graph.aupdate_state(
             config,
-            {
-                **(payload.state_edits or {}),
-                "messages": [*messages[:insertion_idx], synthetic, *messages[insertion_idx:]],
-            },
+            {**payload.state_edits, "messages": synthetic_messages},
             as_node="hitl_guard_node",
         )
 
@@ -437,26 +534,67 @@ class HITLService:
     @staticmethod
     async def escalate_to_support(session_id: str, db: AsyncSession) -> None:
         """Escalates session to SupportQueue due to timeout (T049)."""
+        from sqlalchemy import func
         from sqlalchemy.dialects.postgresql import insert
 
         from models.schema import SupportQueue
 
-        # 1. Update HITLMetadata status
+        now = datetime.now(UTC)
+
+        # 1. Capture pause context BEFORE flipping the status, so the support
+        # agent receives a real snapshot instead of an empty placeholder.
+        meta_stmt = (
+            select(HITLMetadata)
+            .where(HITLMetadata.session_id == session_id, HITLMetadata.status == "paused")
+            .order_by(HITLMetadata.paused_at.desc())
+            .limit(1)
+        )
+        meta = (await db.execute(meta_stmt)).scalars().first()
+
+        pending_stmt = (
+            select(func.count())
+            .select_from(QueuedMessage)
+            .where(
+                QueuedMessage.session_id == session_id,
+                QueuedMessage.processed == False,  # noqa: E712
+            )
+        )
+        pending_count = (await db.execute(pending_stmt)).scalar() or 0
+
+        context_snapshot: dict[str, Any] = {
+            "reason": "Automatic timeout after 60 minutes",
+            "escalated_at": now.isoformat(),
+            "pending_queued_messages": pending_count,
+        }
+        if meta is not None:
+            context_snapshot.update(
+                {
+                    "pause_id": str(meta.pause_id),
+                    "pause_reason": meta.pause_reason,
+                    "paused_at": meta.paused_at.isoformat() if meta.paused_at else None,
+                    "escalation_count": meta.escalation_count,
+                    "timeout_notified_at": (
+                        meta.timeout_notified_at.isoformat() if meta.timeout_notified_at else None
+                    ),
+                }
+            )
+
+        # 2. Update HITLMetadata status
         await db.execute(
             update(HITLMetadata)
             .where(HITLMetadata.session_id == session_id, HITLMetadata.status == "paused")
-            .values(status="escalated", escalated_to_support_at=datetime.now(UTC))
+            .values(status="escalated", escalated_to_support_at=now)
         )
 
-        # 2. Insert into SupportQueue
+        # 3. Insert into SupportQueue
         stmt = (
             insert(SupportQueue)
             .values(
                 session_id=session_id,
                 reason="timeout_60min",
-                created_at=datetime.now(UTC),
+                created_at=now,
                 status="pending",
-                context_snapshot={"reason": "Automatic timeout after 60 minutes"},
+                context_snapshot=context_snapshot,
             )
             .on_conflict_do_nothing(index_elements=["session_id"])
         )

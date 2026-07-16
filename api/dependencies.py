@@ -71,6 +71,15 @@ async def get_agent_graph(request: Request) -> CompiledStateGraph:
     return build_graph(checkpointer=checkpointer)
 
 
+# Statuses during which the graph must NOT be re-invoked for the session:
+# - paused: interrupt() fired, awaiting admin review
+# - resuming: admin action in-flight (service.py sets it before graph.ainvoke)
+# - escalated: handed to human support, agent must stay out of the loop
+# "abandoned" (and terminal statuses like approved/rejected) intentionally
+# pass through — those sessions restart as fresh conversations.
+BLOCKING_STATUSES = frozenset({"paused", "resuming", "escalated"})
+
+
 async def check_paused_session(
     session_id: str,
     message: str,
@@ -78,17 +87,23 @@ async def check_paused_session(
 ) -> dict[str, Any]:
     """
     Why this exists: Intercepts messages for sessions currently in HITL pause (T056).
-    What it does: Enqueues message if paused, otherwise allows normal flow.
+    What it does: Enqueues message if the session is in any blocking HITL status
+    (paused/resuming/escalated), otherwise allows normal flow.
     Note: Called manually in routes to handle body parameters.
     """
     from sqlalchemy import select
 
-    stmt = select(HITLMetadata).where(
-        HITLMetadata.session_id == session_id,
-        HITLMetadata.status == "paused",
+    stmt = (
+        select(HITLMetadata)
+        .where(
+            HITLMetadata.session_id == session_id,
+            HITLMetadata.status.in_(BLOCKING_STATUSES),
+        )
+        .order_by(HITLMetadata.paused_at.desc())
+        .limit(1)
     )
     res = await db.execute(stmt)
-    hitl_meta = res.scalar_one_or_none()
+    hitl_meta = res.scalars().first()
 
     if hitl_meta:
         # Session is paused, enqueue message and return early response info

@@ -110,7 +110,7 @@ async def test_hitl_happy_path_approve_execute(monkeypatch):
 
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-happy", "db": mock_db}}
-    state = make_initial_state("Tôi muốn mua sản phẩm A", "test-happy")
+    state = make_initial_state("Tôi muốn mua sản phẩm A", "test-happy", "cust-happy")
     state["order_info"] = {"product_id": "prod_1", "quantity": 1, "price": 100.0}
 
     with patch("services.ai.ai_router.acompletion", return_value=mock_router_resp):
@@ -156,7 +156,7 @@ async def test_hitl_reject_to_support(monkeypatch):
 
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-reject", "db": mock_db}}
-    state = make_initial_state("Mua đồ", "test-reject")
+    state = make_initial_state("Mua đồ", "test-reject", "cust-reject")
     state["order_info"] = {"product_id": "prod_1", "quantity": 1}
 
     with patch("services.ai.ai_router.acompletion", return_value=mock_router_resp):
@@ -217,7 +217,7 @@ async def test_hitl_cancel_during_pause(monkeypatch):
 
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-cancel", "db": mock_db}}
-    state = make_initial_state("Mua cái này", "test-cancel")
+    state = make_initial_state("Mua cái này", "test-cancel", "cust-cancel")
     state["order_info"] = {"product_id": "prod_1", "quantity": 1, "price": 100.0}
 
     with patch("services.ai.ai_router.acompletion", return_value=mock_router_resp):

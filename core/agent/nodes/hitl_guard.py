@@ -78,7 +78,7 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
     # Cost Check (T026, T072)
     if not trigger_hitl:
         from services.hitl.cost_guard import (
-            estimate_tokens_heuristic,
+            estimate_tokens,
             get_compressed_context_text,
         )
 
@@ -86,7 +86,7 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
         compressed_text = get_compressed_context_text(
             messages, intent=intent, order_info=state.get("order_info")
         )
-        estimated_tokens = estimate_tokens_heuristic(compressed_text)
+        estimated_tokens = estimate_tokens(compressed_text)
 
         if estimated_tokens > settings.HITL_COST_THRESHOLD_TOKENS:
             trigger_hitl = True
