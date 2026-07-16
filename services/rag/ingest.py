@@ -18,6 +18,7 @@ from uuid_utils import uuid7
 from core.config import settings
 from models.schema import Product, TextEmbedding
 from services.ai import AIGateway, KeywordExtraction, ProductMetadata
+from services.semantic_cache import invalidate_cache
 
 
 async def extract_keywords_structured(
@@ -287,6 +288,9 @@ async def ingest_product_text(
     )
     db.add(embedding_record)
     await db.commit()
+
+    # Product catalog changed — cached answers may reference stale price/stock.
+    await invalidate_cache(db)
 
     logfire.info(
         "Product ingested: id={pid}, sku={sku}, metadata_enriched={valid}",

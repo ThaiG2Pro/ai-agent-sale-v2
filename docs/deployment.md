@@ -19,6 +19,51 @@ Optional explicit DSN format:
 
 - `DATABASE_URL=postgresql+asyncpg://<user>:<password>@<host>:<port>/<db>`
 
+> `TELEGRAM_WEBHOOK_SECRET` has **no default** in `docker-compose.yml` — compose
+> refuses to start until you set it (env or `.env`, min 20 chars).
+
+## LLM Provider Options
+
+Model settings (`LIGHT_CHAT_MODEL`, `CHAT_MODEL`, `POWERFUL_CHAT_MODEL`,
+`EMBED_MODEL`) accept **any LiteLLM model string**. LiteLLM reads provider API
+keys straight from the environment; `docker-compose.yml` passes them through
+(`GEMINI_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`).
+
+### Option A — Cloud chat + local embeddings (recommended for fast demos)
+
+No Ollama needed for chat; keeps embeddings compatible with the existing DB:
+
+```bash
+# .env
+CHAT_MODEL=gemini/gemini-2.5-flash
+LIGHT_CHAT_MODEL=gemini/gemini-2.5-flash
+POWERFUL_CHAT_MODEL=gemini/gemini-2.5-pro
+GEMINI_API_KEY=<your key>
+# EMBED_MODEL stays ollama/bge-m3 (local)
+```
+
+### Option B — Fully local (Ollama on the host)
+
+The `api` container reaches host Ollama via `host.docker.internal`
+(`extra_hosts: host-gateway` is preconfigured); the default
+`OLLAMA_BASE_URL=http://host.docker.internal:11434` works out of the box.
+
+### ⚠️ Embedding dimension constraint
+
+pgvector columns are `Vector(1024)` (bge-m3). Only switch `EMBED_MODEL` to a
+model that can emit **1024-dim vectors** (e.g. OpenAI `text-embedding-3-large`
+with `dimensions=1024`). Otherwise keep `EMBED_MODEL=ollama/bge-m3` and switch
+chat models only. A mismatched dimension fails fast at the AI gateway with
+"Configuration Error: Model Mismatch".
+
+### Semantic cache freshness
+
+- `CACHE_TTL_SECONDS` (default 3600): cached answers older than the TTL are
+  ignored, so price/stock changes stop being served after at most one TTL.
+  `0` disables expiry.
+- Ingesting/re-ingesting products invalidates the whole semantic cache
+  immediately.
+
 ## Start Services
 
 ```bash

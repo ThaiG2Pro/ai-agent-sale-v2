@@ -70,3 +70,53 @@ async def test_webhook_acknowledges_and_processes_message_in_background(
     ).scalar_one_or_none()
     assert row is not None
     assert row.chat_id == chat_id
+
+
+@pytest.mark.asyncio
+async def test_background_task_is_referenced_until_done(
+    db_session,
+    monkeypatch,
+) -> None:
+    """The processing task must be held in _background_tasks (GC guard) while
+    running and discarded once it completes."""
+    import asyncio
+
+    update_id = _unique_update_id()
+    chat_id = 456123790
+    webhook_secret = "test_webhook_secret_1234567890"
+    release = asyncio.Event()
+
+    async def blocking_process(update, incoming_chat_id: int, **_) -> None:
+        await release.wait()
+
+    monkeypatch.setattr(telegram_webhook, "process_telegram_message", blocking_process)
+    monkeypatch.setattr(dependencies.settings, "TELEGRAM_WEBHOOK_SECRET", webhook_secret)
+
+    payload = {
+        "update_id": update_id,
+        "message": {
+            "message_id": 112,
+            "from": {"id": chat_id, "is_bot": False, "first_name": "User"},
+            "chat": {"id": chat_id, "type": "private"},
+            "date": int(datetime.now(UTC).timestamp()),
+            "text": "hold the task",
+        },
+    }
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/webhooks/telegram",
+            json=payload,
+            headers={"X-Telegram-Bot-Api-Secret-Token": webhook_secret},
+        )
+
+    assert response.status_code == 200
+    # Task is still blocked on the event — a strong reference must exist.
+    pending = list(telegram_webhook._background_tasks)
+    assert len(pending) == 1
+
+    release.set()
+    await asyncio.gather(*pending)
+    await asyncio.sleep(0)  # let add_done_callback(discard) run
+    assert not telegram_webhook._background_tasks

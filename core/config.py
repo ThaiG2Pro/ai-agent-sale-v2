@@ -40,15 +40,28 @@ class Settings(BaseSettings):
 
     # AI Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    # Model tiers:
+    # Model tiers — any LiteLLM model string works (cloud fast-path):
+    #   e.g. CHAT_MODEL=gemini/gemini-2.5-flash (needs GEMINI_API_KEY in env)
+    #        CHAT_MODEL=gpt-4o-mini             (needs OPENAI_API_KEY in env)
+    # LiteLLM reads provider API keys directly from the environment.
+    # OLLAMA_BASE_URL is only attached to models with the "ollama/" prefix.
     #   LIGHT  — fast, cheap (qwen3:0.6b): normalization, keyword extraction
     #   CHAT   — general (qwen3-4b-q6):    metadata enrichment, RAG generation
     #   POWERFUL — deep reasoning (deepseek-r1): escalation, complex queries
     LIGHT_CHAT_MODEL: str = "ollama/qwen3:0.6b"
     CHAT_MODEL: str = "ollama/qwen3-1.7b"
     POWERFUL_CHAT_MODEL: str = "ollama/deepseek-r1:1.5b"
+    # ⚠️ Embedding dimension constraint: pgvector columns are Vector(1024) (bge-m3).
+    # If you switch EMBED_MODEL, the new model MUST produce 1024-dim vectors
+    # (e.g. OpenAI text-embedding-3-large with dimensions=1024). Recommended
+    # default: chat = cloud, embed = local Ollama bge-m3.
     EMBED_MODEL: str = "ollama/bge-m3"
     EMBED_DIMENSION: int = 1024  # Standard for bge-m3 / small
+
+    # Semantic cache TTL (seconds). Entries older than this are ignored by
+    # L1/L2 lookups so price/stock changes stop serving stale answers.
+    # 0 disables the TTL filter (entries never expire).
+    CACHE_TTL_SECONDS: int = Field(default=3600, ge=0)
 
     # Logging & Observability
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -120,7 +133,9 @@ class Settings(BaseSettings):
         description="Timeout for order processing tool",
     )
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # env_ignore_empty: docker-compose pass-through vars (`${VAR:-}`) arrive as
+    # empty strings — treat them as unset so code defaults still apply.
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
 
 # Insecure placeholder values shipped as dev defaults. Startup (api/main.py::lifespan)
