@@ -76,16 +76,15 @@ async def escalation_node(state: AgentState) -> dict:
             "escalation_failure": False,
         }
 
-    # T064: Attempt to use premium model with graceful fallback
+    # T064: config-level check only — runtime availability can't be known here
+    # without an LLM call (this node is zero-LLM by design). The REAL fallback
+    # happens at point of use: answer_node degrades premium → economy-chat and
+    # sets escalation_failure=True when the premium call actually fails.
     selected_model = settings.PREMIUM_MODEL
     escalation_failure = False
-    try:
-        # Validate the model alias is configured (non-empty string check)
-        if not selected_model:
-            raise ValueError("PREMIUM_MODEL not configured")
-        # Model is available — use it
-    except Exception as e:
-        logger.warning("escalation_failure reason=%s fallback=economy-chat", str(e))
+    if not selected_model:
+        logger.warning("escalation_failure reason=PREMIUM_MODEL not configured "
+                       "fallback=economy-chat")
         selected_model = "economy-chat"
         escalation_failure = True
 

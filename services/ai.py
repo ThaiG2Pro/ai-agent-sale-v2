@@ -50,6 +50,51 @@ class NormalizedQuery(BaseModel):
     )
 
 
+# ── LLM usage metrics (WP3 — real ModelTrace numbers) ─────────────────────────
+
+
+class LLMUsageMetrics(BaseModel):
+    """Token/cost/latency numbers extracted from a LiteLLM response.
+
+    Consumed by answer_node to write real model_traces rows (FR-008)
+    instead of hardcoded zeros.
+    """
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost: float = 0.0
+    latency_ms: float | None = None
+
+
+def extract_llm_metrics(response: Any, latency_ms: float | None = None) -> LLMUsageMetrics:
+    """Best-effort extraction of token usage + cost from a LiteLLM response.
+
+    Never raises — returns zeroed metrics when the response carries no usable
+    usage block (e.g. mocked responses in tests). Cost comes from
+    litellm.completion_cost: 0.0 for local Ollama models (correct — they are
+    free), real USD for cloud provider keys.
+    """
+    metrics = LLMUsageMetrics(latency_ms=latency_ms)
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            value = getattr(usage, field, 0) or 0
+            # Guard against Mock objects: int(MagicMock()) == 1, so only
+            # accept genuine numeric values (bool excluded).
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                setattr(metrics, field, int(value))
+        if not metrics.total_tokens:
+            metrics.total_tokens = metrics.prompt_tokens + metrics.completion_tokens
+    try:
+        import litellm
+
+        metrics.cost = float(litellm.completion_cost(completion_response=response) or 0.0)
+    except Exception:
+        metrics.cost = 0.0
+    return metrics
+
+
 # ── Metadata enrichment schemas (Phase 1 - Ingestion) ──────────────────────────
 
 

@@ -151,7 +151,7 @@ async def test_complaint_escalation_flow(monkeypatch):
 
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-complaint"}}
-    state = make_initial_state("Tôi muốn khiếu nại về đơn hàng", "test-complaint")
+    state = make_initial_state("Tôi muốn khiếu nại về đơn hàng", "test-complaint", "cust_test")
 
     with patch("services.ai.ai_router.acompletion", mock_llm):
         result = await graph.ainvoke(state, config)
@@ -185,7 +185,7 @@ async def test_low_confidence_fallback(monkeypatch):
 
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-low-conf"}}
-    state = make_initial_state("Sản phẩm gì tốt nhất?", "test-low-conf")
+    state = make_initial_state("Sản phẩm gì tốt nhất?", "test-low-conf", "cust_test")
 
     start = time.perf_counter()
     with patch("services.ai.ai_router.acompletion", mock_llm):
@@ -218,7 +218,7 @@ async def test_layer1_declined_propagation(monkeypatch):
 
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-layer1"}}
-    state = make_initial_state("Random unknown query", "test-layer1")
+    state = make_initial_state("Random unknown query", "test-layer1", "cust_test")
 
     with patch("services.ai.ai_router.acompletion", mock_llm):
         with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):
@@ -253,6 +253,7 @@ async def test_streaming_emits_events(monkeypatch):
             async for event in astream_agent(
                 "Còn hàng không?",
                 "stream-test-1",
+                "cust_test",
                 checkpointer=MemorySaver(),
             ):
                 events.append(event)
@@ -280,7 +281,9 @@ async def test_streaming_events_have_required_fields(monkeypatch):
 
     events = []
     with patch("services.ai.ai_router.acompletion", mock_llm):
-        async for event in astream_agent("Xin chào!", "stream-test-2", checkpointer=MemorySaver()):
+        async for event in astream_agent(
+            "Xin chào!", "stream-test-2", "cust_test", checkpointer=MemorySaver()
+        ):
             events.append(event)
 
     assert len(events) > 0, "Expected at least one streaming event"
@@ -311,6 +314,7 @@ async def test_streaming_execution_replay(monkeypatch):
             async for event in astream_agent(
                 "Giá sản phẩm X?",
                 "stream-test-3",
+                "cust_test",
                 checkpointer=MemorySaver(),
             ):
                 events.append(event)

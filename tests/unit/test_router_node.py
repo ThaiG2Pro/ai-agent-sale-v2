@@ -116,6 +116,65 @@ async def test_router_node_smalltalk():
         assert command.update["intent"] == "SMALLTALK"
 
 
+# ---------------------------------------------------------------------------
+# WP3: router_node must never crash on malformed LLM output
+# ---------------------------------------------------------------------------
+
+
+def _make_llm_response(content: str):
+    """Mock LiteLLM response with raw string content."""
+    from unittest.mock import MagicMock
+
+    choice = MagicMock()
+    choice.message.content = content
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "bad_content",
+    [
+        "this is not json at all {{{",  # garbage
+        '{"primary_intent": "INFO_QUERY"}',  # missing required fields
+        '{"primary_intent": "NOT_AN_INTENT", "confidence": 0.9, "reasoning": "x"}',  # bad enum
+        "",  # empty
+    ],
+)
+async def test_router_node_malformed_llm_output_falls_back(bad_content):
+    """Malformed/incomplete JSON from LLM → fallback INFO_QUERY → retrieval_node."""
+    initial_state = make_initial_state("Giá bao nhiêu?", "test-session-bad", "cust_001")
+
+    with patch(
+        "services.ai.ai_router.acompletion",
+        new_callable=AsyncMock,
+        return_value=_make_llm_response(bad_content),
+    ):
+        command = await router_node(initial_state)
+
+    assert command.goto == "retrieval_node"
+    assert command.update["intent"] == "INFO_QUERY"
+    assert command.update["intent_confidence"] == 0.0
+    assert command.update["secondary_intents"] == []
+
+
+@pytest.mark.asyncio
+async def test_router_node_llm_exception_falls_back():
+    """LLM call raising entirely → fallback INFO_QUERY, no crash."""
+    initial_state = make_initial_state("Giá bao nhiêu?", "test-session-err", "cust_001")
+
+    with patch(
+        "services.ai.AIGateway.complete",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("ollama down"),
+    ):
+        command = await router_node(initial_state)
+
+    assert command.goto == "retrieval_node"
+    assert command.update["intent"] == "INFO_QUERY"
+
+
 def test_get_next_node_routing_map():
     """Test _get_next_node routing map (T045).
 

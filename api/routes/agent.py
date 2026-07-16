@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from api.dependencies import check_paused_session, get_agent_graph
-from core.agent.graph import astream_agent
+from core.agent.graph import astream_agent, make_agent_config
 from core.agent.state import make_initial_state
 from services.database import get_db
 from services.memory.background import post_turn_tasks
@@ -150,7 +150,7 @@ async def post_agent_query(
     start_time = time.time()
 
     try:
-        config = {"configurable": {"thread_id": request.session_id, "db": db}}
+        config = make_agent_config(request.session_id, db=db)
         initial_state = make_initial_state(
             request.message,
             session_id=request.session_id,

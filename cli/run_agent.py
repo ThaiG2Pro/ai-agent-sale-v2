@@ -18,7 +18,7 @@ import sys
 
 from langgraph.checkpoint.memory import MemorySaver
 
-from core.agent.graph import astream_agent, build_graph
+from core.agent.graph import astream_agent, build_graph, make_agent_config
 from core.agent.state import make_initial_state
 from core.logging import setup_logging
 
@@ -75,7 +75,7 @@ async def main(
         # Non-streaming mode: invoke and print final result
         graph = build_graph(checkpointer=MemorySaver())
         # Pass db via configurable for retrieval_node and answer_node injection
-        config = {"configurable": {"thread_id": session, "db": db}}
+        config = make_agent_config(session, db=db)
         initial_state = make_initial_state(message, session_id=session, customer_id=customer_id)
 
         try:
