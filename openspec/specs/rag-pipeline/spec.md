@@ -1,8 +1,98 @@
 # rag-pipeline Specification
 
 ## Purpose
-TBD - created by archiving change agentic-rag-retry-loop. Update Purpose after archive.
+Vietnamese-first RAG pipeline for the SME sales agent: query classification/normalization,
+two-tier semantic cache, hybrid retrieval (vector + Vietnamese FTS fused by RRF), context
+compression, confidence gating, and a bounded agentic retry loop. This living spec is the
+single source of truth for the tuned retrieval parameters; it supersedes the numeric values
+in the original locked spec `specs/002-vietnamese-rag-eval/spec.md` (FR-009, FR-012, FR-013,
+FR-015) via the spec-first repair recorded below (R-SDLC-001 remediation, 2026-07-16).
+
 ## Requirements
+
+### Requirement: Layer-1 confidence gating at 0.45
+The pipeline SHALL enforce a Layer-1 confidence guard: when the best vector similarity across
+retrieved chunks is below `CONFIDENCE_THRESHOLD = 0.45`, the pipeline returns the standardized
+decline message and MUST NOT generate an answer. The boundary is inclusive (best similarity
+exactly 0.45 proceeds).
+
+**Rationale (supersedes 0.7 in 002/FR-013).** The embedding model in production (`bge-m3`)
+scores related cross-lingual content in the 0.35–0.70 cosine band, so a 0.7 gate declined most
+legitimate Vietnamese product queries. 0.45 reliably rejects off-topic queries (~0.40 band)
+while accepting on-topic ones. The hallucination risk in the 0.45–0.7 band that motivated the
+original 0.7 gate is now mitigated by two newer mechanisms: (a) the bounded agentic retry loop
+(this spec) rewrites and re-retrieves insufficient results instead of answering from weak
+context, and (b) the Layer-2 fused guard (`AGENT_CONFIDENCE_THRESHOLD = 0.70` on
+`(1-α)·similarity + α·rerank`) still blocks low-confidence answers post-generation. SME UX
+feedback also preferred fewer false declines over marginally stricter gating.
+
+#### Scenario: Off-topic query is declined
+- **WHEN** all retrieved chunks have vector similarity < 0.45
+- **THEN** the pipeline returns the predefined decline message without calling the answer LLM
+
+#### Scenario: Boundary is inclusive
+- **WHEN** the best chunk similarity is exactly 0.45
+- **THEN** the pipeline proceeds toward answer generation (subject to the Layer-2 guard)
+
+#### Scenario: Dual-layer ordering constraint holds
+- **WHEN** `AGENT_CONFIDENCE_THRESHOLD` (Layer 2) is configured
+- **THEN** it MUST be strictly greater than the Layer-1 threshold 0.45, otherwise Layer 2 is vacuous
+
+### Requirement: Query classification bins and adaptive TopK
+The pipeline SHALL classify every query into `short` / `long` / `ambiguous` using deterministic
+word-count bins — `short: word_count ≤ 10`, `long: 11 ≤ word_count ≤ 20`, `ambiguous:
+word_count > 20 AND no action verb AND no capitalized proper noun` (a >20-word query WITH an
+action verb or proper noun falls back to `long`) — and compute adaptive TopK from the class:
+short → 5, long → 15, ambiguous → 20, with intent overrides (e.g. COMPARISON → 10).
+
+**Rationale (supersedes ≤5/6–15/>15 bins in 002/FR-009, FR-015).** Vietnamese product queries
+are wordier than the English-oriented original bins assumed (analytic syllable-per-word
+segmentation inflates `str.split()` counts); with ≤5-word "short" bins, routine questions like
+"điện thoại này giá bao nhiêu tiền vậy shop" were misclassified as long/ambiguous and
+over-fetched. The ≤10/11–20/>20 bins match observed query-length distribution on the gold set
+while keeping the same three-class contract and TopK values.
+
+#### Scenario: Short query gets TopK 5
+- **WHEN** a query has ≤ 10 words
+- **THEN** it is classified `short` and TopK = 5
+
+#### Scenario: Long query gets TopK 15
+- **WHEN** a query has 11–20 words
+- **THEN** it is classified `long` and TopK = 15
+
+#### Scenario: Ambiguous query gets TopK 20
+- **WHEN** a query has > 20 words with no action verb and no capitalized proper noun
+- **THEN** it is classified `ambiguous` and TopK = 20
+
+#### Scenario: COMPARISON intent overrides TopK
+- **WHEN** the normalized intent is COMPARISON
+- **THEN** TopK = 10 regardless of word-count class
+
+### Requirement: Context compression with relative threshold and 0.25 absolute floor
+The pipeline SHALL compress retrieved context in three steps: (a) exact-text deduplication,
+(b) low-signal filtering with a RELATIVE threshold `effective = max(0.25, best_similarity ×
+0.65)` — keeping only chunks scoring ≥ 65% of the top retrieved hit, floored at the absolute
+value `COMPRESSION_SCORE_THRESHOLD = 0.25`, and (c) near-duplicate removal for > 0.80 text
+overlap, preserving the chunk with the highest RRF score.
+
+**Rationale (supersedes the fixed `score < 0.5` cut in 002/FR-012).** A fixed 0.5 vector-score
+cut silently discarded RRF-boosted FTS hits: chunks that rank highly via Vietnamese full-text
+match legitimately carry low vector scores, and hybrid retrieval exists precisely to surface
+them. The relative 65%-of-best rule keeps the original intent (drop low-signal tails — e.g.
+best 0.79 still drops everything below 0.51) while the 0.25 floor prevents over-filtering when
+the whole result set scores low.
+
+#### Scenario: RRF-boosted FTS hit survives compression
+- **WHEN** a chunk ranks high by FTS/RRF but has vector score 0.30 and `best_similarity` is 0.40
+- **THEN** the chunk is retained (effective threshold = max(0.25, 0.26) = 0.26 ≤ 0.30)
+
+#### Scenario: Low-signal tail is dropped relative to the best hit
+- **WHEN** `best_similarity = 0.79` and a chunk scores 0.45
+- **THEN** the chunk is removed (effective threshold = 0.79 × 0.65 ≈ 0.51)
+
+#### Scenario: Near-duplicates keep the highest-RRF copy
+- **WHEN** two chunks overlap by more than 80% of text
+- **THEN** only the chunk with the higher RRF score is kept
 ### Requirement: Retrieval self-evaluation reusing existing confidence signals
 The RAG pipeline SHALL evaluate whether a completed retrieval is sufficient to answer the query
 **by reusing the existing confidence signals** (`best_similarity`, `chunks_after` compression count,
