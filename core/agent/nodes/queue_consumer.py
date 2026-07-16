@@ -234,9 +234,11 @@ async def _resolve_new_product_from_modify(
 
     combined_text = " ".join(modify_texts)
     try:
-        from services.rag.pipeline import search_and_retrieve
+        # agentic-rag-retry-loop (ticket 2026): retrieve_with_retry wraps search_and_retrieve
+        # with the bounded self-evaluate -> rewrite -> re-retrieve loop (ADR-001).
+        from services.rag.pipeline import retrieve_with_retry
 
-        result = await search_and_retrieve(db, combined_text, intent="INFO_QUERY")
+        result = await retrieve_with_retry(db, combined_text, intent="INFO_QUERY")
         if result.declined or not result.citations:
             return None
 

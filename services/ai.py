@@ -50,6 +50,28 @@ class NormalizedQuery(BaseModel):
     )
 
 
+# ── Retry-loop query rewrite schema (agentic-rag-retry-loop, ticket 2026) ─────
+
+
+class RewrittenQuery(BaseModel):
+    """
+    Why this exists: Structured rewrite of a query that failed retrieval, used by the
+    bounded RAG retry loop (`services/rag/pipeline.py::retrieve_with_retry`, AC-2026-007/008).
+    The light model ONLY rewrites — it never scores confidence (ADR-002, no new scorer); the
+    rewrite is used solely as the next retrieval query, never executed (RISK-002).
+    """
+
+    query: str = Field(
+        description="Rewritten query preserving the original intent and product entities."
+    )
+    keeps_subject: bool = Field(
+        description=(
+            "False if the rewrite changed the question's subject/product — the retry loop "
+            "discards the rewrite when False (no subject drift)."
+        )
+    )
+
+
 # ── Metadata enrichment schemas (Phase 1 - Ingestion) ──────────────────────────
 
 
@@ -331,3 +353,71 @@ class AIGateway:
                 extracted_keywords=query.strip().split()[:10],
                 is_valid=True,  # assume valid on error to avoid false rejects
             )
+
+    @staticmethod
+    async def rewrite_query(original: str) -> RewrittenQuery:
+        """
+        Why this exists: Light-tier query rewrite for the bounded RAG retry loop
+        (agentic-rag-retry-loop, ticket 2026 — AC-2026-007, AC-2026-008, AC-2026-010).
+        What it does: Uses LiteLLM response_format=RewrittenQuery to rephrase a query that
+        failed retrieval, preserving intent and product entities. Mirrors normalize_query's
+        pattern exactly (heuristic pre-check, response_format, temperature=0). Calls
+        `ai_router.acompletion` directly (not `AIGateway.complete`) so a failure never falls
+        back to a premium tier — `rewrite_query` ALWAYS hardcodes `economy-chat` (light tier,
+        never premium — AC-2026-010, EC-015). Never raises: any exception or unparseable
+        output returns `keeps_subject=False`, which the caller treats as a failed/no-progress
+        attempt (AC-2026-004, AC-2026-011).
+        """
+        start_time = time.perf_counter()
+
+        # ── Heuristic pre-check (zero-cost, sub-ms) — mirrors normalize_query ─────
+        stripped = original.strip()
+        if len(stripped) < 3:
+            logfire.info("rewrite_query: rejected by heuristic (too short)")
+            return RewrittenQuery(query=stripped, keeps_subject=False)
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a query-rewriting assistant for a bilingual "
+                    "(Vietnamese/English) SME product database.\n"
+                    "The previous retrieval for this query returned poor results. Rewrite "
+                    "the query to improve search recall WITHOUT changing its meaning.\n"
+                    "Rules:\n"
+                    "- Preserve the original intent and EVERY product entity/name mentioned.\n"
+                    "- Do NOT change the subject of the question (never switch to asking "
+                    "about a different product).\n"
+                    "- Expand abbreviations, fix typos, resolve vague phrasing, and add "
+                    "synonyms that help full-text/vector search.\n"
+                    "- keeps_subject: true unless your rewrite could not avoid changing the "
+                    "subject — set false in that case so the rewrite is discarded.\n\n"
+                    "Respond only in the required JSON schema."
+                ),
+            },
+            {"role": "user", "content": original},
+        ]
+        try:
+            current_span = trace.get_current_span()
+            session_id = getattr(current_span, "attributes", {}).get(SpanAttributes.SESSION_ID)
+
+            with using_session(session_id) if session_id else contextlib.nullcontext():
+                response = await ai_router.acompletion(
+                    model="economy-chat",  # light tier, hardcoded — never premium (AC-2026-010)
+                    messages=messages,
+                    response_format=RewrittenQuery,
+                    temperature=0,
+                )
+            latency = time.perf_counter() - start_time
+            logfire.info("rewrite_query: {latency:.4f}s", latency=latency)
+            content = response.choices[0].message.content
+            return RewrittenQuery.model_validate_json(content)
+        except Exception as exc:
+            latency = time.perf_counter() - start_time
+            logfire.error(
+                "rewrite_query failed: {err} ({latency:.4f}s)",
+                err=str(exc),
+                latency=latency,
+            )
+            # Graceful fallback — signal a failed rewrite; caller stops the loop
+            return RewrittenQuery(query=original, keeps_subject=False)

@@ -92,6 +92,7 @@ async def hybrid_search_rrf(
         fts_rows = []
     except Exception as exc:
         logfire.warn("FTS search failed, falling back to vector-only: {err}", err=str(exc))
+        await db.rollback()
         fts_rows = []
 
     # ── RRF merge ─────────────────────────────────────────────────────────────
