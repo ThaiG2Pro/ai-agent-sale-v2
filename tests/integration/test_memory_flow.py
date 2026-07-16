@@ -472,3 +472,247 @@ class TestMemoryFlow:
             # Verify: LiteLLM was called (summarization was triggered)
             # The important part is that should_summarize=True and LLM was invoked
             assert mock_llm.called or not mock_llm.called  # Either way, we tested the threshold
+
+
+# ---------------------------------------------------------------------------
+# P0-1 / P0-5 regression tests — real DB, real compiled graph
+# ---------------------------------------------------------------------------
+
+
+def _seed_vector() -> list[float]:
+    """Deterministic 1024-dim vector; identical query vector → cosine 1.0."""
+    return [0.1] * settings.EMBED_DIMENSION
+
+
+def _make_router_response(intent: str, confidence: float = 0.9):
+    """Mock LiteLLM response for router_node (same shape as test_agent_flow)."""
+    import json
+    from unittest.mock import MagicMock
+
+    content = json.dumps(
+        {
+            "primary_intent": intent,
+            "secondary_intents": [],
+            "confidence": confidence,
+            "reasoning": "test reasoning",
+        },
+    )
+    choice = MagicMock()
+    choice.message.content = content
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def _make_answer_response(text: str = "Test answer"):
+    from unittest.mock import MagicMock
+
+    choice = MagicMock()
+    choice.message.content = text
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def _mock_retrieval_tool(similarity_score: float = 0.9):
+    """Factory (db) -> tool mock, matching make_retrieval_tool signature."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from services.rag.pipeline import RetrievalResult
+
+    result = RetrievalResult(
+        cached_answer=None,
+        cached_citations=[],
+        declined=False,
+        citations=[],
+        chunks=[],
+        best_similarity=similarity_score,
+        similarity_gap=0.0,
+        canonical_query="test query",
+        query_vector=_seed_vector(),
+        query_category="INFO_QUERY",
+        top_k_used=5,
+    )
+    mock_tool = MagicMock()
+    mock_tool.ainvoke = AsyncMock(return_value=result)
+    return lambda db: mock_tool
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_semantic_recall_through_real_compiled_graph(db_session) -> None:
+    """P0-1 E2E: memory_context is NON-EMPTY when the REAL compiled graph runs.
+
+    Lesson "test xanh nhưng feature gãy": unit tests that call the node
+    directly can pass while the graph wiring is broken. This test seeds a
+    semantic memory row in the real Postgres DB, builds the graph via
+    build_graph() (the exact production registration at graph.py:82), and
+    invokes it end-to-end with db injected via config["configurable"]["db"].
+    Only the LLM/embedding boundaries are mocked.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from langgraph.checkpoint.memory import MemorySaver
+    from sqlalchemy import delete as sa_delete
+
+    from core.agent.graph import build_graph
+    from core.agent.state import make_initial_state
+    from models.schema import ConversationSummary, EmbeddingStatus, SemanticMemory
+
+    customer_id = "recall_e2e_cust"
+    vec = _seed_vector()
+
+    # conftest db_session does NOT clean these two tables — do it ourselves.
+    async def _cleanup():
+        await db_session.rollback()  # clear any failed in-flight transaction
+        await db_session.execute(
+            sa_delete(SemanticMemory).where(SemanticMemory.customer_id == customer_id)
+        )
+        await db_session.execute(
+            sa_delete(ConversationSummary).where(ConversationSummary.customer_id == customer_id)
+        )
+        await db_session.commit()
+
+    await _cleanup()
+    try:
+        # Seed: past-session summary + its ACTIVE embedding
+        summary_row = ConversationSummary(
+            customer_id=customer_id,
+            thread_id="thread_past_001",
+            summary_text="Customer previously asked about laptop pricing",
+            summary_model="economy-chat",
+        )
+        db_session.add(summary_row)
+        await db_session.commit()
+
+        db_session.add(
+            SemanticMemory(
+                summary_id=summary_row.id,
+                customer_id=customer_id,
+                embedding=vec,
+                embedding_model=settings.EMBED_MODEL,
+                embedding_dimension=settings.EMBED_DIMENSION,
+                status=EmbeddingStatus.ACTIVE,
+            )
+        )
+        await db_session.commit()
+
+        mock_llm = AsyncMock(
+            side_effect=[
+                _make_router_response("INFO_QUERY"),
+                _make_answer_response("Here is the price."),
+            ],
+        )
+
+        graph = build_graph(checkpointer=MemorySaver())
+        config = {"configurable": {"thread_id": "thread_recall_e2e", "db": db_session}}
+        state = make_initial_state(
+            user_message="Laptop giá bao nhiêu?",
+            session_id="thread_recall_e2e",
+            customer_id=customer_id,
+        )
+
+        with (
+            patch("services.ai.ai_router.acompletion", mock_llm),
+            patch(
+                "core.agent.nodes.retrieval.make_retrieval_tool",
+                _mock_retrieval_tool(similarity_score=0.9),
+            ),
+            # Faithful shape: AIGateway.embed returns a BATCH (list[list[float]])
+            patch(
+                "services.ai.AIGateway.embed",
+                new=AsyncMock(return_value=[vec]),
+            ),
+        ):
+            result = await graph.ainvoke(state, config)
+
+        assert result["memory_context"], (
+            "P0-1 regression: semantic recall must NOT be empty in the real compiled graph"
+        )
+        assert (
+            result["memory_context"][0]["summary_text"]
+            == "Customer previously asked about laptop pricing"
+        )
+        assert result["memory_retrieval_scores"]
+        assert result["memory_retrieval_scores"][0] >= 0.75
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_summary_save_then_resummary_upserts(db_session) -> None:
+    """P0-5: save #1 inserts, re-summary #2 for the same (customer, thread)
+    UPDATES the row instead of violating uq_summary_customer_thread.
+
+    Runs against the real Postgres constraint — the old code silently lost
+    every re-summary (IntegrityError swallowed upstream).
+    """
+    from sqlalchemy import delete as sa_delete, select
+
+    from core.agent.state import ConversationSummaryOutput
+    from models.schema import ConversationSummary
+    from services.memory.summarizer import ConversationSummarizer
+
+    customer_id = "resummary_cust"
+    thread_id = "thread_resummary_001"
+
+    async def _cleanup():
+        await db_session.execute(
+            sa_delete(ConversationSummary).where(ConversationSummary.customer_id == customer_id)
+        )
+        await db_session.commit()
+
+    await _cleanup()
+    try:
+        first = ConversationSummaryOutput(
+            summary_text="First summary",
+            products_discussed=["Laptop A"],
+            open_questions=["Ship time?"],
+            summary_model="economy-chat",
+        )
+        await ConversationSummarizer.save_summary(
+            summary=first,
+            session_id=thread_id,
+            customer_id=customer_id,
+            turn_count=20,
+            db=db_session,
+        )
+
+        second = ConversationSummaryOutput(
+            summary_text="Second summary after 10 more messages",
+            products_discussed=["Laptop A", "Laptop B"],
+            open_questions=[],
+            customer_preference="prefers lightweight models",
+            budget_stated="under 20M VND",
+            summary_model="economy-chat",
+        )
+        await ConversationSummarizer.save_summary(
+            summary=second,
+            session_id=thread_id,
+            customer_id=customer_id,
+            turn_count=30,
+            db=db_session,
+        )
+
+        rows = (
+            (
+                await db_session.execute(
+                    select(ConversationSummary).where(
+                        ConversationSummary.customer_id == customer_id,
+                        ConversationSummary.thread_id == thread_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(rows) == 1, "re-summary must upsert, not duplicate or vanish"
+        row = rows[0]
+        assert row.summary_text == "Second summary after 10 more messages"
+        assert row.products_discussed == ["Laptop A", "Laptop B"]
+        assert row.customer_preference == "prefers lightweight models"
+        assert row.budget_stated == "under 20M VND"
+        assert row.summary_version == 2, "upsert must bump summary_version"
+    finally:
+        await _cleanup()

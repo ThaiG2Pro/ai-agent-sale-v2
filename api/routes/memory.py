@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, bindparam, case, delete, func, select, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,  # noqa: TC002 - NEEDED: for Pydantic schema resolution
 )
@@ -233,9 +233,7 @@ async def list_intents(
         conditions.append(IntentTracking.status == intent_status)
 
     # Count total with filters
-    count_stmt = _latest_sales_intent_log_join(
-        select(func.count(IntentTracking.id)), latest_log
-    )
+    count_stmt = _latest_sales_intent_log_join(select(func.count(IntentTracking.id)), latest_log)
     if conditions:
         count_stmt = count_stmt.where(and_(*conditions))
     count_result = await db.execute(count_stmt)
@@ -245,9 +243,17 @@ async def list_intents(
     stmt = _latest_sales_intent_log_join(select(IntentTracking, latest_log), latest_log)
     if conditions:
         stmt = stmt.where(and_(*conditions))
+    # "Hottest first": urgency_level is a String column, so a plain .desc()
+    # sorts alphabetically (UNKNOWN > MEDIUM > LOW > HIGH). Map to ranks.
+    urgency_rank = case(
+        (latest_log.urgency_level == "HIGH", 3),
+        (latest_log.urgency_level == "MEDIUM", 2),
+        (latest_log.urgency_level == "LOW", 1),
+        else_=0,  # UNKNOWN / NULL (no extraction yet)
+    )
     stmt = (
         stmt.order_by(
-            latest_log.urgency_level.desc(),
+            urgency_rank.desc(),
             IntentTracking.updated_at.desc(),
         )
         .limit(limit)
@@ -337,7 +343,7 @@ async def get_semantic_memory(
     - FR-008b: Strict customer_id isolation (no cross-customer leakage)
 
     Args:
-        customer_id: Customer identifier (must start with "cust_")
+        customer_id: Customer identifier (any non-empty ID)
         db: Async database session
 
     Returns:
@@ -351,7 +357,9 @@ async def get_semantic_memory(
     logger = logging.getLogger(__name__)
 
     try:
-        if not customer_id or not customer_id.startswith("cust_"):
+        # Any non-empty ID is valid — Telegram customers use "tg:123" or a
+        # bare numeric chat_id, not a "cust_" prefix.
+        if not customer_id or not customer_id.strip():
             raise HTTPException(status_code=400, detail="Invalid customer_id format")
 
         from models.schema import SemanticMemory
@@ -435,7 +443,15 @@ async def delete_customer_memory(
 ) -> dict:
     """Delete all customer memory (RTBF - Right to be Forgotten) (T144-T145).
 
-    Cascade delete: IntentTracking → ConversationSummaries → SemanticMemory.
+    Cascade delete across ALL tables holding customer data:
+    semantic_memory → conversation_summaries → sales_intent_logs →
+    intent_tracking, plus the LangGraph checkpoint tables (checkpoints,
+    checkpoint_writes, checkpoint_blobs) for every thread_id seen for this
+    customer (P0-2: previous version left sales_intent_logs + checkpoints).
+
+    Accepts any non-empty customer_id — real IDs are not prefixed with
+    "cust_" (Telegram uses "tg:123" or a bare numeric chat_id).
+
     Requires confirm=true to proceed (safety check for accidental deletes).
     Audit trail via structured logging.
 
@@ -456,9 +472,9 @@ async def delete_customer_memory(
         HTTPException: 400 if confirm=false, 401 if unauthorized, 500 if DB error
     """
     import logging
-    from datetime import datetime
+    from datetime import UTC, datetime
 
-    from models.schema import ConversationSummary, IntentTracking, SemanticMemory
+    from models.schema import ConversationSummary, SemanticMemory
 
     logger = logging.getLogger(__name__)
 
@@ -467,52 +483,47 @@ async def delete_customer_memory(
             status_code=400, detail="confirm=true required to delete customer memory (RTBF)"
         )
 
-    if not customer_id or not customer_id.startswith("cust_"):
+    if not customer_id or not customer_id.strip():
         raise HTTPException(status_code=400, detail="Invalid customer_id format")
 
     try:
-        # T145: Transactional cascade delete
-        deleted_counts = {
-            "intent_tracking": 0,
-            "conversation_summaries": 0,
-            "semantic_memory": 0,
-        }
+        # Collect the customer's LangGraph thread_ids BEFORE deleting the rows
+        # that record them.
+        thread_ids: set[str] = set()
+        for model in (IntentTracking, ConversationSummary, SalesIntentLog):
+            result = await db.execute(
+                select(model.thread_id).where(model.customer_id == customer_id)
+            )
+            thread_ids.update(result.scalars().all())
 
-        # Delete IntentTracking
-        stmt_intent = select(func.count(IntentTracking.id)).where(
-            IntentTracking.customer_id == customer_id
-        )
-        result = await db.execute(stmt_intent)
-        deleted_counts["intent_tracking"] = result.scalar() or 0
+        # T145: Transactional cascade delete. semantic_memory FK-cascades from
+        # conversation_summaries, so it is deleted first for an accurate count.
+        deleted_counts: dict[str, int] = {}
+        for name, model in (
+            ("semantic_memory", SemanticMemory),
+            ("conversation_summaries", ConversationSummary),
+            ("sales_intent_logs", SalesIntentLog),
+            ("intent_tracking", IntentTracking),
+        ):
+            result = await db.execute(delete(model).where(model.customer_id == customer_id))
+            deleted_counts[name] = result.rowcount or 0
 
-        stmt = select(IntentTracking).where(IntentTracking.customer_id == customer_id)
-        rows = (await db.execute(stmt)).scalars().all()
-        for row in rows:
-            await db.delete(row)
-
-        # Delete ConversationSummaries
-        stmt_summary = select(func.count(ConversationSummary.id)).where(
-            ConversationSummary.customer_id == customer_id
-        )
-        result = await db.execute(stmt_summary)
-        deleted_counts["conversation_summaries"] = result.scalar() or 0
-
-        stmt = select(ConversationSummary).where(ConversationSummary.customer_id == customer_id)
-        rows = (await db.execute(stmt)).scalars().all()
-        for row in rows:
-            await db.delete(row)
-
-        # Delete SemanticMemory
-        stmt_semantic = select(func.count(SemanticMemory.id)).where(
-            SemanticMemory.customer_id == customer_id
-        )
-        result = await db.execute(stmt_semantic)
-        deleted_counts["semantic_memory"] = result.scalar() or 0
-
-        stmt = select(SemanticMemory).where(SemanticMemory.customer_id == customer_id)
-        rows = (await db.execute(stmt)).scalars().all()
-        for row in rows:
-            await db.delete(row)
+        # LangGraph checkpoint tables (created by AsyncPostgresSaver in the
+        # default schema — may not exist in environments that never ran the
+        # checkpointer setup; to_regclass guards that).
+        for table in ("checkpoint_writes", "checkpoint_blobs", "checkpoints"):
+            deleted_counts[table] = 0
+            if not thread_ids:
+                continue
+            exists = await db.execute(text("SELECT to_regclass(:t)"), {"t": table})
+            if exists.scalar() is None:
+                continue
+            # Table names come from the fixed tuple above — not user input.
+            stmt = text(f"DELETE FROM {table} WHERE thread_id IN :tids").bindparams(
+                bindparam("tids", expanding=True)
+            )
+            result = await db.execute(stmt, {"tids": sorted(thread_ids)})
+            deleted_counts[table] = result.rowcount or 0
 
         # Commit transaction
         await db.commit()
@@ -522,7 +533,7 @@ async def delete_customer_memory(
             extra={
                 "customer_id": customer_id,
                 "deleted_counts": deleted_counts,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )
 

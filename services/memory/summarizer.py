@@ -155,25 +155,46 @@ Conversation:
 
         Stores summary metadata for later retrieval and semantic memory updates.
 
+        Upserts on (customer_id, thread_id): a re-summary of the same thread
+        updates the existing row (uq_summary_customer_thread) instead of
+        violating the unique constraint (P0-5: re-summary silently lost).
+
         Args:
             summary: ConversationSummaryOutput from LLM
-            session_id: Session identifier
+            session_id: Session identifier (stored as thread_id)
             customer_id: Customer identifier
-            turn_count: Message count when summary was created
+            turn_count: Message count when summary was created (not persisted —
+                conversation_summaries has no such column; kept for call-site
+                logging/compat)
             db: Async database session
         """
-        from sqlalchemy import insert
+        from sqlalchemy import func
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         from models.schema import ConversationSummary
 
-        stmt = insert(ConversationSummary).values(
-            session_id=session_id,
+        stmt = pg_insert(ConversationSummary).values(
             customer_id=customer_id,
-            turn_count_at_summary=turn_count,
+            thread_id=session_id,
             summary_text=summary.summary_text,
             summary_model=summary.summary_model,
             products_discussed=summary.products_discussed,
             open_questions=summary.open_questions,
+            customer_preference=summary.customer_preference,
+            budget_stated=summary.budget_stated,
+        )
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_summary_customer_thread",
+            set_={
+                "summary_text": stmt.excluded.summary_text,
+                "summary_model": stmt.excluded.summary_model,
+                "products_discussed": stmt.excluded.products_discussed,
+                "open_questions": stmt.excluded.open_questions,
+                "customer_preference": stmt.excluded.customer_preference,
+                "budget_stated": stmt.excluded.budget_stated,
+                "summary_version": ConversationSummary.summary_version + 1,
+                "updated_at": func.now(),
+            },
         )
 
         await db.execute(stmt)

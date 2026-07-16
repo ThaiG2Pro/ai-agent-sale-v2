@@ -38,7 +38,7 @@ class TestSemanticMemoryStore:
     async def test_store_inserts_with_model_version(self, semantic_service, mock_db):
         """T114: store() inserts row with embedding_model='bge-m3'."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 1024  # Correct dimension
+            mock_embed.return_value = [[0.1] * 1024]  # Correct dimension
             mock_db.commit = AsyncMock()
 
             await semantic_service.store(
@@ -58,7 +58,7 @@ class TestSemanticMemoryStore:
     async def test_store_sets_status_active(self, semantic_service, mock_db):
         """T115: store() sets status=ACTIVE on insert."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 1024
+            mock_embed.return_value = [[0.1] * 1024]
             mock_db.commit = AsyncMock()
 
             await semantic_service.store(
@@ -79,7 +79,7 @@ class TestSemanticMemoryStore:
         """T116: store() with wrong dimension → raises EmbeddingDimensionMismatchError."""
         mock_db = AsyncMock()
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 512  # Wrong dimension
+            mock_embed.return_value = [[0.1] * 512]  # Wrong dimension
 
             with pytest.raises(EmbeddingDimensionMismatchError):
                 await semantic_service.store(
@@ -98,7 +98,7 @@ class TestSemanticMemoryRetrieve:
     async def test_retrieve_customer_a_returns_only_customer_a(self, semantic_service, mock_db):
         """T118: retrieve() with customer_id='A' returns only customer A rows."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 1024
+            mock_embed.return_value = [[0.1] * 1024]
 
             # Create a proper async result
             mock_result = MagicMock()
@@ -122,7 +122,7 @@ class TestSemanticMemoryRetrieve:
     async def test_retrieve_cross_customer_isolation(self, semantic_service, mock_db):
         """T119: retrieve() with customer_id='A' excludes customer_id='B' rows."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 1024
+            mock_embed.return_value = [[0.1] * 1024]
 
             mock_result = MagicMock()
             mock_result.fetchall.return_value = [
@@ -146,7 +146,7 @@ class TestSemanticMemoryRetrieve:
     async def test_retrieve_filters_by_threshold(self, semantic_service, mock_db):
         """T120: retrieve() filters scores < min_score (0.75)."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 1024
+            mock_embed.return_value = [[0.1] * 1024]
 
             mock_result = MagicMock()
             mock_result.fetchall.return_value = [
@@ -168,7 +168,7 @@ class TestSemanticMemoryRetrieve:
     async def test_retrieve_all_below_threshold_returns_empty(self, semantic_service, mock_db):
         """T121: retrieve() with all scores < threshold → empty list."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 1024
+            mock_embed.return_value = [[0.1] * 1024]
 
             mock_result = MagicMock()
             mock_result.fetchall.return_value = [
@@ -187,7 +187,7 @@ class TestSemanticMemoryRetrieve:
     async def test_retrieve_no_rows_cold_start(self, semantic_service, mock_db):
         """T122: retrieve() with no rows → empty list, no exception."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 1024
+            mock_embed.return_value = [[0.1] * 1024]
 
             mock_result = MagicMock()
             mock_result.fetchall.return_value = []
@@ -203,7 +203,7 @@ class TestSemanticMemoryRetrieve:
     async def test_retrieve_excludes_stale_rows(self, semantic_service, mock_db):
         """T123: retrieve() excludes STALE rows from results."""
         with patch("services.ai.AIGateway.embed", new_callable=AsyncMock) as mock_embed:
-            mock_embed.return_value = [0.1] * 1024
+            mock_embed.return_value = [[0.1] * 1024]
 
             mock_result = MagicMock()
             mock_result.fetchall.return_value = [

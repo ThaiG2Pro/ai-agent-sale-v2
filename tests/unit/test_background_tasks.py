@@ -494,34 +494,72 @@ async def test_update_semantic_memory_store_error_logged_not_raised(caplog, mock
 
 
 @pytest.mark.asyncio
-async def test_update_semantic_memory_only_after_successful_summary(caplog, mock_db_factory):
-    """T129: _update_semantic_memory() only called after successful summary INSERT."""
+async def test_summarize_and_embed_skips_embed_when_no_summary(caplog, mock_db_factory):
+    """T129: embed step only runs after a summary was persisted THIS turn.
+
+    The old gate read the pre-turn thread_summary_exists flag (always False),
+    so the summarize→embed chain never ran; now _summarize_and_embed chains on
+    the actual save result.
+    """
     from unittest.mock import AsyncMock, patch
 
     from core.agent.state import make_initial_state
-    from services.memory.background import _update_semantic_memory
+    from services.memory.background import _summarize_and_embed
 
     state = make_initial_state(
         user_message="test",
         session_id="t001",
         customer_id="cust_001",
     )
-    # Mark summary as NOT created
-    state["thread_summary_exists"] = False
+    # Below summarization threshold → _maybe_summarize returns False
+    state["messages"] = [{"role": "user", "content": "hi"}]
 
     with patch(
-        "services.memory.semantic_memory.SemanticMemoryService.store",
+        "services.memory.background._update_semantic_memory",
         new_callable=AsyncMock,
-    ) as mock_store:
+    ) as mock_embed:
         with caplog.at_level(logging.DEBUG):
-            await _update_semantic_memory(
+            await _summarize_and_embed(
                 customer_id="cust_001",
                 thread_id="t001",
                 state=state,
                 db_factory=mock_db_factory,
             )
 
-        # Verify store() was NOT called
-        mock_store.assert_not_called()
+        # Verify embed step was NOT called
+        mock_embed.assert_not_called()
         # Verify debug message about skipping
         assert "Skipping semantic memory update" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_summarize_and_embed_runs_embed_after_saved_summary(mock_db_factory):
+    """Chain fix: summary persisted this turn → _update_semantic_memory runs."""
+    from unittest.mock import AsyncMock, patch
+
+    from core.agent.state import make_initial_state
+    from services.memory.background import _summarize_and_embed
+
+    state = make_initial_state(
+        user_message="test",
+        session_id="t001",
+        customer_id="cust_001",
+    )
+
+    with patch(
+        "services.memory.background._maybe_summarize",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        with patch(
+            "services.memory.background._update_semantic_memory",
+            new_callable=AsyncMock,
+        ) as mock_embed:
+            await _summarize_and_embed(
+                customer_id="cust_001",
+                thread_id="t001",
+                state=state,
+                db_factory=mock_db_factory,
+            )
+
+            mock_embed.assert_awaited_once()

@@ -95,7 +95,10 @@ class SemanticMemoryService:
             # Embed the summary text
             from services.ai import AIGateway
 
-            embedding = await AIGateway.embed(summary_text)
+            # AIGateway.embed returns a batch (list[list[float]]) — unwrap the
+            # single vector like the RAG callers do (embeddings[0]); passing
+            # the batch itself always fails the dimension guard below.
+            embedding = (await AIGateway.embed(summary_text))[0]
 
             # Validate dimension (T116 guard)
             if len(embedding) != self.embed_dimension:
@@ -180,7 +183,8 @@ class SemanticMemoryService:
             # Embed the query
             from services.ai import AIGateway
 
-            query_embedding = await AIGateway.embed(query)
+            # Unwrap the single vector from the batch result (see store()).
+            query_embedding = (await AIGateway.embed(query))[0]
 
             if len(query_embedding) != self.embed_dimension:
                 logger.warning(
@@ -197,23 +201,28 @@ class SemanticMemoryService:
             query_sql = text(
                 """
             SELECT sm.id, sm.summary_id, cs.summary_text,
-                   1 - (sm.embedding <=> :vec)::numeric AS cosine_score
+                   1 - (sm.embedding <=> (:vec)::vector)::numeric AS cosine_score
             FROM agent_v1.semantic_memory sm
             JOIN agent_v1.conversation_summaries cs
               ON sm.summary_id = cs.id
             WHERE sm.customer_id = :customer_id
               AND sm.status = 'ACTIVE'
               AND sm.embedding_model = :embedding_model
-            ORDER BY sm.embedding <=> :vec
+            ORDER BY sm.embedding <=> (:vec)::vector
             LIMIT :top_k
             """
             )
+
+            # asyncpg binds text() params without pgvector's type adapter, so
+            # a Python list raises "expected str, got list" — serialize to the
+            # pgvector literal format and cast server-side.
+            vec_literal = "[" + ",".join(str(x) for x in query_embedding) + "]"
 
             result = await db.execute(
                 query_sql,
                 {
                     "customer_id": customer_id,
-                    "vec": query_embedding,
+                    "vec": vec_literal,
                     "embedding_model": self.embed_model,
                     "top_k": top_k,
                 },
@@ -250,6 +259,7 @@ class SemanticMemoryService:
         except Exception as e:
             logger.error(
                 "Failed to retrieve semantic memory",
+                exc_info=True,
                 extra={
                     "customer_id": customer_id,
                     "error": str(e),
