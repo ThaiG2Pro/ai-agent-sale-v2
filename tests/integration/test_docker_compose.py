@@ -27,6 +27,8 @@ def compose_up():
     env["API_PORT"] = "18000"
     env["DATABASE_POOL_SIZE"] = "5"
     env["DATABASE_MAX_OVERFLOW"] = "0"
+    # Compose now refuses to start without an explicit webhook secret.
+    env.setdefault("TELEGRAM_WEBHOOK_SECRET", "compose_test_secret_1234567890")
     subprocess.run(
         ["docker", "compose", "up", "-d", "--build"],
         check=True,

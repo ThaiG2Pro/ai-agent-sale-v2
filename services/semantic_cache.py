@@ -5,15 +5,29 @@ What it does: Implements SHA256 hashing (L1) and pgvector similarity search (L2)
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text, true
+from sqlalchemy.sql.elements import ColumnElement  # noqa: TC002
 
 from core.config import settings
 from models.schema import SemanticCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _ttl_filter() -> ColumnElement[bool]:
+    """Freshness predicate: only serve entries younger than CACHE_TTL_SECONDS.
+
+    TTL=0 disables expiry (entries live forever). No migration needed —
+    reuses the existing created_at column instead of an expires_at column.
+    """
+    if settings.CACHE_TTL_SECONDS <= 0:
+        return true()
+    cutoff = datetime.now(UTC) - timedelta(seconds=settings.CACHE_TTL_SECONDS)
+    return SemanticCache.created_at > cutoff
 
 
 def canonicalize_query(query: str) -> str:
@@ -46,6 +60,7 @@ async def get_l1_cache(db: AsyncSession, query: str) -> dict | None:
         select(SemanticCache.response, SemanticCache.citations)
         .where(SemanticCache.query_hash == query_hash)
         .where(SemanticCache.model_name == settings.EMBED_MODEL)
+        .where(_ttl_filter())
     )
     result = await db.execute(stmt)
     row = result.first()
@@ -79,6 +94,7 @@ async def get_l2_cache(
         select(SemanticCache.response, SemanticCache.citations, similarity_col)
         .where(similarity_col > threshold)
         .where(SemanticCache.model_name == settings.EMBED_MODEL)
+        .where(_ttl_filter())
         .order_by(text("similarity DESC"))
         .limit(1)
     )
@@ -123,6 +139,9 @@ async def set_cache(
         embedding=embedding,
         model_name=model_name,
         citations=citations or [],
+        # Explicit timestamp so upserts (merge) refresh the TTL window —
+        # column default only fires on INSERT, not on merge-update.
+        created_at=datetime.now(UTC),
     )
     logfire.info(
         "Cache write: hash={h}, model={m}, citations_count={c}",
@@ -133,3 +152,19 @@ async def set_cache(
     # Use merge to handle potential collisions (Upsert pattern)
     await db.merge(cache_entry)
     await db.commit()
+
+
+async def invalidate_cache(db: AsyncSession) -> int:
+    """
+    Why this exists: Product data changed (ingest/re-ingest, price update) —
+    cached answers may now state wrong prices/stock. TTL alone leaves a
+    staleness window; this closes it immediately.
+    What it does: Deletes all semantic_cache rows. Returns rows removed.
+    """
+    import logfire
+
+    result = await db.execute(delete(SemanticCache))
+    await db.commit()
+    removed = result.rowcount or 0
+    logfire.info("Semantic cache invalidated: {n} entries removed", n=removed)
+    return removed

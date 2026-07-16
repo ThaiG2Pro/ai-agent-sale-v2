@@ -29,6 +29,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
+# Strong references to in-flight background tasks. asyncio only keeps weak
+# references to tasks — without this set a task can be garbage-collected
+# mid-execution and silently never complete.
+_background_tasks: set[asyncio.Task] = set()
+
 
 @router.post("/telegram")
 async def telegram_webhook(
@@ -118,7 +123,8 @@ async def telegram_webhook(
             )
 
     task = asyncio.create_task(_process_with_error_handling())
-    del task
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     logger.info(
         "Telegram webhook acknowledged",

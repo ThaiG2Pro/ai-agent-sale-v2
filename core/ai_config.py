@@ -4,11 +4,27 @@ What it does: Sets up model routing and parameters for local and cloud models.
 
 from __future__ import annotations
 
+from typing import Any
+
 from core.config import settings
 
 # Article X: Model Selection Strategy
 # Economy Tier: Local Ollama (qwen2.5, bge-small)
 # Premium Tier: Cloud fallback (Groq/OpenAI)
+
+
+def _litellm_params(model: str, **extra: Any) -> dict[str, Any]:
+    """Build litellm_params for a model string.
+
+    OLLAMA_BASE_URL must only be attached to local Ollama models — cloud
+    model strings (e.g. "gemini/gemini-2.5-flash", "gpt-4o-mini") resolve
+    their endpoint + API key from the environment via LiteLLM itself.
+    """
+    params: dict[str, Any] = {"model": model, **extra}
+    if model.startswith("ollama/"):
+        params["api_base"] = settings.OLLAMA_BASE_URL
+    return params
+
 
 LITELLM_CONFIG = {
     "model_list": [
@@ -16,50 +32,31 @@ LITELLM_CONFIG = {
         {
             "model_name": "light-chat",
             "model_info": {"id": "light-chat-local"},
-            "litellm_params": {
-                "model": settings.LIGHT_CHAT_MODEL,  # ollama/qwen3:0.6b
-                "api_base": settings.OLLAMA_BASE_URL,
-                "stream": False,
-            },
+            "litellm_params": _litellm_params(settings.LIGHT_CHAT_MODEL, stream=False),
         },
         # ── Economy tier: general tasks — normalize_query + RAG generation ──
         # Same model as normalize_query to avoid Ollama model swap mid-request
         {
             "model_name": "economy-chat",
             "model_info": {"id": "economy-chat-local"},
-            "litellm_params": {
-                "model": settings.CHAT_MODEL,  # ollama/qwen3-1.7b (1.1GB)
-                "api_base": settings.OLLAMA_BASE_URL,
-                "stream": True,
-            },
+            "litellm_params": _litellm_params(settings.CHAT_MODEL, stream=True),
         },
         {
             "model_name": "economy-embedding",
             "model_info": {"id": "economy-embedding-local"},
-            "litellm_params": {
-                "model": settings.EMBED_MODEL,  # ollama/bge-m3
-                "api_base": settings.OLLAMA_BASE_URL,
-            },
+            "litellm_params": _litellm_params(settings.EMBED_MODEL),
         },
         # ── Powerful tier: deep reasoning — escalation, complex queries ──────
         {
             "model_name": "premium-local-chat",
             "model_info": {"id": "premium-local-deepseek"},
-            "litellm_params": {
-                "model": settings.POWERFUL_CHAT_MODEL,  # ollama/deepseel-r1:1.5b
-                "api_base": settings.OLLAMA_BASE_URL,
-                "stream": True,
-            },
+            "litellm_params": _litellm_params(settings.POWERFUL_CHAT_MODEL, stream=True),
         },
         # qwen3-4b: alias used by PREMIUM_MODEL env var in dev environments
         {
             "model_name": "qwen3-4b",
             "model_info": {"id": "qwen3-4b-local"},
-            "litellm_params": {
-                "model": "ollama/qwen3-4b-q6",
-                "api_base": settings.OLLAMA_BASE_URL,
-                "stream": False,
-            },
+            "litellm_params": _litellm_params("ollama/qwen3-4b-q6", stream=False),
         },
         # ── Cloud fallback — when local unavailable ───────────────────────────
         {
