@@ -26,6 +26,11 @@ async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):
     """
     Why this exists: Verifies core system components are operational.
     SC-002 Target: < 10ms response time.
+
+    NOTE — liveness-style by design: this endpoint always returns HTTP 200,
+    even when the DB is down (body reports status="degraded"). Load balancers
+    and orchestrators MUST use /health/readiness, which returns 503 when
+    dependencies are not ready. Do NOT wire /health into traffic-gating checks.
     """
     start_time = time.perf_counter()
 
