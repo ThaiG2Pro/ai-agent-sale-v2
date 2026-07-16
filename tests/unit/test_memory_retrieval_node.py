@@ -40,7 +40,7 @@ async def test_memory_retrieval_missing_customer_id(mock_db):
         conversation_history=[],
     )
 
-    result = await memory_retrieval_node(state, mock_db)
+    result = await memory_retrieval_node(state, {"configurable": {"db": mock_db}})
 
     assert result["memory_context"] == []
     assert result["memory_retrieval_scores"] == []
@@ -56,7 +56,7 @@ async def test_memory_retrieval_smalltalk_intent(base_state, mock_db):
     """
     base_state["primary_intent"] = IntentEnum.SMALLTALK
 
-    result = await memory_retrieval_node(base_state, mock_db)
+    result = await memory_retrieval_node(base_state, {"configurable": {"db": mock_db}})
 
     assert result["memory_context"] == []
     assert result["memory_retrieval_scores"] == []
@@ -89,7 +89,7 @@ async def test_memory_retrieval_two_results(base_state, mock_db):
         "services.memory.semantic_memory.SemanticMemoryService",
         return_value=mock_service_instance,
     ):
-        result = await memory_retrieval_node(base_state, mock_db)
+        result = await memory_retrieval_node(base_state, {"configurable": {"db": mock_db}})
 
         assert len(result["memory_context"]) == 2
         assert len(result["memory_retrieval_scores"]) == 2
@@ -128,7 +128,7 @@ async def test_memory_retrieval_graceful_error_handling(base_state, mock_db):
         "services.memory.semantic_memory.SemanticMemoryService",
         return_value=mock_service_instance,
     ):
-        result = await memory_retrieval_node(base_state, mock_db)
+        result = await memory_retrieval_node(base_state, {"configurable": {"db": mock_db}})
 
         # Should gracefully handle error and return empty context
         assert result["memory_context"] == []
@@ -164,7 +164,7 @@ async def test_memory_retrieval_different_intents(mock_db):
                 conversation_history=[],
             )
 
-            result = await memory_retrieval_node(state, mock_db)
+            result = await memory_retrieval_node(state, {"configurable": {"db": mock_db}})
 
             # Should call retrieve for all non-SMALLTALK intents
             assert result["memory_context"] == []
@@ -185,7 +185,7 @@ async def test_memory_retrieval_empty_results(base_state, mock_db):
         "services.memory.semantic_memory.SemanticMemoryService",
         return_value=mock_service_instance,
     ):
-        result = await memory_retrieval_node(base_state, mock_db)
+        result = await memory_retrieval_node(base_state, {"configurable": {"db": mock_db}})
 
         assert result["memory_context"] == []
         assert result["memory_retrieval_scores"] == []

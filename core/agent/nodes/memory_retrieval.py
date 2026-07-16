@@ -5,9 +5,10 @@ What: Retrieves semantic memory for a customer and injects into system context.
 """
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
+    from langchain_core.runnables import RunnableConfig
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from core.agent.state import AgentState
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def memory_retrieval_node(state: "AgentState", db: "AsyncSession") -> "AgentState":
+async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -> "AgentState":
     """Retrieve relevant past context for customer (T132).
 
     Executes semantic memory search and injects top-3 results as memory_context.
@@ -28,16 +29,23 @@ async def memory_retrieval_node(state: "AgentState", db: "AsyncSession") -> "Age
 
     Args:
         state: Current AgentState (contains customer_id, primary_intent)
-        db: Async database session
+        config: LangGraph RunnableConfig; the DB session lives at
+            config["configurable"]["db"] (P0-1 fix: LangGraph passes config as
+            the second positional arg, never a raw db session)
 
     Returns:
         Updated AgentState with memory_context and memory_retrieval_scores
     """
     try:
+        db = cast(
+            "AsyncSession | None",
+            (config.get("configurable") or {}).get("db"),
+        )
+
         # T133: Missing customer_id → return early with empty context
         customer_id = state.get("customer_id")
-        if not customer_id:
-            logger.debug("No customer_id in state; skipping memory retrieval")
+        if not customer_id or db is None:
+            logger.debug("No customer_id or db in config; skipping memory retrieval")
             state["memory_context"] = []
             state["memory_retrieval_scores"] = []
             return state
