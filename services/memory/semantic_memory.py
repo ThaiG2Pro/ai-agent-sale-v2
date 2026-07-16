@@ -138,6 +138,7 @@ class SemanticMemoryService:
         except Exception as e:
             logger.error(
                 "Failed to store semantic memory",
+                exc_info=True,
                 extra={
                     "summary_id": str(summary_id),
                     "customer_id": customer_id,
@@ -315,6 +316,7 @@ class SemanticMemoryService:
         except Exception as e:
             logger.error(
                 "Failed to flag stale embeddings",
+                exc_info=True,
                 extra={
                     "current_embedding_model": current_embedding_model,
                     "error": str(e),

@@ -113,6 +113,7 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
         # Graceful error handling: log but don't propagate
         logger.error(
             "Memory retrieval failed",
+            exc_info=True,
             extra={
                 "error": str(e),
                 "error_type": type(e).__name__,

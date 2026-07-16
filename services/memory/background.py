@@ -175,6 +175,7 @@ async def _maybe_extract_intent(
         # FR-013: Graceful degradation - log error, do not re-raise
         logger.error(
             "Intent extraction failed (non-blocking)",
+            exc_info=True,
             extra={
                 "customer_id": customer_id,
                 "thread_id": thread_id,
@@ -271,6 +272,7 @@ async def _maybe_summarize(
         # FR-013: Graceful degradation - log error, do not re-raise
         logger.error(
             "Summarization failed (non-blocking)",
+            exc_info=True,
             extra={
                 "customer_id": customer_id,
                 "thread_id": thread_id,
@@ -350,6 +352,7 @@ async def _update_semantic_memory(
         # T128: Log error, don't propagate (graceful degradation)
         logger.error(
             "Semantic memory update failed (non-blocking)",
+            exc_info=True,
             extra={
                 "customer_id": customer_id,
                 "thread_id": thread_id,
@@ -425,6 +428,9 @@ async def post_turn_tasks(
         if isinstance(result, Exception):
             logger.error(
                 f"Background task {task_names[task_idx]} failed",
+                # result is a collected exception object (gather), not the
+                # active exception — pass it explicitly for its traceback.
+                exc_info=result,
                 extra={
                     "customer_id": customer_id,
                     "thread_id": thread_id,
