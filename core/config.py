@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     AGENT_ALPHA: float = 0.7
     # Escalation model alias (used by escalation_node for COMPLAINT/NEGOTIATION)
     PREMIUM_MODEL: str = "premium-chat"
+    # agentic-rag-retry-loop (ticket 2026): bounded self-evaluate -> rewrite -> retry
+    # loop around retrieval. 0 = kill switch (exact static single-pass behavior).
+    RAG_RETRY_MAX_ATTEMPTS: int = Field(default=1, ge=0, le=2)
 
     # Week 4: HITL Configuration
     HITL_TIMEOUT_WARN_MIN: int = Field(default=30, ge=1)

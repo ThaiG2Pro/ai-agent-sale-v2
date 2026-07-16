@@ -1,0 +1,85 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+context: |
+  AI Sales Agent for E-commerce (ai-agent-sale-v2): async, offline-first RAG sales agent for SMEs.
+  Stack: Python 3.13 (uv), FastAPI + uvicorn, LangGraph StateGraph agent, LiteLLM → Ollama local
+  models (qwen3 / deepseek-r1 / bge-m3), SQLAlchemy 2.0 async + asyncpg on PostgreSQL + pgvector,
+  Alembic migrations, Pydantic v2 / pydantic-settings, Typer CLI, Logfire + OpenTelemetry + Phoenix.
+  Tests: pytest + pytest-asyncio (strict) + respx; real test DB (ai_agent_test). Lint/format: ruff
+  (line 99) via ./scripts/lint.sh. Coverage target ≥80% (R-COV-001) but not yet CI-enforced.
+  API: plain Pydantic response_model (NOT {data,meta}); errors = FastAPI {"detail": ...}; real HTTP
+  codes (400/401/404/409/500); lists = {items,total,limit,offset}. No global version prefix; per-change
+  openapi.yaml is the S3 output. Architecture: async modular monolith, layers interface(api,cli) →
+  orchestration(core/agent LangGraph nodes) → services(rag,memory,hitl,ai) → data(models,migrations);
+  services/core must not import api/. Postgres LangGraph checkpointer persists per-session state
+  (thread_id=session_id). Strict customer_id memory isolation; RTBF cascade delete. Secrets via
+  env/Docker secrets only; no PII/tokens in logs. Greenfield — no legacy parity contract.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# --- kiro-sdlc-kit rules (managed by `init --force` — add project-specific rules OUTSIDE these markers) ---
+# Kiro SDLC kit — canonical per-artifact rules for OpenSpec.
+#
+# These are the kit's HARD conventions for the four OpenSpec-native artifacts
+# (proposal · spec · design · tasks). They are *additive* to OpenSpec's built-in
+# <template>/<instruction> — `openspec instructions <artifact>` emits them inside a
+# <rules> block, so the role agents (analyst/architect/developer) do NOT carry these
+# formats inline. Edit conventions HERE, in one place; the agents just run
+# `openspec instructions` and obey what it prints.
+#
+# Installed by `bin/init.mjs`: appended verbatim into the project's real
+# `openspec/config.yaml` (the `rules:` key) right after `openspec init`. The onboarder
+# fills the sibling `context:` key (project domain/stack/conventions) in Phase 4b.
+# Projects may extend any list with project-specific rules.
+
+rules:
+  # ── proposal.md (analyst S1) — WHY + scope. ACs/scenarios live in the spec deltas, not here. ──
+  proposal:
+    - "Pick a kebab-case change name that reflects the feature; carry the ticket id through every AC/BR/INT id."
+    - "Include a `## Non-Goals` section — state explicitly what is out of scope."
+    - "Include an `## Assumptions` section: tag each assumption with exactly one of [CONFIRMED] / [ASSUMED] / [MISSING] / [UNCLEAR]. Max 5 [UNCLEAR]/[MISSING] total."
+    - "Include an `## Edge Cases` section enumerating at least 10 edge cases by category (input boundary, state transition, concurrency, data integrity, permission, integration, UI/UX). Exception: when `_state.json.scope` == \"tiny\", at least 3 edge cases (the categories that genuinely apply) is sufficient — do not pad to 10 with filler."
+    - "Include an `## Early Risk Flags` section — fold in every STRIDE threat from the threat model (if run)."
+    - "Include a `Figma:` line with the design URL(s), or `Figma: N/A`."
+    - "If the feature ports logic from a legacy system, include a `## Legacy Implicit Behavior Audit` section labeling each behavior [CONTRACT] / [ACCIDENT] / [UNCLEAR] with a `file:line` citation."
+    - "Never write \"TBD\" / \"to be determined\" — if you cannot resolve something, tag it [MISSING] or [UNCLEAR] with a reason."
+
+  # ── spec deltas (analyst S2) — the testable ACs/scenarios under specs/<capability>/spec.md ──
+  # NOTE: key MUST be `specs` (plural) — the spec-driven schema's artifact id is `specs`.
+  # A `spec:` key is silently dropped ("Unknown artifact ID in rules: spec"), so these
+  # AC-format rules never reach the analyst at S2.
+  specs:
+    - "Every acceptance criterion uses the id format AC-{ticket}-{NNN} (zero-padded 3 digits) and carries EXACTLY one tag: [CONFIRMED] / [ASSUMED] / [MISSING] / [UNCLEAR]. Wrong: AC-1, AC-1.1, AC-001, AC-69555-1."
+    - "Business rules use BR-{ticket}-{NNN}; integration points use INT-{ticket}-{NNN}. Never drop the ticket id."
+    - "At least 3 happy-path + 3 error-path scenarios per user story. Exception: when `_state.json.scope` == \"tiny\", at least 1 happy-path + 1 error-path is sufficient — do not pad to 3 with near-duplicate scenarios."
+    - "Every AC must be 100% testable by QA — concrete, observable outcome. No \"TBD\"."
+
+  # ── design.md (architect S3) — HOW. Additive to OpenSpec's generic design template. ──
+  design:
+    - "Start the document with `## Sketch — Gap Analysis`: either \"No critical gaps found\" or a list of gaps (STOP and recommend an S2 return on a critical gap)."
+    - "Reference the analyst's AC ids verbatim (AC-{ticket}-{NNN}). NEVER invent new AC ids."
+    - "Every major decision is an `### ADR-{NNN}` with: Context · Options (a markdown table of >=2 options with pros/cons) · Decision (chosen option + why) · Consequences. One option is not a decision."
+    - "Cover these sections beyond OpenSpec's defaults: Architecture Overview · API Design · DB Schema · Error Mapping · Sequence Flows · Edge Cases · Performance · Security · Risk Assessment."
+    - "End the document with `## Implementation Guide`: recommended task order, patterns to follow (with file paths), and gotchas."
+    - "If the change has an API, keep a SEPARATE openapi.yaml (OpenAPI 3.0.x) in the change dir; the design's API Design section and openapi.yaml must agree endpoint-for-endpoint."
+    - "Every rule deviation must be justified by an ADR citing the rule id + reason + spec evidence."
+    - "When `_state.json.scope` == \"tiny\": condense sections this change doesn't touch to one line (`_(unchanged — <why>)_`) instead of a full write-up, and an ADR MAY state Decision + one-line rationale WITHOUT the options table when only one approach is genuinely reasonable — never drop a section header outright, always state why. Default (`standard`, or scope unset/absent): every section gets its full treatment."
+
+  # ── tasks.md (architect S3 → developer S4 via /opsx:apply) — additive to OpenSpec's checkbox template. ──
+  tasks:
+    - "Every subtask line includes `File: \\`{path}\\`` (the exact file it touches) AND `_Requirements: AC-{ticket}-{NNN}_` (the AC ids it satisfies)."
+    - "Order tasks by dependency, following the project's layering: data/schema -> domain/business logic -> service -> interface/controller -> tests. Never put tests before the code they test."
+    - "At least 2 checkpoint tasks (one mid-build, one final); the LAST task is always a checkpoint. Recommended: a checkpoint every 3-5 implementation tasks. Exception: when `_state.json.scope` == \"tiny\", a single final checkpoint is sufficient if there is no meaningful mid-build milestone."
+    - "Checkpoint tasks are human-review gates — never mark them optional (`*`). Required tasks have no `*`; optional tasks end with `*`."
+# --- end kiro-sdlc-kit rules ---

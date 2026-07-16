@@ -1,0 +1,129 @@
+{
+  "ticket_id": "2026",
+  "feature_slug": "agentic-rag-retry-loop",
+  "change_name": "agentic-rag-retry-loop",
+  "type": "cr",
+  "rigor": "full",
+  "testcase_export": "md",
+  "test_scope": "module",
+  "scope": "standard",
+  "phases": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6"
+  ],
+  "isolation": {
+    "method": "branch",
+    "branch": "cr/2026-agentic-rag-retry-loop",
+    "worktree_path": null,
+    "base_branch": "main"
+  },
+  "current_phase": "DONE",
+  "gates": {
+    "S2": "passed",
+    "S3": "passed",
+    "S4": "passed",
+    "S5": "passed"
+  },
+  "convergence": {
+    "S2": {
+      "rounds": 3,
+      "stable": 3
+    },
+    "S3": {
+      "rounds": 3,
+      "stable": 3
+    }
+  },
+  "last_updated": "2026-07-16",
+  "last_agent": "orchestrator",
+  "memory_writeback": {
+    "analyst": "appended",
+    "architect": "appended",
+    "developer": "appended",
+    "qa": "appended"
+  },
+  "phase_history": [
+    {
+      "phase": "S1",
+      "agent": "analyst",
+      "date": "2026-07-15",
+      "note": "Requirement pack from research §4 (agentic RAG static-pipeline gap); 15 edge cases; STRIDE-lite folded into 6 risk flags"
+    },
+    {
+      "phase": "S2",
+      "agent": "analyst",
+      "date": "2026-07-15",
+      "note": "24 ACs / 10 BRs / 6 INTs on capability rag-pipeline (ADDED — specs/ was empty); openspec validate --strict PASS; scope=standard"
+    },
+    {
+      "phase": "S3",
+      "agent": "architect",
+      "date": "2026-07-15",
+      "note": "design.md + tasks.md + stride-threat-model.md; 5 ADRs. Loop = shared retrieve_with_retry wrapping search_and_retrieve (ADR-001); sufficiency gate reuses RetrievalResult signals, no new scorer (ADR-002); bounded for-loop cap (ADR-003); COMPARISON mutual exclusion (ADR-004); light-tier rewrite (ADR-005). openapi N/A. All 24 ACs → design + task. openspec validate PASS."
+    },
+    {
+      "phase": "S4",
+      "agent": "developer",
+      "date": "2026-07-15",
+      "note": "BLOCKED before any code write: sdlc.config.json paths.code_roots/test_roots are empty, so the developer write-fence (built-in _DEVELOPER globs: src/**, app/**, lib/**, ...) does not cover this project real layout (api/**, core/**, services/**, models/**, cli/**). check-write-path.py denies Write/Edit to core/config.py, services/ai.py, services/rag/pipeline.py, core/agent/tools.py, core/agent/nodes/queue_consumer.py, and even sdlc.config.json/.env.example themselves. tests/** and migrations/** already pass (built-in globs). No source files touched; no partial state to revert."
+    },
+    {
+      "phase": "S4",
+      "agent": "developer",
+      "date": "2026-07-15",
+      "note": "retrieve_with_retry + rewrite_query + _write_retry_trace built per ADR-001..005, wired at 3 call sites; 37/37 new unit tests pass, 24/24 ACs covered; lint clean; integration 2/4 pass (2 fail on pre-existing test-DB FTS/session gap, documented); .env.example line blocked by write-fence (D5)."
+    },
+    {
+      "phase": "S5",
+      "agent": "qa",
+      "date": "2026-07-15",
+      "note": "test note"
+    },
+    {
+      "phase": "S5",
+      "agent": "qa",
+      "date": "2026-07-16",
+      "note": "Retest pass: Bug #1 RESOLVED-VERIFIED (await db.rollback fix confirmed via git diff). tests/integration/test_retry_loop_pipeline.py 4/4 pass (was 2/4), unit regression 37/37 pass. GO for S6."
+    },
+    {
+      "phase": "S6",
+      "agent": "developer",
+      "date": "2026-07-16",
+      "note": "release.md written (notes/AC-IDs, no-migration, kill-switch rollback, smoke test); openspec archive run — spec folded into openspec/specs/rag-pipeline/spec.md (first living spec); change moved to archive."
+    }
+  ],
+  "active_concerns": [
+    "ADR-001: confirm answer_with_rag wiring at DESIGN REVIEW (recommended: wire it, behind kill switch)",
+    "G2: subject-drift detection is best-effort (self-declared keeps_subject + prompt) — QA to probe"
+  ],
+  "next_action": {
+    "agent": "developer",
+    "command": "/developer 2026 agentic-rag-retry-loop (S6 release)",
+    "routes_to": "developer /s6",
+    "prerequisite": "S5 GO confirmed. Read qa-report.md and _handoff.md before S6.",
+    "priority_reading": [
+      "openspec/changes/agentic-rag-retry-loop/tasks.md",
+      "openspec/changes/agentic-rag-retry-loop/design.md (Implementation Guide + Control Flow)",
+      "openspec/changes/agentic-rag-retry-loop/stride-threat-model.md",
+      "services/rag/pipeline.py (search_and_retrieve, answer_with_rag, _write_model_trace)",
+      "services/ai.py::normalize_query (rewrite_query precedent)",
+      "core/agent/nodes/retrieval.py (COMPARISON split), core/config.py"
+    ],
+    "watch_items": [
+      "cap enforced as bounded for-loop (RISK-001), not recursion",
+      "distinguish decline reasons via query_vector presence (ADR-002) — do not rewrite spam / retry on dead embed",
+      "COMPARISON early-return before loop (AC-2026-020)",
+      "no cache write inside loop (AC-2026-023)",
+      "rewrite_query hardcodes economy-chat (AC-2026-010); kill switch =0 byte-identical (RISK-005)"
+    ]
+  },
+  "deploy_status": {
+    "dev": "pending",
+    "stg": "pending",
+    "master": "pending"
+  }
+}

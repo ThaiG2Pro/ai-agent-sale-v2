@@ -174,13 +174,17 @@ def make_rag_tool(db: AsyncSession):
 def make_retrieval_tool(db):
     """Factory for retrieval tool (no LLM) with DB session closure.
 
-    Wraps search_and_retrieve() — pipeline steps 1-11 only (no LLM generation).
+    Wraps retrieve_with_retry() — search_and_retrieve (pipeline steps 1-11, no LLM
+    generation) plus the bounded self-evaluate -> rewrite -> re-retrieve loop
+    (agentic-rag-retry-loop, ticket 2026, ADR-001). This is the production wiring point
+    for retrieval_node — retrieve_with_retry early-returns exactly like search_and_retrieve
+    for COMPARISON intent, cache hits, spam/embed-down, and RAG_RETRY_MAX_ATTEMPTS=0.
     Returns a @tool so LLM can decide when to call it (or node can invoke directly).
 
     Returns:
         LangChain @tool: retrieve(input: RetrievalInput) -> RetrievalResult
     """
-    from services.rag.pipeline import search_and_retrieve
+    from services.rag.pipeline import retrieve_with_retry
 
     @tool(args_schema=RetrievalInput)
     async def retrieve(query: str, intent: str | None = None) -> RetrievalResult:
@@ -197,7 +201,7 @@ def make_retrieval_tool(db):
             RetrievalResult with chunks, citations, similarity scores, and
             optional cached_answer if L1/L2 cache hit.
         """
-        return await search_and_retrieve(db, query, intent=intent)
+        return await retrieve_with_retry(db, query, intent=intent)
 
     return retrieve
 
