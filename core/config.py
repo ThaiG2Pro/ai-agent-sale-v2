@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     What it does: Loads environment variables from .env or system environment.
     """
 
+    # Deployment environment — gates fail-fast secret validation at startup.
+    # "production" refuses to boot with default secrets; other envs only warn.
+    ENV: Literal["dev", "staging", "production"] = "dev"
+
     # Database Configuration
     DB_USER: str = "user"
     DB_PASSWORD: str = "password"
@@ -42,7 +46,7 @@ class Settings(BaseSettings):
     #   POWERFUL — deep reasoning (deepseek-r1): escalation, complex queries
     LIGHT_CHAT_MODEL: str = "ollama/qwen3:0.6b"
     CHAT_MODEL: str = "ollama/qwen3-1.7b"
-    POWERFUL_CHAT_MODEL: str = "ollama/deepseel-r1:1.5b"
+    POWERFUL_CHAT_MODEL: str = "ollama/deepseek-r1:1.5b"
     EMBED_MODEL: str = "ollama/bge-m3"
     EMBED_DIMENSION: int = 1024  # Standard for bge-m3 / small
 
@@ -117,6 +121,21 @@ class Settings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+
+# Insecure placeholder values shipped as dev defaults. Startup (api/main.py::lifespan)
+# refuses to boot in ENV=production while any of these are still in effect.
+INSECURE_DEFAULT_SECRETS: dict[str, str] = {
+    "DB_PASSWORD": "password",
+    "X_ADMIN_KEY": "dev-secret-key",
+}
+
+
+def find_insecure_default_secrets(s: Settings) -> list[str]:
+    """Return names of secret settings still carrying their insecure default."""
+    return [
+        name for name, default in INSECURE_DEFAULT_SECRETS.items() if getattr(s, name) == default
+    ]
 
 
 settings = Settings()

@@ -22,7 +22,10 @@ DESIGN NOTE — single TracerProvider pattern:
 
 from __future__ import annotations
 
+import json
 import logging
+import re
+from datetime import UTC, datetime
 
 from core.config import settings
 
@@ -50,15 +53,131 @@ def setup_logging() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Layer 1: Python stdlib logging
+# PII masking helpers (FR-008 + steering/security.md — no bare PII in logs)
 # ---------------------------------------------------------------------------
+
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b")
+# Vietnamese phone formats: 0xxxxxxxxx (10 digits) or +84/84 prefix (9-10 more digits).
+_PHONE_RE = re.compile(r"(?<![\d\w])(?:\+?84|0)(?:[ .-]?\d){8,10}(?![\d\w])")
+
+# Log-record keys treated as customer identity → masked in JSON output.
+_IDENTITY_KEYS = frozenset({"customer_id", "chat_id", "session_id", "thread_id", "email", "phone"})
+# Log-record keys that must never reach stdout with a value.
+_SECRET_KEY_MARKERS = ("token", "secret", "password", "api_key", "authorization", "admin_key")
+
+
+def mask_email(email: str) -> str:
+    """`nguyen.van.a@example.com` → `ng***@example.com`."""
+    local, _, domain = str(email).partition("@")
+    if not domain:
+        return "***"
+    return f"{local[:2]}***@{domain}"
+
+
+def mask_phone(phone: str) -> str:
+    """Keep the last 3 digits only: `0912345678` → `*******678`."""
+    digits = re.sub(r"\D", "", str(phone))
+    if len(digits) < 4:
+        return "***"
+    return "*" * (len(digits) - 3) + digits[-3:]
+
+
+def mask_identifier(value: object) -> str:
+    """Mask an opaque identity value (customer_id, chat_id, session_id...)."""
+    s = str(value)
+    if "@" in s:
+        return mask_email(s)
+    if len(s) <= 4:
+        return "***"
+    return f"{s[:3]}***{s[-2:]}"
+
+
+def mask_pii(text: str) -> str:
+    """Scrub emails and Vietnamese phone numbers from free-form text."""
+    text = _EMAIL_RE.sub(lambda m: mask_email(m.group()), text)
+    return _PHONE_RE.sub(lambda m: mask_phone(m.group()), text)
+
+
+# ---------------------------------------------------------------------------
+# Layer 1: Python stdlib logging — JSON structured output (FR-008)
+# ---------------------------------------------------------------------------
+
+# Attributes present on every LogRecord — anything else came in via `extra=`.
+_BUILTIN_RECORD_ATTRS = frozenset(
+    {
+        "args",
+        "asctime",
+        "created",
+        "exc_info",
+        "exc_text",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "message",
+        "module",
+        "msecs",
+        "msg",
+        "name",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "taskName",
+        "thread",
+        "threadName",
+    }
+)
+
+
+class JsonFormatter(logging.Formatter):
+    """Structured JSON log lines for stdout (FR-008).
+
+    Core fields: timestamp, level, logger, message (+ request_id / OTel
+    trace_id/span_id when present). `extra=` fields are appended with
+    identity keys masked and secret-like keys redacted.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, object] = {
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": mask_pii(record.getMessage()),
+        }
+        # Injected by OTel LoggingInstrumentor / request middleware when present.
+        for source_attr, field in (
+            ("request_id", "request_id"),
+            ("otelTraceID", "trace_id"),
+            ("otelSpanID", "span_id"),
+        ):
+            value = getattr(record, source_attr, None)
+            if value:
+                payload[field] = value
+
+        for key, value in record.__dict__.items():
+            if key in _BUILTIN_RECORD_ATTRS or key.startswith("_") or key in payload:
+                continue
+            if any(marker in key.lower() for marker in _SECRET_KEY_MARKERS):
+                payload[key] = "[REDACTED]"
+            elif key in _IDENTITY_KEYS:
+                payload[key] = mask_identifier(value)
+            elif isinstance(value, str):
+                payload[key] = mask_pii(value)
+            else:
+                payload[key] = value
+
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 def _setup_python_logging() -> None:
-    logging.basicConfig(
-        level=settings.LOG_LEVEL,
-        format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
-    )
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+    logging.basicConfig(level=settings.LOG_LEVEL, handlers=[handler], force=True)
 
 
 # ---------------------------------------------------------------------------

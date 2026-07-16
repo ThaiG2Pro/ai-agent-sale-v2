@@ -19,7 +19,7 @@ from api.middleware import (
 from api.routes import admin, agent, health, hitl, memory, query
 from api.webhooks import telegram as telegram_webhook
 from core.agent.checkpointer import create_checkpointer
-from core.config import settings
+from core.config import find_insecure_default_secrets, settings
 from core.logging import instrument_fastapi, instrument_sqlalchemy, setup_logging
 from services.database import engine, session_factory
 from services.hitl.timeout_scheduler import run_timeout_scheduler
@@ -57,6 +57,23 @@ async def lifespan(app: FastAPI):
 
     # Initialize background task storage
     app.state.background_tasks = set()
+
+    # Fail-fast on insecure default secrets (FR-008 hardening).
+    # production: refuse to start. dev/staging: warn only.
+    insecure_secrets = find_insecure_default_secrets(settings)
+    if insecure_secrets:
+        secrets_msg = ", ".join(insecure_secrets)
+        if settings.ENV == "production":
+            raise RuntimeError(
+                f"Refusing to start: insecure default secrets in production: {secrets_msg}. "
+                "Override them via environment variables or .env before deploying."
+            )
+        logfire.warn(
+            "Insecure default secrets in use ({secrets}) — acceptable for ENV={env}, "
+            "but MUST be overridden in production.",
+            secrets=secrets_msg,
+            env=settings.ENV,
+        )
 
     # Verify Telegram Configuration (T015 - Week 6 validation)
     if (
