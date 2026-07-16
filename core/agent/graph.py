@@ -29,6 +29,7 @@ from core.agent.nodes.retrieval import retrieval_node
 from core.agent.nodes.router import _route_after_router, router_node
 from core.agent.nodes.state_freshness import state_freshness_validator_node
 from core.agent.state import AgentState, NodeStreamEvent
+from core.config import settings
 
 # All registered node names — used to filter streaming events (T081)
 GRAPH_NODES = {
@@ -48,6 +49,25 @@ GRAPH_NODES = {
 
 # Week 5: Graph schema version for checkpoint compatibility (FR-018)
 GRAPH_SCHEMA_VERSION = "005"
+
+# Article X: max 5 turns per conversation. One turn traverses at most ~4 graph
+# super-steps (router → retrieval → memory → confidence → escalation/hitl → answer),
+# so the per-invoke LangGraph recursion limit is AGENT_MAX_TURNS × 4 = 20 steps
+# (LangGraph default 25 would let a mis-wired loop run longer than Article X allows).
+AGENT_RECURSION_LIMIT = settings.AGENT_MAX_TURNS * 4
+
+
+def make_agent_config(session_id: str, db=None) -> dict:
+    """Build the standard RunnableConfig for invoking the agent graph.
+
+    Single place that enforces the Article X recursion limit — every
+    ainvoke/astream call site must build its config here so a graph loop
+    aborts with GraphRecursionError instead of running unbounded.
+    """
+    return {
+        "configurable": {"thread_id": session_id, "db": db},
+        "recursion_limit": AGENT_RECURSION_LIMIT,
+    }
 
 
 def build_graph(checkpointer=None):
@@ -139,7 +159,8 @@ def build_graph(checkpointer=None):
     # answer_node → END (universal trace point)
     builder.add_edge("answer_node", END)
 
-    # Compile with recursion limit
+    # Recursion limit is enforced per-invoke via make_agent_config (Article X) —
+    # compile() can't set it, and with_config() would hide aget_state/aupdate_state.
     return builder.compile(checkpointer=checkpointer, name="agent-orchestration")
 
 
@@ -194,8 +215,9 @@ async def astream_agent(
     if graph is None:
         graph = build_graph(checkpointer=checkpointer)
     initial_state = make_initial_state(message, session_id=session_id, customer_id=customer_id)
-    # Pass db through configurable so nodes can inject via RunnableConfig
-    config: dict = {"configurable": {"thread_id": session_id, "db": db}}
+    # Pass db through configurable so nodes can inject via RunnableConfig;
+    # recursion limit enforced per Article X (make_agent_config).
+    config: dict = make_agent_config(session_id, db=db)
 
     async for event in graph.astream_events(initial_state, config, version="v2"):
         if event["event"] == "on_chain_end" and event.get("name") in GRAPH_NODES:

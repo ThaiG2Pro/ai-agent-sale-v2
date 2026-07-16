@@ -15,12 +15,13 @@ the final answer after the correct model (economy or premium) has generated it.
 from __future__ import annotations
 
 import sys
+import time
 from typing import TYPE_CHECKING
 
 from sqlalchemy import insert
 
 from models.schema import ModelTrace
-from services.ai import AIGateway
+from services.ai import AIGateway, extract_llm_metrics
 from services.rag.constants import DECLINE_MESSAGE
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from core.agent.state import AgentState
+    from services.ai import LLMUsageMetrics
 
 
 async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
@@ -177,18 +179,37 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         user_q = state["user_message"]
         prompt = f"Context sản phẩm:\n{chunk_text}\n{citations_text}\nCâu hỏi: {user_q}"
 
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt},
+    ]
+    escalation_failure = state.get("escalation_failure", False)
+    metrics: LLMUsageMetrics | None = None
+    start_time = time.perf_counter()
     try:
-        result = await AIGateway.complete(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-        )
+        result = await AIGateway.complete(model=model, messages=messages)
         response = result.choices[0].message.content
+        metrics = extract_llm_metrics(
+            result, latency_ms=(time.perf_counter() - start_time) * 1000
+        )
     except Exception as e:
-        response = f"Lỗi khi tạo phản hồi: {e!s}"
-        model = None
+        if model != "economy-chat":
+            # T064 real fallback: premium model failed at point of use →
+            # degrade to economy-chat and flag escalation_failure in state.
+            try:
+                model = "economy-chat"
+                escalation_failure = True
+                result = await AIGateway.complete(model=model, messages=messages)
+                response = result.choices[0].message.content
+                metrics = extract_llm_metrics(
+                    result, latency_ms=(time.perf_counter() - start_time) * 1000
+                )
+            except Exception as e2:
+                response = f"Lỗi khi tạo phản hồi: {e2!s}"
+                model = None
+        else:
+            response = f"Lỗi khi tạo phản hồi: {e!s}"
+            model = None
 
     # Write to cache after successful generation (best-effort)
     if response and db and state.get("canonical_query") and state.get("query_vector"):
@@ -198,16 +219,17 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     metadata_ = {
         "guard_decision": "ACCEPTED",
         "escalation_reason": state.get("escalation_reason"),
-        "escalation_failure": state.get("escalation_failure", False),
+        "escalation_failure": escalation_failure,
         "escalation_flag": state.get("escalation_flag", False),
         "declined": False,
         "intended_model": model,
     }
-    await _write_model_trace(state, db=db, metadata_=metadata_)
+    await _write_model_trace(state, db=db, metadata_=metadata_, metrics=metrics)
 
     return {
         "response": response,
         "model_used": model,
+        "escalation_failure": escalation_failure,
     }
 
 
@@ -285,11 +307,17 @@ async def _write_cache(state: AgentState, response: str, db: AsyncSession) -> No
 
 
 async def _write_model_trace(
-    state: AgentState, db: AsyncSession | None = None, metadata_: dict | None = None
+    state: AgentState,
+    db: AsyncSession | None = None,
+    metadata_: dict | None = None,
+    metrics: LLMUsageMetrics | None = None,
 ) -> None:
     """Write model trace to agent_v1.model_traces table (T049).
 
     Called at end of answer_node for both accepted AND declined paths.
+    `metrics` carries real token/cost/latency numbers from the LLM call;
+    None (cache hit / declined / business path) writes zeros — correct,
+    since no LLM call happened.
     Fail-safe: logs to stderr on error, doesn't block response.
     """
     if not db or not metadata_:
@@ -300,11 +328,11 @@ async def _write_model_trace(
         stmt = insert(ModelTrace).values(
             message_id=message_id,
             model_name=metadata_.get("intended_model") or "declined",
-            prompt_tokens=0,
-            completion_tokens=0,
-            total_tokens=0,
-            latency_ms=None,
-            cost=0.00,
+            prompt_tokens=metrics.prompt_tokens if metrics else 0,
+            completion_tokens=metrics.completion_tokens if metrics else 0,
+            total_tokens=metrics.total_tokens if metrics else 0,
+            latency_ms=metrics.latency_ms if metrics else None,
+            cost=metrics.cost if metrics else 0.00,
             metadata_=metadata_,
         )
         await db.execute(stmt)

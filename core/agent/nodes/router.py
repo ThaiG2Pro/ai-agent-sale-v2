@@ -10,10 +10,23 @@ answer_node.
 
 from __future__ import annotations
 
+import logging
+
 from langgraph.types import Command
 
 from core.agent.state import AgentState, IntentClassification, IntentEnum
 from services.ai import AIGateway
+
+logger = logging.getLogger(__name__)
+
+# Safe fallback when the LLM returns malformed/incomplete JSON: INFO_QUERY
+# routes to retrieval_node, whose confidence guards decline gracefully.
+_FALLBACK_CLASSIFICATION = IntentClassification(
+    primary_intent=IntentEnum.INFO_QUERY,
+    secondary_intents=[],
+    confidence=0.0,
+    reasoning="fallback: classification failed (malformed LLM output)",
+)
 
 
 async def router_node(state: AgentState) -> Command:
@@ -46,15 +59,24 @@ async def router_node(state: AgentState) -> Command:
         "Set primary_intent to the best matching intent. "
         "Set confidence 0.0-1.0. Keep reasoning concise."
     )
-    result = await AIGateway.complete(
-        model="economy-chat",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": state["user_message"]},
-        ],
-        response_format=IntentClassification,
-    )
-    classification = IntentClassification.model_validate_json(result.choices[0].message.content)
+    try:
+        result = await AIGateway.complete(
+            model="economy-chat",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": state["user_message"]},
+            ],
+            response_format=IntentClassification,
+        )
+        classification = IntentClassification.model_validate_json(
+            result.choices[0].message.content
+        )
+    except Exception as e:
+        logger.warning(
+            "router_node classification failed, falling back to INFO_QUERY: %s",
+            e,
+        )
+        classification = _FALLBACK_CLASSIFICATION
     # FR-007: escalate if ANY intent (primary OR secondary) is COMPLAINT/NEGOTIATION
     next_node = _get_next_node(classification)
     return Command(

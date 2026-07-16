@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from api.dependencies import get_agent_graph, verify_admin_key
+from core.agent.graph import make_agent_config
 from models.schema import HITLMetadata
 from services.database import get_db
 from services.hitl.schemas import ReviewActionCreate  # noqa: TC001
@@ -50,7 +51,7 @@ async def submit_review(
     x_idempotency_key: Annotated[str, Header(alias="X-Idempotency-Key")],
 ) -> dict[str, Any]:
     """Submit admin decision on a paused session (T051, T052)."""
-    config = {"configurable": {"thread_id": payload.session_id, "db": db}}
+    config = make_agent_config(payload.session_id, db=db)
 
     try:
         # T051: Check idempotency FIRST (before status gate)

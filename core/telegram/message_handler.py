@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from langgraph.errors import GraphInterrupt
 
-from core.agent.graph import build_graph
+from core.agent.graph import build_graph, make_agent_config
 from core.agent.state import make_initial_state
 from core.agent.tools import execute_inventory_lookup
 from services.database import AsyncSessionLocal
@@ -129,7 +129,7 @@ async def process_telegram_message(
                 return
 
             active_graph = graph if graph is not None else build_graph()
-            config = {"configurable": {"thread_id": session_id, "db": db}}
+            config = make_agent_config(session_id, db=db)
             initial_state = make_initial_state(
                 text,
                 session_id=session_id,
