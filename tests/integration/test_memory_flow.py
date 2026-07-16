@@ -170,7 +170,8 @@ class TestMemoryFlow:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/memory/intents",
-                params={"urgency_level": "HIGH", "x_admin_key": "test-admin-key-12345"},
+                params={"urgency_level": "HIGH"},
+                headers={"X-Admin-Key": "test-admin-key-12345"},
             )
 
         assert response.status_code == 200, (
@@ -245,7 +246,7 @@ class TestMemoryFlow:
             response = await client.patch(
                 f"/memory/intent/{customer_id}/status",
                 json={"new_status": "CONTACTED", "expected_version": 1},
-                params={"x_admin_key": "test-admin-key-12345"},
+                headers={"X-Admin-Key": "test-admin-key-12345"},
             )
 
         assert response.status_code == 200
@@ -292,7 +293,7 @@ class TestMemoryFlow:
             response = await client.patch(
                 f"/memory/intent/{customer_id}/status",
                 json={"new_status": "CONTACTED", "expected_version": 1},  # Stale
-                params={"x_admin_key": "test-admin-key-12345"},
+                headers={"X-Admin-Key": "test-admin-key-12345"},
             )
 
         assert response.status_code == 409

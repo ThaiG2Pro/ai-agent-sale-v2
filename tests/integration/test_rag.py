@@ -13,6 +13,8 @@ from models.schema import Product, SemanticCache, TextEmbedding
 from services.rag import answer_with_rag, ingest_product_text, search_products
 from services.semantic_cache import get_l1_cache, get_l2_cache, set_cache
 
+pytestmark = pytest.mark.integration
+
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session():
@@ -167,22 +169,47 @@ async def test_answer_with_rag_returns_citations(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_confidence_guard_declines_low_similarity(db_session: AsyncSession):
+async def test_confidence_guard_declines_low_similarity(db_session: AsyncSession, monkeypatch):
     """
     Why this exists: Verifies confidence guard declines low-similarity queries (US3).
+
+    WP6: previously depended on a live Ollama (embedding down → the
+    "Dịch vụ tạm thời không khả dụng" path, not the confidence guard).
+    Now mocks the AIGateway boundary — same pattern as
+    test_retry_loop_pipeline.py — so the guard itself is what's under test.
     """
-    # valid Vietnamese query that matches no specific product (triggers decline)
-    query = "điện thoại thông minh cao cấp màn hình 100 inch"
-    try:
-        result = await answer_with_rag(db=db_session, query=query)
-    except Exception as e:
-        pytest.skip(f"answer_with_rag failed (LLM/embedding may be offline): {e}")
+    from unittest.mock import AsyncMock
 
     from services import rag as rag_mod
+    from services.ai import NormalizedQuery
+
+    # Deterministic single-pass: the retry loop has its own dedicated tests
+    monkeypatch.setattr(settings, "RAG_RETRY_MAX_ATTEMPTS", 0)
+    monkeypatch.setattr(
+        "services.rag.pipeline.AIGateway.normalize_query",
+        AsyncMock(
+            return_value=NormalizedQuery(
+                canonical="điện thoại thông minh cao cấp màn hình 100 inch",
+                detected_language="vi",
+                is_valid=True,
+                intent="INFO_QUERY",
+                extracted_keywords=["điện thoại"],
+            )
+        ),
+    )
+    # Embedding orthogonal to anything stored → best_similarity ~ 0 → guard fires
+    far_vector = [0.0] * (settings.EMBED_DIMENSION - 1) + [1.0]
+    monkeypatch.setattr(
+        "services.rag.pipeline.AIGateway.embed", AsyncMock(return_value=[far_vector])
+    )
+
+    result = await answer_with_rag(
+        db=db_session, query="điện thoại thông minh cao cấp màn hình 100 inch"
+    )
 
     assert result.declined is True
     assert result.answer == rag_mod.DECLINE_MESSAGE
-    assert result.best_similarity < 0.7
+    assert result.best_similarity < 0.45  # below the Layer-1 threshold
 
 
 @pytest.mark.asyncio
@@ -215,10 +242,15 @@ async def test_compression_to_empty_triggers_decline(db_session: AsyncSession, m
         AsyncMock(return_value=mock_normalized),
     )
 
-    try:
-        result = await answer_with_rag(db=db_session, query="trigger empty")
-    except Exception as e:
-        pytest.skip(f"answer_with_rag failed (LLM/embedding may be offline): {e}")
+    # WP6: mock the remaining AIGateway boundary (embedding) and disable the
+    # retry loop so the test is deterministic without a live Ollama.
+    monkeypatch.setattr(settings, "RAG_RETRY_MAX_ATTEMPTS", 0)
+    monkeypatch.setattr(
+        "services.rag.pipeline.AIGateway.embed",
+        AsyncMock(return_value=[[0.1] * settings.EMBED_DIMENSION]),
+    )
+
+    result = await answer_with_rag(db=db_session, query="trigger empty")
 
     assert result.declined is True
     assert result.answer == rag_mod.DECLINE_MESSAGE

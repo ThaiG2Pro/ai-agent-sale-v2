@@ -69,7 +69,8 @@ class TestMemoryContractPreImpl:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             response = await ac.patch(
-                "/memory/intent/unknown-customer/status?x_admin_key=" + TEST_ADMIN_KEY,
+                "/memory/intent/unknown-customer/status",
+                headers=admin_headers,
                 json={"new_status": "CONTACTED", "expected_version": 1},
             )
             assert response.status_code == 404

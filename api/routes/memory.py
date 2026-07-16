@@ -132,18 +132,16 @@ def _build_intent_response(
 
 
 def require_admin_key(
-    x_admin_key: Annotated[str | None, Query()] = None,
-    x_admin_key_header: Annotated[str | None, Header()] = None,
+    x_admin_key: Annotated[str | None, Header()] = None,
 ) -> bool:
     """Require valid admin key for sensitive endpoints.
 
-    Query param: x_admin_key (for testing)
-    Header: X-Admin-Key (for production)
+    Header only: X-Admin-Key. Query-string keys are rejected because
+    query strings end up in access/proxy logs.
     """
     from core.config import settings
 
-    # Try header first, then query parameter
-    key = x_admin_key_header or x_admin_key
+    key = x_admin_key
     if not key:
         raise HTTPException(status_code=401, detail="Admin key required")
     if key != settings.X_ADMIN_KEY:
