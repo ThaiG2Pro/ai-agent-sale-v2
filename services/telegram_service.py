@@ -86,6 +86,19 @@ async def record_telegram_update(
         return None
 
 
+def clean_markdown_for_telegram(text: str) -> str:
+    """Clean markdown text to prevent Telegram parser crashes (e.g. unclosed bullet bold indicators)."""
+    import re
+
+    # Replace bullet points like "* " at start of lines with "•"
+    text = re.sub(r"^\*(?=\s)", "•", text, flags=re.MULTILINE)
+    # Replace bullet points like " + " at start of lines with "   •"
+    text = re.sub(r"^(\s*)\+(?=\s)", r"\1•", text, flags=re.MULTILINE)
+    # Replace bullet points like " - " at start of lines with "   •"
+    text = re.sub(r"^(\s*)\-(?=\s)", r"\1•", text, flags=re.MULTILINE)
+    return text
+
+
 async def send_telegram_message(
     chat_id: int,
     text: str,
@@ -103,10 +116,11 @@ async def send_telegram_message(
 
     Retry logic: 3 attempts with exponential backoff (1s, 2s, 4s)
     """
+    clean_text = clean_markdown_for_telegram(text)
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": text,
+        "text": clean_text,
         "parse_mode": "Markdown",
     }
     if reply_markup:
@@ -118,6 +132,7 @@ async def send_telegram_message(
     async with httpx.AsyncClient(timeout=10.0) as client:
         for attempt in range(max_retries):
             try:
+                logger.info("Telegram outgoing payload", extra={"url": url, "payload": payload})
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
 

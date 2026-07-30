@@ -217,7 +217,18 @@ async def test_sc5_vietnamese_change_of_mind_no_llm_call(initial_state, mock_con
     mock_result.scalars().all.return_value = [mock_msg]
     mock_db.execute.return_value = mock_result
 
-    with patch("litellm.acompletion") as mock_llm:
+    with (
+        patch("litellm.acompletion") as mock_llm,
+        patch(
+            "core.agent.nodes.queue_consumer._resolve_new_product_from_modify",
+            new_callable=AsyncMock,
+            return_value={
+                "sku": "xiaomi-14-ultra",
+                "name": "Xiaomi 14 Ultra",
+                "price": 20000000.0,
+            },
+        ) as mock_resolve,
+    ):
         result = await queue_consumer_node(initial_state, mock_config)
 
         # Must route to re-pause
