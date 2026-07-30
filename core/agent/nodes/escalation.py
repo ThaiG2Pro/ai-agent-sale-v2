@@ -83,8 +83,9 @@ async def escalation_node(state: AgentState) -> dict:
     selected_model = settings.PREMIUM_MODEL
     escalation_failure = False
     if not selected_model:
-        logger.warning("escalation_failure reason=PREMIUM_MODEL not configured "
-                       "fallback=economy-chat")
+        logger.warning(
+            "escalation_failure reason=PREMIUM_MODEL not configured fallback=economy-chat"
+        )
         selected_model = "economy-chat"
         escalation_failure = True
 

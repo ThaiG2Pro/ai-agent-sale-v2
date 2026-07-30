@@ -52,7 +52,7 @@ GRAPH_SCHEMA_VERSION = "005"
 
 # Article X: max 5 turns per conversation. One turn traverses at most ~4 graph
 # super-steps (router → retrieval → memory → confidence → escalation/hitl → answer),
-# so the per-invoke LangGraph recursion limit is AGENT_MAX_TURNS × 4 = 20 steps
+# so the per-invoke LangGraph recursion limit is AGENT_MAX_TURNS x 4 = 20 steps
 # (LangGraph default 25 would let a mis-wired loop run longer than Article X allows).
 AGENT_RECURSION_LIMIT = settings.AGENT_MAX_TURNS * 4
 
