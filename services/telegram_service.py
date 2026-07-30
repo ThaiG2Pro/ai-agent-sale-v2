@@ -87,7 +87,7 @@ async def record_telegram_update(
 
 
 def clean_markdown_for_telegram(text: str) -> str:
-    """Clean markdown text to prevent Telegram parser crashes (e.g. unclosed bullet bold indicators)."""
+    """Clean markdown text to prevent Telegram parser crashes."""
     import re
 
     # Replace bullet points like "* " at start of lines with "•"
@@ -157,7 +157,10 @@ async def send_telegram_message(
                     },
                 )
                 if e.response.status_code == 400 and "parse_mode" in payload:
-                    logger.warning("Telegram Markdown parse error, falling back to plain text", extra={"chat_id": chat_id})
+                    logger.warning(
+                        "Telegram Markdown parse error, falling back to plain text",
+                        extra={"chat_id": chat_id},
+                    )
                     payload.pop("parse_mode", None)
                     continue
 

@@ -110,7 +110,7 @@ class Settings(BaseSettings):
 
     # Week 5: Memory & Persistence Configuration
     MEMORY_SUMMARY_THRESHOLD: int = Field(default=20, ge=1)
-    MEMORY_RELEVANCE_THRESHOLD: float = Field(default=0.75, ge=0.0, le=1.0)
+    MEMORY_RELEVANCE_THRESHOLD: float = Field(default=0.55, ge=0.0, le=1.0)
     MEMORY_TOP_K: int = Field(default=3, ge=1, le=100)
     CHECKPOINT_SIZE_WARN_BYTES: int = Field(default=1_048_576, ge=65536)  # 1MB default
     CHECKPOINT_RETENTION_DAYS: int = Field(default=90, ge=1, le=365)

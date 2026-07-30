@@ -81,6 +81,10 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     intent = state.get("intent", None)
     is_declined = fused < confidence_threshold
 
+    # Do not decline if cross-session memory context exists
+    if state.get("memory_context"):
+        is_declined = False
+
     # FR-007: INFO_QUERY, PRICING, AVAILABILITY, COMPARISON borderline (0.45 ≤ sim < 0.70)
     # must NOT be declined here. _route_after_confidence routes them to escalation_node.
     _borderline_answer_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY", "COMPARISON"}

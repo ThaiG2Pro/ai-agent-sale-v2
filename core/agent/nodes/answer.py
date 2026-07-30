@@ -163,7 +163,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             else:
                 # All messages (no compression)
                 memory_context_text = "\n".join(
-                    f"- {ctx.get('summary', ctx.get('text', ''))}"
+                    f"- {ctx.get('summary_text') or ctx.get('summary') or ctx.get('text', '')}"
                     for ctx in state["memory_context"]
                 )
             memory_note = f"\n[Ngữ cảnh từ các cuộc hội thoại trước]:\n{memory_context_text}"
@@ -171,7 +171,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         system_prompt = (
             "Bạn là trợ lý bán hàng AI chuyên nghiệp. "
             "Trả lời bằng tiếng Việt, thân thiện và hữu ích. "
-            "Chỉ dùng thông tin từ context được cung cấp. "
+            "Chỉ dùng thông tin từ context sản phẩm và ngữ cảnh hội thoại trước được cung cấp. "
             f"Nếu không có thông tin phù hợp, nói rõ điều đó.{rejection_note}{memory_note}"
         )
 
@@ -471,15 +471,15 @@ def _compress_context(memory_context: list[dict]) -> str:
 
     # If first item is a summary (has 'summary' field), use it
     compressed = []
-    if memory_context and "summary" in memory_context[0]:
-        compressed.append(f"📋 {memory_context[0].get('summary', '')}")
+    first_summary = memory_context[0].get("summary_text") or memory_context[0].get("summary")
+    if first_summary:
+        compressed.append(f"📋 {first_summary}")
 
     # Add last 5 messages
     recent_messages = memory_context[-5:] if len(memory_context) > 5 else memory_context
     for ctx in recent_messages:
-        if "summary" not in ctx:  # Skip if it's the summary we already added
-            text = ctx.get("text", ctx.get("summary", ""))
-            if text:
-                compressed.append(f"- {text}")
+        text_content = ctx.get("summary_text") or ctx.get("summary") or ctx.get("text", "")
+        if text_content and text_content != first_summary:
+            compressed.append(f"- {text_content}")
 
     return "\n".join(compressed)

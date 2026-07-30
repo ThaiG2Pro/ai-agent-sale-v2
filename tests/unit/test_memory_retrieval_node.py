@@ -148,7 +148,9 @@ async def test_memory_retrieval_two_results(base_state, mock_db):
         assert call_args.kwargs["customer_id"] == "cust_001"
         assert call_args.kwargs["query"] == "What's the price?"
         assert call_args.kwargs["top_k"] == 3
-        assert call_args.kwargs["min_score"] == 0.75
+        from core.config import settings
+
+        assert call_args.kwargs["min_score"] == settings.MEMORY_RELEVANCE_THRESHOLD
         assert call_args.kwargs["db"] is mock_db
 
 

@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
     from core.agent.state import AgentState
 
+from core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,8 +83,8 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
             customer_id=customer_id,
             query=user_message,
             db=db,
-            top_k=3,  # Adaptive TopK: start with 3
-            min_score=0.75,  # Relevance threshold (T120)
+            top_k=settings.MEMORY_TOP_K,  # Adaptive TopK
+            min_score=settings.MEMORY_RELEVANCE_THRESHOLD,  # Threshold (T120)
         )
 
         # T134: Map results to state context format
@@ -107,7 +109,12 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
             },
         )
 
-        return {"memory_context": memory_context, "memory_retrieval_scores": scores}
+        update_dict = {"memory_context": memory_context, "memory_retrieval_scores": scores}
+        if memory_context:
+            # Past cross-session memory retrieved — allow answer_node to process context
+            update_dict["declined"] = False
+
+        return update_dict
 
     except Exception as e:
         # Graceful error handling: log but don't propagate
