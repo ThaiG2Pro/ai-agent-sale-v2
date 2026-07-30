@@ -536,6 +536,53 @@ async def answer_with_rag(
         answer_text = DECLINE_MESSAGE
     gen_latency_ms = (time.perf_counter() - gen_start) * 1000
 
+    # ── WP-V2-1 groundedness self-check (kill switch: GROUNDEDNESS_CHECK_ENABLED) ─────────
+    grounded_declined = False
+    grounded_meta: dict | None = None
+    if llm_response is not None:
+        from core.config import settings as _settings
+
+        if _settings.GROUNDEDNESS_CHECK_ENABLED:
+            (
+                answer_text,
+                llm_response,
+                grounded_declined,
+                grounded_meta,
+            ) = await _apply_groundedness(
+                query, context, messages, model, answer_text, llm_response
+            )
+
+    if grounded_declined:
+        # Verdict says the answer would mislead (out-of-catalog subject, or
+        # unsupported claims survived regeneration) → decline politely. The
+        # unverified answer is NEVER cached.
+        await _write_model_trace(
+            db=db,
+            model_name=model,
+            guard_decision="GROUNDEDNESS_REJECTED",
+            best_similarity=result.best_similarity,
+            similarity_gap=result.similarity_gap,
+            top_k_used=result.top_k_used,
+            query_category=result.query_category,
+            llm_response=llm_response,
+            latency_ms=gen_latency_ms,
+            extra_metadata=grounded_meta,
+        )
+        return RAGResult(
+            answer=DECLINE_MESSAGE,
+            declined=True,
+            citations=[],
+            best_similarity=result.best_similarity,
+            similarity_gap=result.similarity_gap,
+            rrf_scores=result.rrf_scores,
+            query_category=result.query_category,
+            top_k_used=result.top_k_used,
+            model_used=model,
+            escalation_flag=False,
+            chunks_before_compression=result.chunks_before_compression,
+            chunks_after_compression=result.chunks_after_compression,
+        )
+
     # model_trace write — best-effort, captures gap + guard + cost (FR-010)
     await _write_model_trace(
         db=db,
@@ -547,6 +594,7 @@ async def answer_with_rag(
         query_category=result.query_category,
         llm_response=llm_response,
         latency_ms=gen_latency_ms,
+        extra_metadata=grounded_meta,
     )
 
     # Cache write — best-effort, never blocks the response (Article X.3). Only the FINAL
@@ -582,6 +630,58 @@ async def answer_with_rag(
         chunks_before_compression=result.chunks_before_compression,
         chunks_after_compression=result.chunks_after_compression,
     )
+
+
+async def _apply_groundedness(
+    query: str,
+    context: str,
+    messages: list[dict[str, str]],
+    model: str,
+    answer_text: str,
+    llm_response: Any,
+) -> tuple[str, Any, bool, dict]:
+    """
+    Why this exists: WP-V2-1 — verify → regenerate → decline loop around a generated
+    answer so unsupported claims never reach the customer.
+    What it does: Grades the answer with check_groundedness (1 economy call).
+    - answerable=False → decline immediately (regeneration cannot conjure a product
+      the catalog does not have).
+    - supported=False → regenerate with STRICT_GROUNDING_SUFFIX up to
+      settings.GROUNDEDNESS_MAX_REGEN times, re-grading each attempt; still
+      unsupported → decline.
+    Returns (answer_text, llm_response, declined, verdict_metadata). Never raises —
+    check_groundedness is fail-open and regen failures abort to the current verdict.
+    """
+    from core.config import settings
+    from services.rag.groundedness import STRICT_GROUNDING_SUFFIX, check_groundedness
+
+    verdict = await check_groundedness(query, answer_text, context)
+    regen_count = 0
+    if verdict.answerable and not verdict.supported:
+        strict_messages = [
+            {"role": "system", "content": messages[0]["content"] + STRICT_GROUNDING_SUFFIX},
+            *messages[1:],
+        ]
+        while regen_count < settings.GROUNDEDNESS_MAX_REGEN and not verdict.supported:
+            regen_count += 1
+            try:
+                llm_response = await AIGateway.complete(messages=strict_messages, model=model)
+                answer_text = llm_response.choices[0].message.content or DECLINE_MESSAGE
+            except Exception as exc:
+                logfire.error("groundedness regen failed: {err}", err=str(exc))
+                break
+            verdict = await check_groundedness(query, answer_text, context)
+
+    declined = not (verdict.answerable and verdict.supported)
+    meta = {
+        "groundedness": {
+            "answerable": verdict.answerable,
+            "supported": verdict.supported,
+            "unsupported_claims": verdict.unsupported_claims[:5],
+            "regen_count": regen_count,
+        }
+    }
+    return answer_text, llm_response, declined, meta
 
 
 async def _write_retry_trace(
@@ -641,6 +741,7 @@ async def _write_model_trace(
     query_category: str,
     llm_response: Any = None,
     latency_ms: float = 0.0,
+    extra_metadata: dict | None = None,
 ) -> None:
     """
     Why this exists: Persists retrieval quality signals to model_traces (FR-010).
@@ -684,6 +785,7 @@ async def _write_model_trace(
                 "similarity_gap": round(similarity_gap, 4),
                 "top_k_used": top_k_used,
                 "query_category": query_category,
+                **(extra_metadata or {}),
             },
         )
         db.add(trace)

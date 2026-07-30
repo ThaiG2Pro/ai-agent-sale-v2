@@ -86,6 +86,18 @@ class Settings(BaseSettings):
     # agentic-rag-retry-loop (ticket 2026): bounded self-evaluate -> rewrite -> retry
     # loop around retrieval. 0 = kill switch (exact static single-pass behavior).
     RAG_RETRY_MAX_ATTEMPTS: int = Field(default=1, ge=0, le=2)
+    # WP-V2-1: groundedness self-check on generated answers. False = kill switch
+    # (byte-identical pre-check behavior). On verdict fail the answer is
+    # regenerated with a stricter prompt up to GROUNDEDNESS_MAX_REGEN times,
+    # then declined politely. answerable=False declines immediately (regen
+    # cannot conjure an out-of-catalog product).
+    GROUNDEDNESS_CHECK_ENABLED: bool = True
+    GROUNDEDNESS_MAX_REGEN: int = Field(default=1, ge=0, le=2)
+    # WP-V2-1: cascade verification for intent escalations (COMPLAINT/
+    # NEGOTIATION). True = answer on economy tier first, escalate to
+    # PREMIUM_MODEL only when the groundedness verdict fails. False = old
+    # behavior (premium directly).
+    CASCADE_VERIFY_ENABLED: bool = True
 
     # Week 4: HITL Configuration
     HITL_TIMEOUT_WARN_MIN: int = Field(default=30, ge=1)
