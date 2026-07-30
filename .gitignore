@@ -96,3 +96,6 @@ memory/*/_index.md
 /context/
 # <<< kiro-sdlc-kit <<<
 reports/eval_runs/
+
+# Local setup script
+setup_local.sh

@@ -31,6 +31,13 @@ async def test_webhook_response_time_under_200ms():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Warmup request to trigger route compilation and lazy initialization
+        await client.post(
+            "/webhooks/telegram",
+            json=payload,
+            headers={"X-Telegram-Bot-Api-Secret-Token": "dev_test_secret_min_20_chars_12345678"},
+        )
+
         start_time = time.perf_counter()
 
         response = await client.post(

@@ -18,7 +18,7 @@ def test_ollama_model_gets_api_base() -> None:
 
 
 def test_cloud_models_do_not_get_ollama_api_base() -> None:
-    for model in ("gemini/gemini-2.5-flash", "gpt-4o-mini", "groq/llama-3.1-70b-versatile"):
+    for model in ("gemini/gemini-2.5-flash", "gpt-4o-mini", "groq/llama-3.3-70b-versatile"):
         params = _litellm_params(model)
         assert "api_base" not in params, f"{model} must not be pinned to Ollama"
 

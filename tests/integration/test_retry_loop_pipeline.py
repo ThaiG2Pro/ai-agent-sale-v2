@@ -26,7 +26,7 @@ from uuid_utils import uuid7
 
 from core.config import settings
 from models.schema import Product, SemanticCache, TextEmbedding
-from services.ai import RewrittenQuery
+from services.ai import NormalizedQuery, RewrittenQuery
 from services.rag.constants import DECLINE_MESSAGE
 from services.rag.pipeline import answer_with_rag, retrieve_with_retry
 
@@ -76,6 +76,15 @@ async def test_recover_on_rewrite_produces_answer(db_session):
         AsyncMock(message=AsyncMock(content="Máy pha cà phê Espresso Deluxe có áp suất 15 bar."))
     ]
 
+    async def mock_normalize(q: str):
+        return NormalizedQuery(
+            canonical=q,
+            detected_language="vi",
+            intent="INFO_QUERY",
+            extracted_keywords=q.strip().split()[:10],
+            is_valid=True,
+        )
+
     with (
         patch(
             "services.rag.pipeline.AIGateway.embed",
@@ -94,6 +103,11 @@ async def test_recover_on_rewrite_produces_answer(db_session):
             "services.rag.pipeline.AIGateway.complete",
             new_callable=AsyncMock,
             return_value=llm_answer,
+        ),
+        patch(
+            "services.ai.AIGateway.normalize_query",
+            new_callable=AsyncMock,
+            side_effect=mock_normalize,
         ),
     ):
         result = await answer_with_rag(
@@ -119,6 +133,15 @@ async def test_exhaustion_still_insufficient_declines(db_session, monkeypatch):
         sku=f"fridge-{uuid7()}",
     )
 
+    async def mock_normalize(q: str):
+        return NormalizedQuery(
+            canonical=q,
+            detected_language="vi",
+            intent="INFO_QUERY",
+            extracted_keywords=q.strip().split()[:10],
+            is_valid=True,
+        )
+
     with (
         patch(
             "services.rag.pipeline.AIGateway.embed",
@@ -129,6 +152,11 @@ async def test_exhaustion_still_insufficient_declines(db_session, monkeypatch):
             "services.ai.AIGateway.rewrite_query",
             new_callable=AsyncMock,
             return_value=RewrittenQuery(query="một câu hỏi khác về tủ lạnh", keeps_subject=True),
+        ),
+        patch(
+            "services.ai.AIGateway.normalize_query",
+            new_callable=AsyncMock,
+            side_effect=mock_normalize,
         ),
     ):
         result = await answer_with_rag(db_session, query="dự báo thời tiết tuần này")
@@ -178,6 +206,15 @@ async def test_answer_with_rag_caches_only_final_accepted_query(db_session):
         AsyncMock(message=AsyncMock(content="Loa Bluetooth Mini SoundBox có pin 12 giờ."))
     ]
 
+    async def mock_normalize(q: str):
+        return NormalizedQuery(
+            canonical=q,
+            detected_language="vi",
+            intent="INFO_QUERY",
+            extracted_keywords=q.strip().split()[:10],
+            is_valid=True,
+        )
+
     with (
         patch(
             "services.rag.pipeline.AIGateway.embed",
@@ -193,6 +230,11 @@ async def test_answer_with_rag_caches_only_final_accepted_query(db_session):
             "services.rag.pipeline.AIGateway.complete",
             new_callable=AsyncMock,
             return_value=llm_answer,
+        ),
+        patch(
+            "services.ai.AIGateway.normalize_query",
+            new_callable=AsyncMock,
+            side_effect=mock_normalize,
         ),
     ):
         result = await answer_with_rag(db_session, query="mưa có to không ngày mai")
