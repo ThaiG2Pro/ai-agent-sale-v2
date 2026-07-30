@@ -156,6 +156,11 @@ async def send_telegram_message(
                         "attempt": attempt + 1,
                     },
                 )
+                if e.response.status_code == 400 and "parse_mode" in payload:
+                    logger.warning("Telegram Markdown parse error, falling back to plain text", extra={"chat_id": chat_id})
+                    payload.pop("parse_mode", None)
+                    continue
+
                 if attempt < max_retries - 1:
                     delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay}s...")
