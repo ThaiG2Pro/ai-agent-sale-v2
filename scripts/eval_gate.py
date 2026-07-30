@@ -281,6 +281,24 @@ async def run_tier_f(cases: list[dict], ds_hash: str, resume: dict[str, dict]) -
     return results
 
 
+async def _flush_semantic_cache() -> None:
+    """--flush-cache: empty semantic_cache so Tier-F answers are generated fresh.
+
+    A previous run caches its answers (L1/L2); without this, a behavior change in
+    the generation path is invisible — the gate replays yesterday's answers
+    (discovered in WP-V2-1: 4 stale out_of_catalog answers masked the new
+    groundedness decline).
+    """
+    from sqlalchemy import text as sql_text
+
+    from services.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(sql_text("TRUNCATE agent_v1.semantic_cache"))
+        await db.commit()
+    print("semantic_cache flushed (--flush-cache).")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Tiered deterministic eval gate (WP-V2-0)")
     parser.add_argument("--tier", choices=["r", "f", "all"], default="r")
@@ -288,6 +306,12 @@ def main() -> int:
     parser.add_argument("--limit", type=int, help="max cases per tier")
     parser.add_argument(
         "--rerun", action="store_true", help="ignore JSONL checkpoints, run all again"
+    )
+    parser.add_argument(
+        "--flush-cache",
+        action="store_true",
+        help="truncate semantic_cache before Tier-F so answers cached by a previous "
+        "run (pre-change behavior) cannot mask the effect of the change under test",
     )
     parser.add_argument(
         "--save-baseline",
@@ -331,6 +355,8 @@ def main() -> int:
         print(f"\n═══ Tier-{tier.upper()} — {len(cases)} case(s), dataset {ds_hash} ═══")
         runner = run_tier_r if tier == "r" else run_tier_f
         try:
+            if args.flush_cache and tier == "f":
+                asyncio.run(_flush_semantic_cache())
             results = asyncio.run(runner(cases, ds_hash, resume))
         except Exception as exc:  # litellm APIConnectionError, asyncpg errors, …
             print(
