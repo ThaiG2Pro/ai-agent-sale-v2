@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import insert
 
+from core.agent.state import EscalationReasonEnum
+from core.config import settings
 from models.schema import ModelTrace
 from services.ai import AIGateway, extract_llm_metrics
 from services.rag.constants import DECLINE_MESSAGE
@@ -184,6 +186,24 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         {"role": "user", "content": prompt},
     ]
     escalation_failure = state.get("escalation_failure", False)
+
+    # ── WP-V2-1 cascade verification (research §7): intent escalations
+    # (COMPLAINT/NEGOTIATION) answer on economy-chat first; PREMIUM_MODEL is
+    # spent only when the groundedness verdict fails. Requires the groundedness
+    # check as its verifier — with either switch off, premium goes direct (old
+    # behavior). LOW_CONFIDENCE escalations keep premium direct: their trigger
+    # already IS low confidence, so an economy first pass would just be wasted.
+    cascade_target: str | None = None
+    if (
+        settings.CASCADE_VERIFY_ENABLED
+        and settings.GROUNDEDNESS_CHECK_ENABLED
+        and model != "economy-chat"
+        and state.get("escalation_reason") == EscalationReasonEnum.INTENT_ESCALATION
+        and state.get("intent") != "SMALLTALK"
+    ):
+        cascade_target = model
+        model = "economy-chat"
+
     metrics: LLMUsageMetrics | None = None
     start_time = time.perf_counter()
     try:
@@ -191,12 +211,14 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         response = result.choices[0].message.content
         metrics = extract_llm_metrics(result, latency_ms=(time.perf_counter() - start_time) * 1000)
     except Exception as e:
-        if model != "economy-chat":
-            # T064 real fallback: premium model failed at point of use →
-            # degrade to economy-chat and flag escalation_failure in state.
+        # T064 real fallback: premium failed at point of use → degrade to
+        # economy-chat (escalation_failure=True). Cascade inverse: the economy
+        # first pass failed → go straight to the reserved premium target.
+        alt_model = cascade_target if model == "economy-chat" else "economy-chat"
+        if alt_model:
             try:
-                model = "economy-chat"
-                escalation_failure = True
+                model = alt_model
+                escalation_failure = alt_model == "economy-chat"
                 result = await AIGateway.complete(model=model, messages=messages)
                 response = result.choices[0].message.content
                 metrics = extract_llm_metrics(
@@ -209,18 +231,50 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             response = f"Lỗi khi tạo phản hồi: {e!s}"
             model = None
 
-    # Write to cache after successful generation (best-effort)
-    if response and db and state.get("canonical_query") and state.get("query_vector"):
+    # ── WP-V2-1 groundedness self-check (kill switch: GROUNDEDNESS_CHECK_ENABLED).
+    # Skipped for SMALLTALK (no retrieval context to ground against) and when
+    # generation itself failed (metrics is None).
+    grounded_declined = False
+    groundedness_meta: dict | None = None
+    if (
+        metrics is not None
+        and settings.GROUNDEDNESS_CHECK_ENABLED
+        and state.get("intent") != "SMALLTALK"
+        and chunk_text
+    ):
+        response, model, metrics, grounded_declined, groundedness_meta = await _verify_grounded(
+            state=state,
+            messages=messages,
+            model=model,
+            cascade_target=cascade_target,
+            response=response,
+            metrics=metrics,
+            context=f"{chunk_text}\n{citations_text}",
+            start_time=start_time,
+        )
+        if grounded_declined:
+            response = DECLINE_MESSAGE
+
+    # Write to cache after successful generation (best-effort) — never cache an
+    # answer the groundedness verdict rejected.
+    if (
+        response
+        and not grounded_declined
+        and db
+        and state.get("canonical_query")
+        and state.get("query_vector")
+    ):
         await _write_cache(state, response, db)
 
     # Universal trace write (FR-008)
     metadata_ = {
-        "guard_decision": "ACCEPTED",
+        "guard_decision": "GROUNDEDNESS_REJECTED" if grounded_declined else "ACCEPTED",
         "escalation_reason": state.get("escalation_reason"),
         "escalation_failure": escalation_failure,
         "escalation_flag": state.get("escalation_flag", False),
-        "declined": False,
+        "declined": grounded_declined,
         "intended_model": model,
+        **(groundedness_meta or {}),
     }
     await _write_model_trace(state, db=db, metadata_=metadata_, metrics=metrics)
 
@@ -228,7 +282,72 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         "response": response,
         "model_used": model,
         "escalation_failure": escalation_failure,
+        "declined": grounded_declined,
     }
+
+
+async def _verify_grounded(
+    state: AgentState,
+    messages: list[dict[str, str]],
+    model: str | None,
+    cascade_target: str | None,
+    response: str,
+    metrics: LLMUsageMetrics | None,
+    context: str,
+    start_time: float,
+) -> tuple[str, str | None, LLMUsageMetrics | None, bool, dict]:
+    """WP-V2-1 verify → regenerate → decline loop for the graph answer path.
+
+    - answerable=False → decline immediately (regen cannot conjure a product the
+      catalog does not have).
+    - supported=False → regenerate with STRICT_GROUNDING_SUFFIX and re-grade, up
+      to GROUNDEDNESS_MAX_REGEN attempts. Under cascade the FIRST retry switches
+      to the reserved premium target (that switch is the cascade escalation, so
+      one retry is always budgeted); still unsupported → decline.
+
+    Returns (response, model, metrics, declined, trace_metadata). Never raises.
+    """
+    from services.rag.groundedness import STRICT_GROUNDING_SUFFIX, check_groundedness
+
+    verdict = await check_groundedness(state["user_message"], response, context)
+    regen_count = 0
+    cascade_escalated = False
+    budget = settings.GROUNDEDNESS_MAX_REGEN
+    if cascade_target is not None:
+        budget = max(budget, 1)
+
+    if verdict.answerable and not verdict.supported:
+        strict_messages = [
+            {"role": "system", "content": messages[0]["content"] + STRICT_GROUNDING_SUFFIX},
+            *messages[1:],
+        ]
+        while regen_count < budget and not verdict.supported:
+            regen_count += 1
+            if cascade_target is not None and not cascade_escalated:
+                model = cascade_target
+                cascade_escalated = True
+            try:
+                result = await AIGateway.complete(model=model, messages=strict_messages)
+                response = result.choices[0].message.content
+                metrics = extract_llm_metrics(
+                    result, latency_ms=(time.perf_counter() - start_time) * 1000
+                )
+            except Exception as exc:
+                print(f"[GROUNDEDNESS_REGEN_FAIL] {exc}", file=sys.stderr)
+                break
+            verdict = await check_groundedness(state["user_message"], response, context)
+
+    declined = not (verdict.answerable and verdict.supported)
+    meta = {
+        "groundedness": {
+            "answerable": verdict.answerable,
+            "supported": verdict.supported,
+            "unsupported_claims": verdict.unsupported_claims[:5],
+            "regen_count": regen_count,
+            "cascade_escalated": cascade_escalated,
+        }
+    }
+    return response, model, metrics, declined, meta
 
 
 async def _generate_catalog_response(state: AgentState, db: AsyncSession) -> str | None:

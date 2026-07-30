@@ -230,6 +230,7 @@ async def _embed_local(texts: list[str]) -> list[list[float]]:
     )
     return vectors
 
+
 # LiteLLM traces are captured via HTTPXClientInstrumentor (registered in core/logging.py).
 # Do NOT set litellm.success_callback = ["logfire"] — LiteLLM's own OTel integration
 # tries to create a new TracerProvider, conflicting with logfire's ProxyTracerProvider

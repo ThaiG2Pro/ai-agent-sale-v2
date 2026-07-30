@@ -25,9 +25,7 @@ def _embedding_response(dim: int) -> SimpleNamespace:
 
 def _completion_response(content: str) -> SimpleNamespace:
     """Shape-compatible stand-in for litellm ModelResponse."""
-    return SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
-    )
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
 @pytest.mark.asyncio
@@ -46,9 +44,7 @@ async def test_ai_gateway_embed_offline(monkeypatch):
     assert isinstance(embeddings[0], list)
     assert len(embeddings[0]) == settings.EMBED_DIMENSION
     # str input must be normalized to a list before hitting the router
-    assert mock_aembedding.await_args.kwargs["input"] == [
-        "This is a test for offline embedding."
-    ]
+    assert mock_aembedding.await_args.kwargs["input"] == ["This is a test for offline embedding."]
 
 
 @pytest.mark.asyncio
