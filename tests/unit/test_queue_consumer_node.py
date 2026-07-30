@@ -211,13 +211,26 @@ def test_keyword_heuristic_cancel_takes_priority_over_modify():
 @pytest.mark.asyncio
 async def test_sc5_vietnamese_change_of_mind_no_llm_call(initial_state, mock_config, mock_db):
     """SC5 regression: 'đổi ý rồi. lấy Xiaomi 14 ultra đi' must route to hitl_guard_node
-    WITHOUT calling the LLM — keyword heuristic catches it deterministically."""
+    WITHOUT calling the LLM — keyword heuristic catches it deterministically.
+
+    _resolve_new_product_from_modify is stubbed out: it runs the real retrieval
+    pipeline (retrieve_with_retry → rewrite_query, its own LLM), which is not
+    under test here — it has its own suite. Historically this test only passed
+    because the embedding step crashed against an offline Ollama; with the
+    local/ embed path retrieval works in unit tests, so the boundary must be
+    mocked explicitly."""
     mock_msg = _make_row("tôi đổi ý rồi. lấy Xiaomi 14 ultra đi")
     mock_result = MagicMock()
     mock_result.scalars().all.return_value = [mock_msg]
     mock_db.execute.return_value = mock_result
 
-    with patch("litellm.acompletion") as mock_llm:
+    with (
+        patch("litellm.acompletion") as mock_llm,
+        patch(
+            "core.agent.nodes.queue_consumer._resolve_new_product_from_modify",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
         result = await queue_consumer_node(initial_state, mock_config)
 
         # Must route to re-pause

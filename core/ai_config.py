@@ -4,6 +4,7 @@ What it does: Sets up model routing and parameters for local and cloud models.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from core.config import settings
@@ -11,6 +12,16 @@ from core.config import settings
 # Article X: Model Selection Strategy
 # Economy Tier: Local Ollama (qwen2.5, bge-small)
 # Premium Tier: Cloud fallback (Groq/OpenAI)
+
+
+# LiteLLM resolves provider API keys from os.environ. pydantic-settings loads
+# .env into the Settings object only, so without this export a key set in .env
+# is invisible when running outside docker compose (seed scripts, eval gate,
+# bare uvicorn). setdefault: a real environment variable always wins.
+for _key in ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"):
+    _val = getattr(settings, _key, None)
+    if _val:
+        os.environ.setdefault(_key, _val)
 
 
 def _litellm_params(model: str, **extra: Any) -> dict[str, Any]:
@@ -41,11 +52,10 @@ LITELLM_CONFIG = {
             "model_info": {"id": "economy-chat-local"},
             "litellm_params": _litellm_params(settings.CHAT_MODEL, stream=True),
         },
-        {
-            "model_name": "economy-embedding",
-            "model_info": {"id": "economy-embedding-local"},
-            "litellm_params": _litellm_params(settings.EMBED_MODEL),
-        },
+        # economy-embedding is appended below — omitted entirely when
+        # EMBED_MODEL is "local/<name>" (in-process fastembed): the LiteLLM
+        # Router validates providers at init and rejects the local/ prefix,
+        # and AIGateway.embed short-circuits before the router in that mode.
         # ── Powerful tier: deep reasoning — escalation, complex queries ──────
         {
             "model_name": "premium-local-chat",
@@ -63,7 +73,9 @@ LITELLM_CONFIG = {
             "model_name": "premium-chat",
             "model_info": {"id": "premium-chat-groq"},
             "litellm_params": {
-                "model": "groq/llama-3.1-70b-versatile",
+                # llama-3.1-70b-versatile was decommissioned by Groq; 3.3 is the
+                # current versatile tier (verified against /v1/models).
+                "model": "groq/llama-3.3-70b-versatile",
             },
         },
     ],
@@ -72,3 +84,12 @@ LITELLM_CONFIG = {
     # litellm_params context.
     "routing_strategy": "simple-shuffle",
 }
+
+if not settings.EMBED_MODEL.startswith("local/"):
+    LITELLM_CONFIG["model_list"].append(
+        {
+            "model_name": "economy-embedding",
+            "model_info": {"id": "economy-embedding-local"},
+            "litellm_params": _litellm_params(settings.EMBED_MODEL),
+        }
+    )

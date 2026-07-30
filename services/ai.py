@@ -184,6 +184,52 @@ class ProductMetadata(BaseModel):
 # Initialize LiteLLM Router for advanced routing and fallbacks
 ai_router = Router(**LITELLM_CONFIG)
 
+# ── Local in-process embedding (fastembed, ONNX CPU) ────────────────────────
+# Used when EMBED_MODEL = "local/<name>". Keeps the zero-cost/offline path
+# alive without an Ollama server: Groq & friends serve chat only, so the
+# embedding leg must run somewhere free. Model files download once to the HF
+# cache; inference is CPU-only (no VRAM).
+
+_LOCAL_EMBED_ALIASES = {
+    # 1024-dim — matches the pgvector Vector(1024) column seeded by ingest.
+    "multilingual-e5-large": "intfloat/multilingual-e5-large",
+}
+_local_embedder: Any = None
+
+
+def _resolve_local_embed_id(embed_model: str) -> str:
+    name = embed_model.removeprefix("local/")
+    return _LOCAL_EMBED_ALIASES.get(name, name)
+
+
+async def _embed_local(texts: list[str]) -> list[list[float]]:
+    """Embed via fastembed in a worker thread (CPU-bound, keeps the loop free)."""
+    import asyncio
+
+    from core.config import settings
+
+    global _local_embedder
+    start_time = time.perf_counter()
+    model_id = _resolve_local_embed_id(settings.EMBED_MODEL)
+    if _local_embedder is None:
+        from fastembed import TextEmbedding
+
+        _local_embedder = await asyncio.to_thread(TextEmbedding, model_name=model_id)
+    embedder = _local_embedder
+    vectors = await asyncio.to_thread(lambda: [v.tolist() for v in embedder.embed(texts)])
+    for vec in vectors:
+        if len(vec) != settings.EMBED_DIMENSION:
+            raise ValueError(
+                f"Configuration Error: Model Mismatch — local embedding dimension "
+                f"{len(vec)} (expected {settings.EMBED_DIMENSION})"
+            )
+    logfire.info(
+        "AI Embedding finished: {model} (local), Latency: {latency:.4f}s",
+        model=model_id,
+        latency=time.perf_counter() - start_time,
+    )
+    return vectors
+
 # LiteLLM traces are captured via HTTPXClientInstrumentor (registered in core/logging.py).
 # Do NOT set litellm.success_callback = ["logfire"] — LiteLLM's own OTel integration
 # tries to create a new TracerProvider, conflicting with logfire's ProxyTracerProvider
@@ -258,7 +304,11 @@ class AIGateway:
     ) -> list[list[float]]:
         """
         Why this exists: Generates text embeddings for RAG and caching.
-        What it does: Wraps litellm.aembedding with latency monitoring.
+        What it does: Wraps litellm.aembedding with latency monitoring. When
+        EMBED_MODEL uses the "local/" prefix, embeds in-process via fastembed
+        (ONNX, CPU) instead — no Ollama server and no cloud key needed, which
+        keeps the zero-cost path alive when chat runs on a cloud provider
+        (e.g. Groq, which offers no embedding endpoint).
         """
         current_span = trace.get_current_span()
         session_id = getattr(current_span, "attributes", {}).get(SpanAttributes.SESSION_ID)
@@ -268,6 +318,11 @@ class AIGateway:
         # Ensure input is a list for consistent processing
         if isinstance(input_text, str):
             input_text = [input_text]
+
+        from core.config import settings as _settings
+
+        if _settings.EMBED_MODEL.startswith("local/"):
+            return await _embed_local(input_text)
 
         try:
             logfire.info("AI Embedding started: {model}", model=model)
