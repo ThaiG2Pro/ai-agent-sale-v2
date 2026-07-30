@@ -56,9 +56,7 @@ def _validate_state_edits(state_edits: dict[str, Any]) -> None:
         # bool is an int subclass; never a valid edit value here
         if isinstance(value, bool) or not isinstance(value, expected):
             expected_names = "/".join(t.__name__ for t in expected)
-            issues.append(
-                f"field '{field}' expects {expected_names}, got {type(value).__name__}"
-            )
+            issues.append(f"field '{field}' expects {expected_names}, got {type(value).__name__}")
             continue
         if field in ("confidence_score", "similarity_score") and not 0.0 <= value <= 1.0:
             issues.append(f"field '{field}' must be within [0.0, 1.0], got {value}")
