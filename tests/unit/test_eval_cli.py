@@ -22,8 +22,11 @@ class TestGoldDatasetSchema:
         assert len(data) > 0
 
     def test_all_items_have_required_fields(self):
+        # Gold dataset v2 (WP-V2-0): intent/difficulty were dropped in favour of
+        # deterministic expectations (expected_skus / must_decline / …) graded
+        # by scripts/eval_gate.py.
         data = json.loads(GOLD_DATASET_PATH.read_text())
-        required = {"id", "query", "category", "intent", "expected_keywords"}
+        required = {"id", "query", "category", "language", "expected_keywords"}
         for item in data:
             missing = required - set(item.keys())
             assert not missing, f"{item['id']} missing: {missing}"
@@ -34,11 +37,17 @@ class TestGoldDatasetSchema:
             assert "language" in item, f"{item['id']} missing language"
             assert item["language"] in ("en", "vi")
 
-    def test_all_items_have_difficulty_field(self):
+    def test_all_items_have_deterministic_expectation(self):
+        # v2 invariant: every case must be gradable without an LLM judge.
         data = json.loads(GOLD_DATASET_PATH.read_text())
         for item in data:
-            assert "difficulty" in item, f"{item['id']} missing difficulty"
-            assert item["difficulty"] in ("easy", "medium", "hard")
+            graded = bool(
+                item.get("expected_skus")
+                or item.get("must_decline")
+                or item.get("expected_price")
+                or item.get("absent_terms")
+            )
+            assert graded, f"{item['id']} has no deterministic expectation"
 
     def test_ids_are_unique(self):
         data = json.loads(GOLD_DATASET_PATH.read_text())

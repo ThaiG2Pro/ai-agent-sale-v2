@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     # default: chat = cloud, embed = local Ollama bge-m3.
     EMBED_MODEL: str = "ollama/bge-m3"
     EMBED_DIMENSION: int = 1024  # Standard for bge-m3 / small
+    # Cloud provider keys — declared here so a plain `.env` works OUTSIDE Docker
+    # too (pydantic-settings only populates its own fields; LiteLLM reads keys
+    # from os.environ, so core/ai_config.py exports these at router init).
+    GROQ_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
+    OPENAI_API_KEY: str | None = None
 
     # Semantic cache TTL (seconds). Entries older than this are ignored by
     # L1/L2 lookups so price/stock changes stop serving stale answers.

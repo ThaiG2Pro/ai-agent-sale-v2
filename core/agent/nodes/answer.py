@@ -189,9 +189,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     try:
         result = await AIGateway.complete(model=model, messages=messages)
         response = result.choices[0].message.content
-        metrics = extract_llm_metrics(
-            result, latency_ms=(time.perf_counter() - start_time) * 1000
-        )
+        metrics = extract_llm_metrics(result, latency_ms=(time.perf_counter() - start_time) * 1000)
     except Exception as e:
         if model != "economy-chat":
             # T064 real fallback: premium model failed at point of use →

@@ -15,7 +15,7 @@ from core.config import settings
 
 
 def test_agent_recursion_limit_value():
-    """Article X: 5 turns × ~4 super-steps per turn = 20 (< LangGraph default 25)."""
+    """Article X: 5 turns x ~4 super-steps per turn = 20 (< LangGraph default 25)."""
     assert AGENT_RECURSION_LIMIT == settings.AGENT_MAX_TURNS * 4
     assert AGENT_RECURSION_LIMIT == 20
     assert AGENT_RECURSION_LIMIT < 25  # must be tighter than LangGraph's default

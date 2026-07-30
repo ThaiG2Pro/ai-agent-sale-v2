@@ -86,7 +86,7 @@ async def _seed(limit: int, stock: int | None) -> None:
                 await db.commit()
                 ok += 1
                 table.add_row(sku, item["name"][:40], f"{item['price']:,}", str(qty), "✅")
-            except Exception as e:  # noqa: BLE001 — report per-product, keep seeding
+            except Exception as e:
                 await db.rollback()
                 failed += 1
                 table.add_row(sku, item["name"][:40], f"{item['price']:,}", "-", f"❌ {e}")

@@ -169,9 +169,11 @@ async def process_telegram_message(
                     )
                 )
                 task.add_done_callback(
-                    lambda t: logger.error("Post-turn background tasks failed: %s", t.exception())
-                    if t.exception()
-                    else None
+                    lambda t: (
+                        logger.error("Post-turn background tasks failed: %s", t.exception())
+                        if t.exception()
+                        else None
+                    )
                 )
 
         logger.info(

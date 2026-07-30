@@ -95,3 +95,4 @@ secrets/
 memory/*/_index.md
 /context/
 # <<< kiro-sdlc-kit <<<
+reports/eval_runs/

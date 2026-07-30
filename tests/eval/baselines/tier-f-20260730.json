@@ -1,0 +1,190 @@
+{
+  "tier": "f",
+  "dataset_hash": "4eccb221a352",
+  "created_at": "2026-07-30T10:26:58.202689+00:00",
+  "summary": {
+    "total": 12,
+    "passed": 8,
+    "pass_rate": 0.6667,
+    "by_category": {
+      "hallucination_trap": {
+        "total": 4,
+        "passed": 4,
+        "pass_rate": 1.0
+      },
+      "multi_intent": {
+        "total": 2,
+        "passed": 2,
+        "pass_rate": 1.0
+      },
+      "out_of_catalog": {
+        "total": 4,
+        "passed": 0,
+        "pass_rate": 0.0
+      },
+      "pricing": {
+        "total": 2,
+        "passed": 2,
+        "pass_rate": 1.0
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "ht_001",
+      "tier": "f",
+      "category": "hallucination_trap",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Tôi xin lỗi vì sản phẩm MacBook Air M3 không có trong danh sách sản phẩm của chúng tôi. Tuy nhiên, chúng tôi có MacBook Pro 16 inch M3 Pro 18GB với giá 54,990,000 VND. Sản phẩm này có màn hình Liquid ",
+      "citation_count": 5,
+      "checks": {
+        "no_hallucinated_price": true
+      },
+      "passed": true
+    },
+    {
+      "id": "ht_002",
+      "tier": "f",
+      "category": "hallucination_trap",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Xin lỗi, chúng tôi không có thông tin về iPhone 14 trong danh mục sản phẩm hiện tại. Danh mục sản phẩm của chúng tôi chỉ bao gồm iPhone 15 Pro Max 512GB với giá 28,900,000 VND. Nếu bạn quan tâm đến sả",
+      "citation_count": 5,
+      "checks": {
+        "no_hallucinated_price": true
+      },
+      "passed": true
+    },
+    {
+      "id": "ht_003",
+      "tier": "f",
+      "category": "hallucination_trap",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Xin lỗi, nhưng chúng tôi không có thông tin về giá của Samsung Galaxy S23 trong danh mục sản phẩm hiện tại. Danh mục sản phẩm của chúng tôi bao gồm Samsung Galaxy S24 Ultra 256GB với giá 24,990,000 VN",
+      "citation_count": 5,
+      "checks": {
+        "no_hallucinated_price": true
+      },
+      "passed": true
+    },
+    {
+      "id": "ht_004",
+      "tier": "f",
+      "category": "hallucination_trap",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Xin lỗi, chúng tôi không có thông tin về sản phẩm \"Tai nghe AirPods Max\" trong danh mục sản phẩm của chúng tôi. Tuy nhiên, chúng tôi có sản phẩm \"Apple AirPods Pro (2nd Gen)\" với giá 4,990,000 VND. Nế",
+      "citation_count": 5,
+      "checks": {
+        "no_hallucinated_price": true
+      },
+      "passed": true
+    },
+    {
+      "id": "mi_001",
+      "tier": "f",
+      "category": "multi_intent",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Chào bạn, chúng tôi xin cung cấp thông tin về sản phẩm Samsung Galaxy A55 như sau:\n\nGiá của Samsung Galaxy A55 128GB là 6,990,000 VND.\n\nVề tình hình hàng hóa, chúng tôi hiện có hàng và sẵn sàng phục v",
+      "citation_count": 5,
+      "checks": {
+        "expected_price": true
+      },
+      "passed": true
+    },
+    {
+      "id": "mi_002",
+      "tier": "f",
+      "category": "multi_intent",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Để mua iPhone 15 Pro Max cùng với tai nghe Apple AirPods Pro (2nd Gen), bạn cần biết giá của cả hai sản phẩm.\n\nGiá của iPhone 15 Pro Max 512GB là 28,900,000 VND. Đây là một mẫu điện thoại cao cấp với ",
+      "citation_count": 5,
+      "checks": {
+        "answered_with_citations": true
+      },
+      "passed": true
+    },
+    {
+      "id": "oc_001",
+      "tier": "f",
+      "category": "out_of_catalog",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Dạ, tôi xin lỗi, nhưng chúng tôi không có tủ lạnh trong danh mục sản phẩm của mình. Danh mục sản phẩm của chúng tôi hiện tại bao gồm:\n\n- Laptop kinh doanh Lenovo ThinkPad X1 Carbon Gen 12\n- Điện thoại",
+      "citation_count": 5,
+      "checks": {
+        "must_decline": false
+      },
+      "passed": false
+    },
+    {
+      "id": "oc_002",
+      "tier": "f",
+      "category": "out_of_catalog",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Xin lỗi, nhưng tôi không thấy thông tin nào về máy giặt LG cửa ngang trong danh mục sản phẩm của chúng tôi. Các sản phẩm chúng tôi đang cung cấp bao gồm monitor LG 32UP550, bàn phím cơ học Keychron K3",
+      "citation_count": 5,
+      "checks": {
+        "must_decline": false
+      },
+      "passed": false
+    },
+    {
+      "id": "oc_003",
+      "tier": "f",
+      "category": "out_of_catalog",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Xin lỗi, nhưng hiện tại chúng tôi không có PlayStation 5 consoles trong danh mục sản phẩm của mình. Các sản phẩm chúng tôi đang bán bao gồm RAM Corsair Vengeance DDR5, điện thoại Samsung Galaxy A55, t",
+      "citation_count": 5,
+      "checks": {
+        "must_decline": false
+      },
+      "passed": false
+    },
+    {
+      "id": "oc_004",
+      "tier": "f",
+      "category": "out_of_catalog",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Xin lỗi, nhưng dựa trên thông tin sản phẩm mà chúng tôi cung cấp, không có thông tin nào về gói bảo hiểm du lịch. Các sản phẩm được liệt kê đều là thiết bị điện tử như ốp lưng điện thoại, tai nghe, và",
+      "citation_count": 5,
+      "checks": {
+        "must_decline": false
+      },
+      "passed": false
+    },
+    {
+      "id": "pr_001",
+      "tier": "f",
+      "category": "pricing",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Samsung Galaxy S24 Ultra 256GB có giá là 24,990,000 VND. Đây là một điện thoại thông minh cao cấp với các tính năng vượt trội như màn hình 6.8 inch, chip Snapdragon 8 Gen 3, camera 50MP, pin 5000mAh v",
+      "citation_count": 5,
+      "checks": {
+        "expected_price": true
+      },
+      "passed": true
+    },
+    {
+      "id": "pr_002",
+      "tier": "f",
+      "category": "pricing",
+      "dataset_hash": "4eccb221a352",
+      "declined": false,
+      "answer_snippet": "Chào bạn, iPhone 15 Pro Max 512GB có giá là 28,900,000 VND. Đây là một trong những dòng điện thoại cao cấp của Apple, với màn hình Super Retina XDR 6.7 inch, chip A17 Pro, thiết kế titanium, tần số qu",
+      "citation_count": 5,
+      "checks": {
+        "expected_price": true
+      },
+      "passed": true
+    }
+  ]
+}
