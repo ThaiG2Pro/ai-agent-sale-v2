@@ -1,204 +1,363 @@
 [
   {
-    "id": "sme_001",
-    "query": "What high-performance laptops do you have?",
-    "category": "product_info",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["laptop", "performance"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "en"
-  },
-  {
-    "id": "sme_002",
-    "query": "How much does the MacBook Pro cost?",
+    "id": "pr_001",
+    "query": "Samsung Galaxy S24 Ultra giá bao nhiêu?",
     "category": "pricing",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["cost", "price", "macbook"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "en"
-  },
-  {
-    "id": "sme_003",
-    "query": "Can I get a discount if I buy 100 smartphones?",
-    "category": "negotiation",
-    "intent": "NEGOTIATION",
-    "expected_keywords": ["discount", "100", "smartphone"],
-    "complexity": "hard",
-    "difficulty": "hard",
-    "language": "en"
-  },
-  {
-    "id": "sme_004",
-    "query": "I received a broken iPhone, I want a refund.",
-    "category": "support",
-    "intent": "COMPLAINT",
-    "expected_keywords": ["broken", "refund", "iphone"],
-    "complexity": "hard",
-    "difficulty": "hard",
-    "language": "en"
-  },
-  {
-    "id": "sme_005",
-    "query": "Where is my laptop order #12345?",
-    "category": "support",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["order", "#12345", "laptop"],
-    "complexity": "medium",
-    "difficulty": "medium",
-    "language": "en"
-  },
-  {
-    "id": "sme_006",
-    "query": "Do you ship gaming laptops to Vietnam?",
-    "category": "logistics",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["ship", "vietnam", "laptop"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "en"
-  },
-  {
-    "id": "sme_007",
-    "query": "What are the technical specs of the Dell XPS 15?",
-    "category": "product_info",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["technical", "specs", "dell xps"],
-    "complexity": "medium",
-    "difficulty": "medium",
-    "language": "en"
-  },
-  {
-    "id": "sme_008",
-    "query": "How do I set up the wireless headphones I bought?",
-    "category": "support",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["setup", "headphones"],
-    "complexity": "medium",
-    "difficulty": "medium",
-    "language": "en"
-  },
-  {
-    "id": "sme_009",
-    "query": "Your smartphone price is too high compared to competitor X.",
-    "category": "negotiation",
-    "intent": "NEGOTIATION",
-    "expected_keywords": ["price", "high", "competitor", "smartphone"],
-    "complexity": "hard",
-    "difficulty": "hard",
-    "language": "en"
-  },
-  {
-    "id": "sme_010",
-    "query": "Tell me about your warranty policy for laptops.",
-    "category": "policy",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["warranty", "policy", "laptop"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "en"
-  },
-  {
-    "id": "vn_001",
-    "query": "Giá của laptop MacBook Pro cao cấp là bao nhiêu?",
-    "category": "pricing",
-    "intent": "PRICING",
-    "expected_keywords": ["giá", "macbook"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "vi"
-  },
-  {
-    "id": "vn_002",
-    "query": "iPhone 15 Pro Max có những tính năng gì?",
-    "category": "product_info",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["tính năng", "iphone"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "vi"
-  },
-  {
-    "id": "vn_003",
-    "query": "Tôi muốn đặt mua 50 cái smartphone Samsung, có được giảm giá không?",
-    "category": "negotiation",
-    "intent": "NEGOTIATION",
-    "expected_keywords": ["đặt mua", "giảm giá", "smartphone"],
-    "complexity": "medium",
-    "difficulty": "medium",
-    "language": "vi"
-  },
-  {
-    "id": "vn_004",
-    "query": "Thời gian bảo hành sản phẩm laptop là bao lâu?",
-    "category": "policy",
-    "intent": "AVAILABILITY",
-    "expected_keywords": ["bảo hành", "laptop"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "vi"
-  },
-  {
-    "id": "vn_005",
-    "query": "Sony WH-1000XM5 headphones có sẵn hàng để giao ngay không?",
-    "category": "availability",
-    "intent": "AVAILABILITY",
-    "expected_keywords": ["có sẵn", "giao", "headphones"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "vi"
-  },
-  {
-    "id": "vn_006",
-    "query": "So sánh iPad và Galaxy Tab, loại nào phù hợp cho công việc văn phòng?",
-    "category": "comparison",
-    "intent": "COMPARISON",
-    "expected_keywords": ["so sánh", "tablet", "văn phòng"],
-    "complexity": "hard",
-    "difficulty": "hard",
-    "language": "vi"
-  },
-  {
-    "id": "vn_007",
-    "query": "Tôi đặt hàng laptop nhưng chưa nhận được, liên hệ bộ phận nào?",
-    "category": "support",
-    "intent": "COMPLAINT",
-    "expected_keywords": ["đặt hàng", "nhận", "laptop"],
-    "complexity": "medium",
-    "difficulty": "medium",
-    "language": "vi"
-  },
-  {
-    "id": "vn_008",
-    "query": "Apple Watch Ultra có hỗ trợ kết nối Bluetooth không?",
-    "category": "product_info",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["bluetooth", "kết nối", "watch"],
-    "complexity": "easy",
-    "difficulty": "easy",
-    "language": "vi"
-  },
-  {
-    "id": "vn_009",
-    "query": "Tôi muốn mua smartphone nhưng ngân sách chỉ có 5 triệu, có sản phẩm phù hợp không?",
-    "category": "pricing",
-    "intent": "PRICING",
-    "expected_keywords": ["mua", "smartphone", "triệu"],
-    "complexity": "medium",
-    "difficulty": "medium",
-    "language": "vi"
-  },
-  {
-    "id": "vn_010",
-    "query": "Hãy cho tôi biết tất cả những sản phẩm điện tử mà công ty bạn đang kinh doanh, giá của từng loại cũng như các chính sách ưu đãi hiện tại.",
-    "category": "product_catalog",
-    "intent": "INFO_QUERY",
-    "expected_keywords": ["sản phẩm", "giá", "ưu đãi"],
-    "complexity": "hard",
-    "difficulty": "hard",
     "language": "vi",
-    "note": "Ambiguous long query - expects TopK=20, should match multiple tech products (laptops, phones, accessories)"
+    "expected_skus": ["PHONE-SM-001"],
+    "expected_keywords": ["giá", "s24"],
+    "tier_f": true,
+    "expected_price": 24990000
+  },
+  {
+    "id": "pr_002",
+    "query": "iPhone 15 Pro Max 512GB giá nhiêu vậy shop?",
+    "category": "pricing",
+    "language": "vi",
+    "expected_skus": ["PHONE-IP-001"],
+    "expected_keywords": ["giá", "iphone"],
+    "tier_f": true,
+    "expected_price": 28900000
+  },
+  {
+    "id": "pr_003",
+    "query": "How much is the MacBook Pro 16 M3 Pro?",
+    "category": "pricing",
+    "language": "en",
+    "expected_skus": ["LAPTOP-MACBOOK-001"],
+    "expected_keywords": ["macbook", "price"]
+  },
+  {
+    "id": "pr_004",
+    "query": "Chuột Logitech MX Master 3S giá bao nhiêu?",
+    "category": "pricing",
+    "language": "vi",
+    "expected_skus": ["MOUSE-LOGI-001"],
+    "expected_keywords": ["chuột", "giá"]
+  },
+  {
+    "id": "pr_005",
+    "query": "What's the price of the LG 32-inch 4K monitor?",
+    "category": "pricing",
+    "language": "en",
+    "expected_skus": ["MONITOR-LG-001"],
+    "expected_keywords": ["monitor", "price"]
+  },
+  {
+    "id": "in_001",
+    "query": "Sony WH-1000XM5 có chống ồn không?",
+    "category": "product_info",
+    "language": "vi",
+    "expected_skus": ["HEADPHONE-SONY-001"],
+    "expected_keywords": ["sony", "chống ồn"]
+  },
+  {
+    "id": "in_002",
+    "query": "Dell XPS 15 Plus dùng card đồ họa gì?",
+    "category": "product_info",
+    "language": "vi",
+    "expected_skus": ["LAPTOP-DELL-001"],
+    "expected_keywords": ["dell", "card"]
+  },
+  {
+    "id": "in_003",
+    "query": "Tell me about the Apple Watch Ultra 2",
+    "category": "product_info",
+    "language": "en",
+    "expected_skus": ["WATCH-APPLE-001"],
+    "expected_keywords": ["watch", "ultra"]
+  },
+  {
+    "id": "in_004",
+    "query": "ThinkPad X1 Carbon Gen 12 dùng chip gì?",
+    "category": "product_info",
+    "language": "vi",
+    "expected_skus": ["LAPTOP-LENOVO-001"],
+    "expected_keywords": ["thinkpad", "chip"]
+  },
+  {
+    "id": "in_005",
+    "query": "Pin sạc dự phòng Anker 737 công suất bao nhiêu?",
+    "category": "product_info",
+    "language": "vi",
+    "expected_skus": ["CHARGER-ANKER-001"],
+    "expected_keywords": ["anker", "công suất"]
+  },
+  {
+    "id": "in_006",
+    "query": "Nguồn Corsair RM1000x bao nhiêu watt?",
+    "category": "product_info",
+    "language": "vi",
+    "expected_skus": ["PSU-CORSAIR-001"],
+    "expected_keywords": ["corsair", "watt"]
+  },
+  {
+    "id": "av_001",
+    "query": "Galaxy Tab S9 Ultra còn hàng không?",
+    "category": "availability",
+    "language": "vi",
+    "expected_skus": ["TABLET-SM-001"],
+    "expected_keywords": ["tab", "hàng"]
+  },
+  {
+    "id": "av_002",
+    "query": "Còn RTX 4070 Super không shop?",
+    "category": "availability",
+    "language": "vi",
+    "expected_skus": ["GPU-RTX-001"],
+    "expected_keywords": ["rtx", "còn"]
+  },
+  {
+    "id": "av_003",
+    "query": "Is the Keychron K3 Pro in stock?",
+    "category": "availability",
+    "language": "en",
+    "expected_skus": ["KEYBOARD-MECH-001"],
+    "expected_keywords": ["keychron", "stock"]
+  },
+  {
+    "id": "av_004",
+    "query": "AirPods Pro 2 có sẵn giao ngay không?",
+    "category": "availability",
+    "language": "vi",
+    "expected_skus": ["HEADPHONE-APPLE-001"],
+    "expected_keywords": ["airpods", "sẵn"]
+  },
+  {
+    "id": "av_005",
+    "query": "Sạc GaN 65W còn không?",
+    "category": "availability",
+    "language": "vi",
+    "expected_skus": ["CHARGER-GAN-65W-001"],
+    "expected_keywords": ["sạc", "65w"]
+  },
+  {
+    "id": "mi_001",
+    "query": "Giá Galaxy A55 và còn hàng không?",
+    "category": "multi_intent",
+    "language": "vi",
+    "expected_skus": ["PHONE-SM-002"],
+    "expected_keywords": ["a55", "giá"],
+    "tier_f": true,
+    "expected_price": 6990000
+  },
+  {
+    "id": "mi_002",
+    "query": "Cho hỏi giá iPhone 15 Pro Max với cả tai nghe AirPods Pro",
+    "category": "multi_intent",
+    "language": "vi",
+    "expected_skus": ["PHONE-IP-001", "HEADPHONE-APPLE-001"],
+    "expected_keywords": ["iphone", "airpods"],
+    "tier_f": true
+  },
+  {
+    "id": "mi_003",
+    "query": "Mua laptop ROG Strix G16 kèm chuột MX Master 3S hết bao nhiêu?",
+    "category": "multi_intent",
+    "language": "vi",
+    "expected_skus": ["LAPTOP-ROG-001", "MOUSE-LOGI-001"],
+    "expected_keywords": ["rog", "chuột"]
+  },
+  {
+    "id": "mi_004",
+    "query": "Price of the Samsung 990 PRO SSD and the Corsair DDR5 RAM kit?",
+    "category": "multi_intent",
+    "language": "en",
+    "expected_skus": ["SSD-SAMSUNG-001", "RAM-CORSAIR-001"],
+    "expected_keywords": ["ssd", "ram"]
+  },
+  {
+    "id": "mi_005",
+    "query": "Xiaomi 14 Ultra giá bao nhiêu, có ốp lưng kèm theo không?",
+    "category": "multi_intent",
+    "language": "vi",
+    "expected_skus": ["PHONE-XM-001", "CASE-PHONE-001"],
+    "expected_keywords": ["xiaomi", "ốp lưng"]
+  },
+  {
+    "id": "cp_001",
+    "query": "So sánh Galaxy S24 Ultra và iPhone 15 Pro Max",
+    "category": "comparison",
+    "language": "vi",
+    "expected_skus": ["PHONE-SM-001", "PHONE-IP-001"],
+    "expected_keywords": ["so sánh", "iphone"]
+  },
+  {
+    "id": "cp_002",
+    "query": "Dell XPS 15 với MacBook Pro 16 con nào mạnh hơn?",
+    "category": "comparison",
+    "language": "vi",
+    "expected_skus": ["LAPTOP-DELL-001", "LAPTOP-MACBOOK-001"],
+    "expected_keywords": ["dell", "macbook"]
+  },
+  {
+    "id": "cp_003",
+    "query": "Compare the POCO F6 vs Galaxy A55",
+    "category": "comparison",
+    "language": "en",
+    "expected_skus": ["PHONE-PO-001", "PHONE-SM-002"],
+    "expected_keywords": ["poco", "a55"]
+  },
+  {
+    "id": "cp_004",
+    "query": "Acer Swift 14 hay HP Envy 14 đáng mua hơn?",
+    "category": "comparison",
+    "language": "vi",
+    "expected_skus": ["LAPTOP-ACER-001", "LAPTOP-HP-001"],
+    "expected_keywords": ["acer", "hp"]
+  },
+  {
+    "id": "am_001",
+    "query": "điện thoại Samsung nào rẻ nhất?",
+    "category": "ambiguous",
+    "language": "vi",
+    "expected_skus": ["PHONE-SM-002"],
+    "expected_keywords": ["samsung", "rẻ"]
+  },
+  {
+    "id": "am_002",
+    "query": "có laptop nào cho gaming không?",
+    "category": "ambiguous",
+    "language": "vi",
+    "expected_skus": ["LAPTOP-ROG-001", "LAPTOP-DELL-001"],
+    "match": "any",
+    "expected_keywords": ["laptop", "gaming"]
+  },
+  {
+    "id": "am_003",
+    "query": "tai nghe không dây nào tốt?",
+    "category": "ambiguous",
+    "language": "vi",
+    "expected_skus": ["HEADPHONE-SONY-001", "HEADPHONE-APPLE-001", "EARBUDS-SM-002"],
+    "match": "any",
+    "expected_keywords": ["tai nghe"]
+  },
+  {
+    "id": "am_004",
+    "query": "I need a good wireless mouse",
+    "category": "ambiguous",
+    "language": "en",
+    "expected_skus": ["MOUSE-LOGI-001"],
+    "expected_keywords": ["mouse"]
+  },
+  {
+    "id": "am_005",
+    "query": "màn hình làm đồ họa",
+    "category": "ambiguous",
+    "language": "vi",
+    "expected_skus": ["MONITOR-LG-001"],
+    "expected_keywords": ["màn hình"]
+  },
+  {
+    "id": "oc_001",
+    "query": "Shop có bán tủ lạnh không?",
+    "category": "out_of_catalog",
+    "language": "vi",
+    "expected_skus": [],
+    "expected_keywords": [],
+    "tier_f": true,
+    "must_decline": true
+  },
+  {
+    "id": "oc_002",
+    "query": "Máy giặt LG cửa ngang giá bao nhiêu?",
+    "category": "out_of_catalog",
+    "language": "vi",
+    "expected_skus": [],
+    "expected_keywords": [],
+    "tier_f": true,
+    "must_decline": true
+  },
+  {
+    "id": "oc_003",
+    "query": "Do you sell PlayStation 5 consoles?",
+    "category": "out_of_catalog",
+    "language": "en",
+    "expected_skus": [],
+    "expected_keywords": [],
+    "tier_f": true,
+    "must_decline": true
+  },
+  {
+    "id": "oc_004",
+    "query": "Có gói bảo hiểm du lịch không?",
+    "category": "out_of_catalog",
+    "language": "vi",
+    "expected_skus": [],
+    "expected_keywords": [],
+    "tier_f": true,
+    "must_decline": true
+  },
+  {
+    "id": "ht_001",
+    "query": "MacBook Air M3 giá bao nhiêu?",
+    "category": "hallucination_trap",
+    "language": "vi",
+    "expected_skus": [],
+    "expected_keywords": [],
+    "tier_f": true,
+    "absent_terms": ["macbook air"]
+  },
+  {
+    "id": "ht_002",
+    "query": "iPhone 14 còn hàng không?",
+    "category": "hallucination_trap",
+    "language": "vi",
+    "expected_skus": [],
+    "expected_keywords": [],
+    "tier_f": true,
+    "absent_terms": ["iphone 14"]
+  },
+  {
+    "id": "ht_003",
+    "query": "How much is the Galaxy S23?",
+    "category": "hallucination_trap",
+    "language": "en",
+    "expected_skus": [],
+    "expected_keywords": [],
+    "tier_f": true,
+    "absent_terms": ["s23"]
+  },
+  {
+    "id": "ht_004",
+    "query": "Tai nghe AirPods Max giá bao nhiêu?",
+    "category": "hallucination_trap",
+    "language": "vi",
+    "expected_skus": [],
+    "expected_keywords": [],
+    "tier_f": true,
+    "absent_terms": ["airpods max"]
+  },
+  {
+    "id": "nd_001",
+    "query": "gia dien thoai samsung galaxy s24 ultra",
+    "category": "no_diacritics",
+    "language": "vi",
+    "expected_skus": ["PHONE-SM-001"],
+    "expected_keywords": ["samsung"]
+  },
+  {
+    "id": "nd_002",
+    "query": "laptop dell xps 15 con hang khong",
+    "category": "no_diacritics",
+    "language": "vi",
+    "expected_skus": ["LAPTOP-DELL-001"],
+    "expected_keywords": ["dell"]
+  },
+  {
+    "id": "nd_003",
+    "query": "tai nghe sony chong on",
+    "category": "no_diacritics",
+    "language": "vi",
+    "expected_skus": ["HEADPHONE-SONY-001"],
+    "expected_keywords": ["sony"]
+  },
+  {
+    "id": "nd_004",
+    "query": "ban phim co keychron k3 pro",
+    "category": "no_diacritics",
+    "language": "vi",
+    "expected_skus": ["KEYBOARD-MECH-001"],
+    "expected_keywords": ["keychron"]
   }
 ]
-
