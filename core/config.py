@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     #   POWERFUL — deep reasoning (deepseek-r1): escalation, complex queries
     LIGHT_CHAT_MODEL: str = "ollama/qwen3:0.6b"
     CHAT_MODEL: str = "ollama/qwen3-1.7b"
-    POWERFUL_CHAT_MODEL: str = "ollama/deepseel-r1:1.5b"
+    POWERFUL_CHAT_MODEL: str = "ollama/deepseek-r1:1.5b"
     # ⚠️ Embedding dimension constraint: pgvector columns are Vector(1024) (bge-m3).
     # If you switch EMBED_MODEL, the new model MUST produce 1024-dim vectors
     # (e.g. OpenAI text-embedding-3-large with dimensions=1024). Recommended
