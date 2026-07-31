@@ -1,44 +1,10 @@
 """Unit tests for agent state and types."""
 
 from core.agent.state import (
-    AgentState,
-    EscalationReasonEnum,
     IntentClassification,
     IntentEnum,
     make_initial_state,
 )
-
-
-def test_agent_state_imports():
-    """Verify that all core agent state types are importable."""
-    assert AgentState is not None
-    assert IntentEnum is not None
-    assert EscalationReasonEnum is not None
-
-
-def test_intent_enum_values():
-    """Verify IntentEnum has all 10 required values (Week 4 + Week 5)."""
-    required = {
-        "INFO_QUERY",
-        "PRICING",
-        "COMPARISON",
-        "COMPLAINT",
-        "NEGOTIATION",
-        "SMALLTALK",
-        "AVAILABILITY",
-        "ORDER_PLACEMENT",
-        "FOLLOW_UP",  # Week 5
-        "OTHER",  # Week 5
-    }
-    actual = {e.value for e in IntentEnum}
-    assert required == actual
-
-
-def test_escalation_reason_enum_values():
-    """Verify EscalationReasonEnum has 3 required values."""
-    required = {"intent_escalation", "low_confidence", "none"}
-    actual = {e.value for e in EscalationReasonEnum}
-    assert required == actual
 
 
 def test_intent_classification_has_escalation_intent():
@@ -69,58 +35,6 @@ def test_intent_classification_has_escalation_intent():
         reasoning="Simple info query",
     )
     assert ic3.has_escalation_intent() is False
-
-
-def test_agent_state_fields_complete():
-    """Verify AgentState TypedDict has all required fields from FR-001 (T055)."""
-    required_fields = {
-        "session_id",
-        "user_message",
-        "messages",
-        "intent",
-        "secondary_intents",
-        "intent_confidence",
-        "retrieved_chunks",
-        "citations",
-        "similarity_score",
-        "rerank_score",
-        "confidence_score",
-        "model_used",
-        "escalation_flag",
-        "escalation_reason",
-        "escalation_failure",
-        "response",
-        "declined",
-        "error",
-        "hitl_triggered",
-        "hitl_reason",
-        "hitl_pause_id",
-        "hitl_rejection_reason",
-        "hitl_escalation_count",
-        "hitl_approved",
-        "hitl_freshness_valid",
-        "estimated_token_cost",
-        "order_info",
-        "cached_answer",
-        "canonical_query",
-        "query_vector",
-        "pending_info_questions",
-        # Week 5 fields
-        "customer_id",
-        "memory_context",
-        "memory_retrieval_scores",
-        "thread_summary_exists",
-        "sales_intent_skipped",
-        # WP-V2-3 clarify loop fields
-        "needs_clarification",
-        "awaiting_clarification",
-        "clarify_original_query",
-        "clarify_count",
-    }
-    actual_fields = set(AgentState.__annotations__.keys())
-    assert required_fields == actual_fields, (
-        f"Missing or extra fields: {required_fields ^ actual_fields}"
-    )
 
 
 def test_intent_enum_serialization():

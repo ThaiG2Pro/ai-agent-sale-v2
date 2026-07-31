@@ -11,6 +11,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
@@ -27,19 +28,6 @@ if TYPE_CHECKING:
 @pytest.mark.integration
 class TestMemoryFlow:
     """Integration test suite for complete memory workflow."""
-
-    @pytest.mark.asyncio
-    async def test_checkpoint_survives_restart(self):
-        """T042: Checkpoint survives restart - create session, restart, verify state intact.
-
-        This is a skeleton test. Full implementation requires:
-        1. Create session with message
-        2. Save checkpoint
-        3. Simulate restart (kill graph, reload)
-        4. Verify state values match original
-        """
-        # TODO: Implement with real graph + DB checkpoint restoration
-        assert True
 
     @pytest.mark.asyncio
     async def test_memory_flow_pricing_intent_end_to_end(
@@ -327,82 +315,6 @@ class TestMemoryFlow:
         app.dependency_overrides.clear()
 
     @pytest.mark.asyncio
-    @pytest.mark.asyncio
-    async def test_restart_session_continues(self):
-        """T090: Checkpoint survives restart - verify graph can reload from DB.
-
-        Scenario:
-        1. Create initial session and invoke graph (creates checkpoint)
-        2. Verify checkpoint can be retrieved from DB
-        3. Create new graph instance and reload same checkpoint
-        4. Verify no errors occur during reload (checkpoint durability)
-        """
-        from core.agent.checkpointer import create_checkpointer
-        from core.agent.graph import build_graph
-        from core.agent.state import make_initial_state
-        from core.config import settings
-
-        # Setup: Create checkpointer
-        checkpointer = await create_checkpointer(settings.database_url_psycopg)
-
-        session_id = "test_restart_001"
-        customer_id = "test_cust_001"
-
-        # Step 1: Build first graph and invoke
-        graph1 = build_graph(checkpointer=checkpointer)
-        initial_state = make_initial_state(
-            user_message="Initial message",
-            session_id=session_id,
-            customer_id=customer_id,
-        )
-        config = {"configurable": {"thread_id": session_id, "db": None}}
-
-        try:
-            # Invoke graph (checkpoint saved to DB)
-            await graph1.ainvoke(initial_state, config=config)
-        except Exception:
-            # Service errors are OK - we're testing checkpoint persistence
-            pass
-
-        # Step 2: Verify checkpoint was saved
-        try:
-            checkpoint = await checkpointer.aget(config)
-            # If we got a checkpoint, durability is proven
-            assert checkpoint is not None
-        except Exception:
-            # No checkpoint yet is also OK - next step will verify reload
-            pass
-
-        # Step 3: Create new graph (simulating restart) and reload state
-        graph2 = build_graph(checkpointer=checkpointer)
-
-        try:
-            # This should load the checkpoint without error
-            await checkpointer.aget(config)
-            # Successful load means checkpoint durability works
-            assert True, "Checkpoint reload succeeded - durability verified"
-        except Exception as e:
-            # Only fail if it's a checkpoint-related error
-            if "checkpoint" in str(e).lower() or "thread" in str(e).lower():
-                raise
-
-        # Step 4: Verify new graph can continue with same session_id
-        followup_state = make_initial_state(
-            user_message="Follow-up message",
-            session_id=session_id,
-            customer_id=customer_id,
-        )
-
-        try:
-            # Should execute without checkpoint reload errors
-            await graph2.ainvoke(followup_state, config=config)
-            assert True, "Graph restart with same session_id succeeded"
-        except Exception as e:
-            # Don't fail on service errors, only checkpoint errors
-            if "checkpoint" in str(e).lower():
-                raise
-
-    @pytest.mark.asyncio
     async def test_summary_created_at_threshold(self):
         """T111: Integration test - verify _maybe_summarize triggers at message threshold.
 
@@ -470,9 +382,8 @@ class TestMemoryFlow:
                 db_factory=mock_db_factory,
             )
 
-            # Verify: LiteLLM was called (summarization was triggered)
-            # The important part is that should_summarize=True and LLM was invoked
-            assert mock_llm.called or not mock_llm.called  # Either way, we tested the threshold
+            # Verify: crossing the threshold actually triggers summarization (LLM call)
+            assert mock_llm.called, "summarization must be invoked once threshold is crossed"
 
 
 # ---------------------------------------------------------------------------
@@ -717,3 +628,118 @@ async def test_summary_save_then_resummary_upserts(db_session) -> None:
         assert row.summary_version == 2, "upsert must bump summary_version"
     finally:
         await _cleanup()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_semantic_memory_retrieve_excludes_stale_rows(db_session) -> None:
+    """T123: retrieve() excludes STALE embeddings against the real Postgres WHERE
+    clause — the filter lives in raw SQL, so a mocked DB can't exercise it; only
+    a real seeded STALE row proves exclusion actually happens.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from sqlalchemy import delete as sa_delete
+
+    from models.schema import ConversationSummary, EmbeddingStatus, SemanticMemory
+    from services.memory.semantic_memory import SemanticMemoryService
+
+    customer_id = "stale_exclusion_cust"
+    vec = _seed_vector()
+
+    async def _cleanup():
+        await db_session.rollback()
+        await db_session.execute(
+            sa_delete(SemanticMemory).where(SemanticMemory.customer_id == customer_id)
+        )
+        await db_session.execute(
+            sa_delete(ConversationSummary).where(ConversationSummary.customer_id == customer_id)
+        )
+        await db_session.commit()
+
+    await _cleanup()
+    try:
+        active_summary = ConversationSummary(
+            customer_id=customer_id,
+            thread_id="thread_active",
+            summary_text="Active summary",
+            summary_model="economy-chat",
+        )
+        stale_summary = ConversationSummary(
+            customer_id=customer_id,
+            thread_id="thread_stale",
+            summary_text="Stale summary (old embedding model)",
+            summary_model="economy-chat",
+        )
+        db_session.add_all([active_summary, stale_summary])
+        await db_session.commit()
+
+        db_session.add_all(
+            [
+                SemanticMemory(
+                    summary_id=active_summary.id,
+                    customer_id=customer_id,
+                    embedding=vec,
+                    embedding_model=settings.EMBED_MODEL,
+                    embedding_dimension=settings.EMBED_DIMENSION,
+                    status=EmbeddingStatus.ACTIVE,
+                ),
+                SemanticMemory(
+                    summary_id=stale_summary.id,
+                    customer_id=customer_id,
+                    embedding=vec,
+                    embedding_model="old-model-v1",
+                    embedding_dimension=settings.EMBED_DIMENSION,
+                    status=EmbeddingStatus.STALE,
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        with patch("services.ai.AIGateway.embed", new=AsyncMock(return_value=[vec])):
+            results = await SemanticMemoryService().retrieve(
+                customer_id=customer_id, query="anything", db=db_session
+            )
+
+        assert len(results) == 1, "STALE row must be excluded from retrieval"
+        assert results[0].summary_text == "Active summary"
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_intent_tracker_concurrent_upserts_no_lost_update(db_session) -> None:
+    """T065: two concurrent upsert_with_lock() calls on the same customer/thread
+    must both persist — real Postgres row locking, not a mocked stand-in.
+
+    Each call runs on its own AsyncSession/connection (mirrors two real request
+    handlers racing on the same row); the final version must reflect both writes.
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from services.memory.intent_tracker import IntentTracker
+
+    customer_id = "concurrent_upsert_cust"
+    thread_id = "concurrent_upsert_thread"
+    tracker = IntentTracker()
+
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+
+    async def _upsert():
+        async with session_factory() as session:
+            result = await tracker.upsert_with_lock(customer_id, thread_id, db=session)
+            await session.commit()
+            return result
+
+    try:
+        result1, result2 = await asyncio.gather(_upsert(), _upsert())
+
+        assert {result1.version, result2.version} == {1, 2}, (
+            "both concurrent upserts must persist — one insert (v1) + one update (v2), "
+            "no lost update"
+        )
+    finally:
+        await engine.dispose()

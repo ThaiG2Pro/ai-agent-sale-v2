@@ -1,6 +1,7 @@
 """Unit tests for telegram_service.py (T026-T027, T036)."""
 
 import time
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -127,10 +128,14 @@ async def test_send_telegram_message_success(respx_mock):
 
 
 @pytest.mark.asyncio
-async def test_send_telegram_message_retry_on_failure(respx_mock):
-    """Test retry logic on HTTP error (T036)."""
+async def test_send_telegram_message_retry_on_failure(respx_mock, monkeypatch):
+    """Test retry logic on HTTP error (T036): succeeds once a retry gets a 200."""
     chat_id = 123456789
     text = "Test message"
+
+    monkeypatch.setattr(
+        "services.telegram_service.asyncio.sleep", AsyncMock(return_value=None)
+    )
 
     # First two attempts fail, third succeeds
     respx_mock.post(url__regex=r"https://api\.telegram\.org/bot.*/sendMessage").mock(
@@ -141,11 +146,10 @@ async def test_send_telegram_message_retry_on_failure(respx_mock):
         ]
     )
 
-    # Should succeed on third attempt (but will fail due to raise_for_status)
     success = await send_telegram_message(chat_id, text)
 
-    # Current implementation will fail on 429 - this is acceptable
-    assert success is False or success is True  # Allow either outcome
+    assert success is True
+    assert respx_mock.calls.call_count == 3
 
 
 @pytest.mark.asyncio

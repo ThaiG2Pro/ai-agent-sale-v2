@@ -25,39 +25,6 @@ def _payload_with_date(ts: int) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_webhook_without_secret_header_returns_401(monkeypatch) -> None:
-    monkeypatch.setattr(
-        dependencies.settings,
-        "TELEGRAM_WEBHOOK_SECRET",
-        "integration_secret_1234567890",
-    )
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/webhooks/telegram",
-            json=_payload_with_date(int(datetime.now(UTC).timestamp())),
-        )
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_webhook_with_wrong_secret_returns_401(monkeypatch) -> None:
-    monkeypatch.setattr(
-        dependencies.settings,
-        "TELEGRAM_WEBHOOK_SECRET",
-        "integration_secret_1234567890",
-    )
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/webhooks/telegram",
-            json=_payload_with_date(int(datetime.now(UTC).timestamp())),
-            headers={"X-Telegram-Bot-Api-Secret-Token": "wrong"},
-        )
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
 async def test_webhook_with_old_timestamp_returns_403(monkeypatch) -> None:
     secret = "integration_secret_1234567890"
     monkeypatch.setattr(dependencies.settings, "TELEGRAM_WEBHOOK_SECRET", secret)

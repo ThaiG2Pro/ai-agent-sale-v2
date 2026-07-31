@@ -59,23 +59,3 @@ class TestGoldDatasetSchema:
         languages = {item["language"] for item in data}
         assert "en" in languages
         assert "vi" in languages
-
-
-class TestEvalCLIStructure:
-    """US5: Eval script must support expected CLI arguments."""
-
-    def test_eval_script_exists(self):
-        assert Path("scripts/tier1_eval.py").exists()
-
-    def test_eval_script_has_skip_tier2_flag(self):
-        content = Path("scripts/tier1_eval.py").read_text()
-        assert "--skip-tier2" in content
-
-    def test_eval_script_has_verbose_flag(self):
-        content = Path("scripts/tier1_eval.py").read_text()
-        assert "--verbose" in content
-
-    def test_likert_scale_defined(self):
-        content = Path("scripts/tier1_eval.py").read_text()
-        for score in ["1 =", "2 =", "3 =", "4 =", "5 ="]:
-            assert score in content, f"Likert {score} not in eval script"

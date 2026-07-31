@@ -124,50 +124,6 @@ class TestIntentTracker:
         with pytest.raises(IntentLockConflictError):
             await self.tracker.upsert_with_lock("cust-001", "thread-001", extraction, mock_db)
 
-    # === Race Condition Test (T065) ===
-
-    @pytest.mark.asyncio
-    async def test_concurrent_upserts_no_lost_update(self):
-        """T065: concurrent asyncio.gather of 2 upserts → version=3, no duplicate.
-
-        This test validates optimistic locking prevents lost updates (R4 mitigation).
-        Note: Real test would use actual DB; this uses mock with simulated versions.
-        """
-        # In a real scenario, this would use a test database with actual
-        # concurrent upserts. For now, mock the behavior.
-        mock_db = AsyncMock()
-
-        # Simulate first upsert returns version=2
-        mock_row_1 = MagicMock()
-        mock_row_1.version = 2
-
-        # Simulate second upsert returns version=3
-        mock_row_2 = MagicMock()
-        mock_row_2.version = 3
-
-        mock_result_1 = MagicMock()
-        mock_result_1.scalar_one_or_none.return_value = mock_row_1
-
-        mock_result_2 = MagicMock()
-        mock_result_2.scalar_one_or_none.return_value = mock_row_2
-
-        mock_db.execute.side_effect = [mock_result_1, mock_result_2]
-
-        from core.agent.state import SalesIntentExtraction
-
-        extraction = SalesIntentExtraction()
-
-        result1 = await self.tracker.upsert_with_lock(
-            "cust-001", "thread-001", extraction, mock_db
-        )
-        result2 = await self.tracker.upsert_with_lock(
-            "cust-001", "thread-002", extraction, mock_db
-        )
-
-        # Verify versions increment (simulating concurrent updates)
-        assert result1.version == 2
-        assert result2.version == 3
-
     # === Status Update Tests (T067-T069) ===
 
     @pytest.mark.asyncio
