@@ -75,6 +75,11 @@ class Citation(BaseModel):
         ...,
         description="Raw chunk text used for grounding (Article IX auditability)",
     )
+    # WP-V2-2 (FR-011): source sentence best matching the answer. Optional —
+    # None when nothing clears MIN_FRAGMENT_RATIO, absent on pre-V2-2 cache
+    # entries. Must exist here or Citation(**cached_dict) in retrieval_node
+    # raises on the extra key and the citation is silently dropped.
+    fragment_text: str | None = None
 
     model_config = ConfigDict(strict=True)
 

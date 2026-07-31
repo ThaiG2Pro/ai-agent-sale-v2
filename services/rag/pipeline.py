@@ -89,6 +89,37 @@ async def search_and_retrieve(db, query: str, intent: str | None = None) -> Retr
     query_category = classify_query(query)
     top_k = compute_adaptive_topk(query)
 
+    # ── L1 cache check — WP-V2-2: keyed on the RAW user query, BEFORE normalize ──────────
+    # The old order (normalize → L1) keyed the hash on LLM output, which is
+    # non-deterministic → same raw query could miss on rephrase. Raw-first also
+    # means an L1 hit costs ZERO chat calls (normalize is skipped entirely).
+    # Only accepted answers are ever cached, so the is_valid spam guard cannot
+    # be bypassed by a hit.
+    try:
+        l1_hit = await get_l1_cache(db, query)
+        if l1_hit is not None:
+            logfire.info("L1 cache hit for query")
+            return RetrievalResult(
+                cached_answer=l1_hit["response"],
+                cached_citations=l1_hit.get("citations", []),
+                declined=False,
+                citations=l1_hit.get("citations", []),
+                chunks=[],
+                best_similarity=1.0,
+                similarity_gap=0.0,
+                canonical_query=query,
+                query_vector=[],  # no vector needed for L1 hit (already cached)
+                query_category=query_category,
+                top_k_used=top_k,
+            )
+        else:
+            logfire.info(
+                "L1 cache miss: query_hash={hash}",
+                hash=__import__("hashlib").sha256(query.strip().lower().encode()).hexdigest()[:8],
+            )
+    except Exception as exc:
+        logfire.warn("L1 cache lookup failed: {err}", err=str(exc))
+
     # Normalize query (best-effort) — skip if intent is pre-classified
     canonical_query = query
     fts_query_text = query
@@ -138,34 +169,6 @@ async def search_and_retrieve(db, query: str, intent: str | None = None) -> Retr
             i=intent,
             k=top_k,
         )
-
-    # L1 cache check
-    try:
-        l1_hit = await get_l1_cache(db, canonical_query)
-        if l1_hit is not None:
-            logfire.info("L1 cache hit for query")
-            return RetrievalResult(
-                cached_answer=l1_hit["response"],
-                cached_citations=l1_hit.get("citations", []),
-                declined=False,
-                citations=l1_hit.get("citations", []),
-                chunks=[],
-                best_similarity=1.0,
-                similarity_gap=0.0,
-                canonical_query=canonical_query,
-                query_vector=[],  # no vector needed for L1 hit (already cached)
-                query_category=query_category,
-                top_k_used=top_k,
-            )
-        else:
-            logfire.info(
-                "L1 cache miss: query_hash={hash}",
-                hash=__import__("hashlib")
-                .sha256(canonical_query.strip().lower().encode())
-                .hexdigest()[:8],
-            )
-    except Exception as exc:
-        logfire.warn("L1 cache lookup failed: {err}", err=str(exc))
 
     # Embed query
     try:
@@ -511,7 +514,6 @@ async def answer_with_rag(
         )
 
     # ── Accepted — generate the answer from the accepted retrieval ────────────────────────
-    canonical_query = result.canonical_query
     query_vector = result.query_vector
     citations = result.citations
     # citations[i]["source_text"] is already "[sku] name\nprice_line\ndescription" (built by
@@ -583,6 +585,12 @@ async def answer_with_rag(
             chunks_after_compression=result.chunks_after_compression,
         )
 
+    # ── WP-V2-2 fragment-level citations (FR-011): attach the source sentence that
+    # best matches the accepted answer. Deterministic string matching, no LLM call.
+    from services.rag.fragments import annotate_fragments
+
+    citations = annotate_fragments(citations, answer_text)
+
     # model_trace write — best-effort, captures gap + guard + cost (FR-010)
     await _write_model_trace(
         db=db,
@@ -600,13 +608,34 @@ async def answer_with_rag(
     # Cache write — best-effort, never blocks the response (Article X.3). Only the FINAL
     # accepted query/answer is cached — intermediate rewrites are never cached (AC-2026-023)
     # since retrieve_with_retry only returns here on acceptance.
-    # CRITICAL: Use EMBED_MODEL (not chat model) so cache lookups match
+    # CRITICAL: Use EMBED_MODEL (not chat model) so cache lookups match.
+    # WP-V2-2: keyed on the RAW user query (not canonical_query) so the L1 raw-first
+    # lookup finds it — text keyed raw; the stored embedding stays the accepted
+    # retrieval's vector (rewritten query on a retry win), which only widens L2 recall.
+    # WP-V2-2 guard: llm_response is None means generation FAILED and answer_text is
+    # the fallback DECLINE_MESSAGE — caching it would replay a fake decline forever.
+    if llm_response is None:
+        logfire.warn("Generation failed — skipping cache write for fallback answer")
+        return RAGResult(
+            answer=answer_text,
+            declined=False,
+            citations=citations,
+            best_similarity=result.best_similarity,
+            similarity_gap=result.similarity_gap,
+            rrf_scores=result.rrf_scores,
+            query_category=result.query_category,
+            top_k_used=result.top_k_used,
+            model_used=model,
+            escalation_flag=False,
+            chunks_before_compression=result.chunks_before_compression,
+            chunks_after_compression=result.chunks_after_compression,
+        )
     try:
         from core.config import settings
 
         await set_cache(
             db=db,
-            query=canonical_query,
+            query=query,
             response=answer_text,
             embedding=query_vector,
             model_name=settings.EMBED_MODEL,

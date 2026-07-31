@@ -256,9 +256,12 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             response = DECLINE_MESSAGE
 
     # Write to cache after successful generation (best-effort) — never cache an
-    # answer the groundedness verdict rejected.
+    # answer the groundedness verdict rejected. WP-V2-2 guard: metrics is None
+    # means BOTH generation attempts failed and `response` is the error fallback —
+    # caching it would replay the failure forever.
     if (
         response
+        and metrics is not None
         and not grounded_declined
         and db
         and state.get("canonical_query")
@@ -402,6 +405,7 @@ async def _write_cache(state: AgentState, response: str, db: AsyncSession) -> No
     """Write answer to semantic cache (L1+L2) after successful LLM generation."""
     try:
         from core.config import settings
+        from services.rag.fragments import annotate_fragments
         from services.semantic_cache import set_cache
 
         citations_for_cache = []
@@ -411,6 +415,14 @@ async def _write_cache(state: AgentState, response: str, db: AsyncSession) -> No
             elif isinstance(c, dict):
                 citations_for_cache.append(c)
 
+        # WP-V2-2 (FR-011): cached citations carry fragment_text so cache hits
+        # replay fragment-level grounding.
+        citations_for_cache = annotate_fragments(citations_for_cache, response)
+
+        # Cache key stays canonical_query: in the graph path normalize is skipped
+        # (intent pre-classified), so canonical_query == the pronoun-EXPANDED query
+        # that get_l1_cache hashed — deterministic, and context-correct for pronoun
+        # queries ("nó giá bao nhiêu" must not be cached across products).
         await set_cache(
             db=db,
             query=state["canonical_query"],
