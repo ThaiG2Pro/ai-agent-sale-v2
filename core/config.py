@@ -130,6 +130,18 @@ class Settings(BaseSettings):
     HITL_ORDER_VALUE_NORM_CAP: float = Field(default=20_000_000.0, gt=0.0)
     # VND. Orders above this NEVER auto-approve regardless of risk score.
     HITL_HIGH_VALUE_ORDER_THRESHOLD: float = Field(default=5_000_000.0, gt=0.0)
+    # WP-V2-5: budget guard. DAILY_COST_LIMIT_USD > 0 → when today's summed
+    # model_traces cost reaches the limit, LLM calls are force-downgraded to
+    # light-chat (never blocked — availability first). 0 = off (default:
+    # local Ollama cost is 0, a limit only matters with cloud keys).
+    DAILY_COST_LIMIT_USD: float = Field(default=0.0, ge=0.0)
+    # WP-V2-5: per-customer daily LLM-call cap (anti single-customer spam
+    # burning the SME's cloud budget). Over cap → polite come-back-later
+    # message, no LLM call. 0 = off (default).
+    CUSTOMER_DAILY_MSG_CAP: int = Field(default=0, ge=0)
+    # WP-V2-5: route cheap intents (SMALLTALK) to LIGHT_CHAT_MODEL instead of
+    # economy-chat. False = kill switch (pre-V2-5 routing).
+    CHEAP_INTENT_LIGHT_ROUTING: bool = True
 
     # Week 4: HITL Configuration
     HITL_TIMEOUT_WARN_MIN: int = Field(default=30, ge=1)

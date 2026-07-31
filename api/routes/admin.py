@@ -4,9 +4,10 @@ What it does: Implements ingestion and search routes secured by X-Admin-Key.
 
 from __future__ import annotations
 
+from datetime import datetime  # noqa: TC003 - NEEDED: FastAPI Query annotation resolution
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import (
@@ -15,10 +16,15 @@ from sqlalchemy.ext.asyncio import (
 
 from api.dependencies import verify_admin_key
 from models.schema import Product, TextEmbedding
+from services.costs import GROUP_BY_CHOICES, cost_report
 from services.database import get_db
 from services.rag import ingest_product_text, search_products
 
 router = APIRouter(prefix="/admin/rag", tags=["admin"], dependencies=[Depends(verify_admin_key)])
+
+# WP-V2-5: cost dashboard lives under /admin (not /admin/rag) — ops surface,
+# not a RAG tool. Same admin-key gate.
+costs_router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(verify_admin_key)])
 
 
 class IngestRequest(BaseModel):
@@ -112,3 +118,39 @@ async def admin_stats(db: Annotated[AsyncSession, Depends(get_db)]) -> StatsResp
         total_embeddings=total_embeddings or 0,
         embedding_models=models_data,
     )
+
+
+@costs_router.get("/costs")
+async def admin_costs(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    date_from: Annotated[
+        datetime | None, Query(alias="from", description="ISO datetime, default: 7 days ago")
+    ] = None,
+    date_to: Annotated[
+        datetime | None, Query(alias="to", description="ISO datetime, default: now")
+    ] = None,
+    group_by: Annotated[str, Query(description="day | customer | model")] = "day",
+) -> dict[str, Any]:
+    """WP-V2-5 cost dashboard: aggregate model_traces so the SME can read real
+    spend (tokens, USD, latency p50/p95, cache hit-rate) with one curl.
+
+    `group_by=customer` keys on metadata->customer_id (traces written before
+    V2-5 lack it and land under "unknown").
+    """
+    if group_by not in GROUP_BY_CHOICES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"group_by must be one of {list(GROUP_BY_CHOICES)}",
+        )
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="'from' must be earlier than 'to'",
+        )
+    try:
+        return await cost_report(db, group_by=group_by, date_from=date_from, date_to=date_to)
+    except Exception as exc:  # pragma: no cover - defensive wrap, matches memory.py style
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Cost report failed",
+        ) from exc

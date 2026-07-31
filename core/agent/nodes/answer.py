@@ -18,6 +18,7 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
+import logfire
 from sqlalchemy import insert
 
 from core.agent.state import EscalationReasonEnum
@@ -25,6 +26,13 @@ from core.config import settings
 from models.schema import ModelTrace
 from services.ai import AIGateway, extract_llm_metrics
 from services.rag.constants import DECLINE_MESSAGE
+
+# WP-V2-5: returned instead of an LLM answer when CUSTOMER_DAILY_MSG_CAP is hit.
+CUSTOMER_CAP_MESSAGE = (
+    "Cảm ơn bạn đã quan tâm! Hôm nay shop đã nhận khá nhiều câu hỏi từ bạn nên "
+    "trợ lý cần tạm nghỉ. Bạn vui lòng quay lại vào ngày mai, hoặc để lại lời "
+    "nhắn — nhân viên của shop sẽ liên hệ hỗ trợ sớm nhất nhé! 🙏"
+)
 
 if TYPE_CHECKING:
     from langchain_core.runnables import RunnableConfig
@@ -125,6 +133,38 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     # Path 3: Accepted → call LLM with citations context
     model = state.get("model_used") or "economy-chat"
 
+    # ── WP-V2-5 budget guard: only this path spends LLM tokens. Both checks
+    # are no-ops at default config (limits = 0) and fail open on DB error.
+    from services.costs import check_budget
+
+    budget = await check_budget(state.get("customer_id"), db)
+    if budget.over_customer_cap:
+        await _write_model_trace(
+            state,
+            db=db,
+            metadata_={
+                "guard_decision": "CUSTOMER_CAP",
+                "declined": False,
+                "intended_model": "customer_cap",
+                "customer_calls_today": budget.customer_calls_today,
+            },
+        )
+        return {"response": CUSTOMER_CAP_MESSAGE, "model_used": None}
+
+    budget_downgrade = False
+    if budget.over_daily_budget and model != "light-chat":
+        logfire.warn(
+            "Daily cost limit reached ({cost} USD) — downgrading to light-chat",
+            cost=budget.daily_cost_usd,
+        )
+        model = "light-chat"
+        budget_downgrade = True
+
+    # WP-V2-5 routing tune: SMALLTALK has no retrieval context and needs no
+    # reasoning — the light tier answers it at a fraction of the cost.
+    if settings.CHEAP_INTENT_LIGHT_ROUTING and state.get("intent") == "SMALLTALK":
+        model = "light-chat"
+
     # Build context from retrieved chunks (use all chunks, not just first)
     chunks = state.get("retrieved_chunks", [])
     chunk_text = "\n\n".join(c.get("text", "") for c in chunks if c.get("text"))
@@ -199,7 +239,8 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     if (
         settings.CASCADE_VERIFY_ENABLED
         and settings.GROUNDEDNESS_CHECK_ENABLED
-        and model != "economy-chat"
+        and not budget_downgrade  # WP-V2-5: over budget → no premium reserve
+        and model not in ("economy-chat", "light-chat")
         and state.get("escalation_reason") == EscalationReasonEnum.INTENT_ESCALATION
         and state.get("intent") != "SMALLTALK"
     ):
@@ -279,6 +320,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         "escalation_flag": state.get("escalation_flag", False),
         "declined": grounded_declined,
         "intended_model": model,
+        "budget_downgrade": budget_downgrade,
         **(groundedness_meta or {}),
     }
     await _write_model_trace(state, db=db, metadata_=metadata_, metrics=metrics)
@@ -482,6 +524,15 @@ async def _write_model_trace(
         return
 
     try:
+        # WP-V2-5: stamp turn identity into the JSONB metadata so /admin/costs
+        # can group by customer and the daily cap can count per-customer calls
+        # (model_traces has no customer column — no migration needed this way).
+        metadata_ = {
+            **metadata_,
+            "customer_id": state.get("customer_id"),
+            "session_id": state.get("session_id"),
+            "intent": state.get("intent"),
+        }
         message_id = state.get("message_id")
         stmt = insert(ModelTrace).values(
             message_id=message_id,
