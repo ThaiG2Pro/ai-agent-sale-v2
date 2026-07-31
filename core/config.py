@@ -107,6 +107,29 @@ class Settings(BaseSettings):
     # queries in the graph retrieval node. False = regex COMPARISON split only
     # (pre-V2-3 behavior). On LLM error the regex split remains the fallback.
     QUERY_DECOMPOSITION_ENABLED: bool = True
+    # WP-V2-4: episodic memory — per-turn event log so time-referenced queries
+    # ("hôm qua", "lần trước") recall past consultations. False = kill switch
+    # (no writes, no retrieval — semantic memory only, pre-V2-4 behavior).
+    EPISODIC_MEMORY_ENABLED: bool = True
+    EPISODIC_RECENT_LIMIT: int = Field(default=5, ge=1, le=50)
+    # WP-V2-4: risk-score HITL tiers (anti approval-fatigue). False = kill
+    # switch (pre-V2-4 binary triggers: ORDER_PLACEMENT OR low confidence).
+    # risk = W_CONF*(1-confidence) + W_VALUE*order_value_norm + W_HISTORY*history
+    # Tier1 (risk < TIER1): auto-proceed. Tier2: interrupt (current behavior).
+    # Tier3 (risk >= TIER3): straight to support queue.
+    # SAFETY INVARIANT (hardcoded in hitl_guard): ORDER_PLACEMENT with order
+    # value > HIGH_VALUE threshold — or with MISSING order value — is always
+    # >= Tier2. Tuning these weights can never auto-approve a high-value order.
+    RISK_HITL_ENABLED: bool = True
+    HITL_RISK_W_CONF: float = Field(default=0.4, ge=0.0, le=1.0)
+    HITL_RISK_W_VALUE: float = Field(default=0.4, ge=0.0, le=1.0)
+    HITL_RISK_W_HISTORY: float = Field(default=0.2, ge=0.0, le=1.0)
+    HITL_RISK_TIER1_THRESHOLD: float = Field(default=0.35, gt=0.0, lt=1.0)
+    HITL_RISK_TIER3_THRESHOLD: float = Field(default=0.75, gt=0.0, le=1.0)
+    # VND. Order value / NORM_CAP (clamped to 1.0) is the order_value_norm term.
+    HITL_ORDER_VALUE_NORM_CAP: float = Field(default=20_000_000.0, gt=0.0)
+    # VND. Orders above this NEVER auto-approve regardless of risk score.
+    HITL_HIGH_VALUE_ORDER_THRESHOLD: float = Field(default=5_000_000.0, gt=0.0)
 
     # Week 4: HITL Configuration
     HITL_TIMEOUT_WARN_MIN: int = Field(default=30, ge=1)

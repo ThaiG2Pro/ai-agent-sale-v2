@@ -64,6 +64,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
                 "intended_model": "business_logic",
             },
         )
+        await _write_episodic_event(state, state["response"], db)
         return {}  # No additional updates needed
 
     # Path 1: Cache hit — use pre-generated answer, skip LLM entirely
@@ -81,6 +82,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
                 "intended_model": "cache",
             },
         )
+        await _write_episodic_event(state, cached_answer, db)
         return {
             "response": cached_answer,
             "model_used": "cache",
@@ -281,6 +283,11 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     }
     await _write_model_trace(state, db=db, metadata_=metadata_, metrics=metrics)
 
+    # WP-V2-4: record the episodic event for accepted answers only — declines
+    # carry no consultation content worth recalling.
+    if not grounded_declined:
+        await _write_episodic_event(state, response, db)
+
     return {
         "response": response,
         "model_used": model,
@@ -433,6 +440,28 @@ async def _write_cache(state: AgentState, response: str, db: AsyncSession) -> No
         )
     except Exception as exc:
         print(f"[CACHE_WRITE_FAIL] {exc}", file=sys.stderr)
+
+
+async def _write_episodic_event(state: AgentState, response: str | None, db) -> None:
+    """WP-V2-4: append this turn to the customer's episodic memory (best-effort).
+
+    Skips SMALLTALK (no consultation content) and turns without customer/db.
+    The service handles the EPISODIC_MEMORY_ENABLED kill switch and never raises.
+    """
+    customer_id = state.get("customer_id")
+    if not db or not customer_id or state.get("intent") == "SMALLTALK":
+        return
+    from services.memory.episodic import EpisodicMemoryService
+
+    await EpisodicMemoryService().record_event(
+        customer_id=customer_id,
+        thread_id=state.get("session_id", ""),
+        user_message=state.get("user_message", ""),
+        response=response,
+        intent=state.get("intent"),
+        citations=state.get("citations"),
+        db=db,
+    )
 
 
 async def _write_model_trace(

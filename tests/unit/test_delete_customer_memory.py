@@ -20,6 +20,7 @@ ALL_DELETED_TABLES = {
     "sales_intent_logs",
     "conversation_summaries",
     "semantic_memory",
+    "episodic_events",  # WP-V2-4: episodic layer must be RTBF-cleaned too
     "checkpoints",
     "checkpoint_writes",
     "checkpoint_blobs",
@@ -125,10 +126,11 @@ async def test_delete_accepts_telegram_style_ids():
 
 @pytest.mark.asyncio
 async def test_delete_successful_cascade():
-    """T145: DELETE with confirm=true → cascade delete across ALL 7 tables.
+    """T145: DELETE with confirm=true → cascade delete across ALL 8 tables.
 
     intent_tracking, sales_intent_logs, conversation_summaries,
-    semantic_memory + the 3 LangGraph checkpoint tables.
+    semantic_memory, episodic_events (WP-V2-4) + the 3 LangGraph
+    checkpoint tables.
     """
     from api.routes.memory import delete_customer_memory
 

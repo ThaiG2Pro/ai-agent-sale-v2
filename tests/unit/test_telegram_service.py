@@ -133,9 +133,7 @@ async def test_send_telegram_message_retry_on_failure(respx_mock, monkeypatch):
     chat_id = 123456789
     text = "Test message"
 
-    monkeypatch.setattr(
-        "services.telegram_service.asyncio.sleep", AsyncMock(return_value=None)
-    )
+    monkeypatch.setattr("services.telegram_service.asyncio.sleep", AsyncMock(return_value=None))
 
     # First two attempts fail, third succeeds
     respx_mock.post(url__regex=r"https://api\.telegram\.org/bot.*/sendMessage").mock(

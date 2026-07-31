@@ -33,7 +33,11 @@ async def test_ai_gateway_embed_offline(monkeypatch):
     """
     Why this exists: Verifies embedding extraction + dimension validation
     (Article XII) with the router mocked out.
+
+    EMBED_MODEL is pinned to a non-"local/" value: the local prefix routes to
+    in-process fastembed and would bypass the router seam under test.
     """
+    monkeypatch.setattr(settings, "EMBED_MODEL", "ollama/bge-m3")
     mock_aembedding = AsyncMock(return_value=_embedding_response(settings.EMBED_DIMENSION))
     monkeypatch.setattr("services.ai.ai_router.aembedding", mock_aembedding)
 
@@ -53,6 +57,7 @@ async def test_ai_gateway_embed_dimension_mismatch_raises(monkeypatch):
     Why this exists: A wrong embedding dimension is a config error (model
     mismatch) and must fail loudly, never be stored.
     """
+    monkeypatch.setattr(settings, "EMBED_MODEL", "ollama/bge-m3")
     mock_aembedding = AsyncMock(return_value=_embedding_response(settings.EMBED_DIMENSION + 1))
     monkeypatch.setattr("services.ai.ai_router.aembedding", mock_aembedding)
 

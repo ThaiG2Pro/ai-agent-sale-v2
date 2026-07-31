@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import aliased
 
-from models.schema import IntentTracking, SalesIntentLog
+from models.schema import EpisodicEvent, IntentTracking, SalesIntentLog
 from services.database import get_db
 from services.memory.intent_tracker import (
     CustomerNotFoundError,
@@ -84,6 +84,27 @@ class SemanticMemoryResponse(BaseModel):
     results: list[SemanticMemoryResult] = Field(
         default_factory=list, description="Top-K semantic memory results"
     )
+
+
+class EpisodicEventResponse(BaseModel):
+    """Single episodic event (WP-V2-4)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    thread_id: str
+    user_message: str
+    response_summary: str | None = None
+    intent: str | None = None
+    products: list[dict] = Field(default_factory=list)
+    created_at: str
+
+
+class EpisodicEventsResponse(BaseModel):
+    """Response schema for the episodic memory endpoint (WP-V2-4)."""
+
+    customer_id: str
+    events: list[EpisodicEventResponse] = Field(default_factory=list)
 
 
 # === Helpers ===
@@ -432,6 +453,54 @@ async def get_semantic_memory(
         raise HTTPException(status_code=500, detail="Semantic memory retrieval failed") from e
 
 
+@router.get("/episodic/{customer_id}", response_model=EpisodicEventsResponse)
+async def get_episodic_events(
+    customer_id: str,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    db: Annotated[AsyncSession, Depends(get_db)] = None,
+    _admin: Annotated[bool, Depends(require_admin_key)] = True,
+) -> EpisodicEventsResponse:
+    """Newest-first episodic events for one customer (WP-V2-4, admin-only).
+
+    Strict customer_id scoping — the query filters on the path param only,
+    so no cross-customer leakage is possible.
+    """
+    if not customer_id or not customer_id.strip():
+        raise HTTPException(status_code=400, detail="Invalid customer_id format")
+
+    try:
+        from services.memory.episodic import EpisodicMemoryService
+
+        events = await EpisodicMemoryService().recent_events(
+            customer_id=customer_id, db=db, limit=limit
+        )
+        return EpisodicEventsResponse(
+            customer_id=customer_id,
+            events=[
+                EpisodicEventResponse(
+                    id=str(e.id),
+                    thread_id=e.thread_id,
+                    user_message=e.user_message,
+                    response_summary=e.response_summary,
+                    intent=e.intent,
+                    products=e.products or [],
+                    created_at=e.created_at.isoformat() if e.created_at else "",
+                )
+                for e in events
+            ],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).error(
+            "Episodic memory retrieval failed",
+            extra={"customer_id": customer_id, "error": str(e)},
+        )
+        raise HTTPException(status_code=500, detail="Episodic memory retrieval failed") from e
+
+
 @router.delete("/customer/{customer_id}")
 async def delete_customer_memory(
     customer_id: str,
@@ -443,7 +512,8 @@ async def delete_customer_memory(
 
     Cascade delete across ALL tables holding customer data:
     semantic_memory → conversation_summaries → sales_intent_logs →
-    intent_tracking, plus the LangGraph checkpoint tables (checkpoints,
+    intent_tracking → episodic_events (WP-V2-4), plus the LangGraph checkpoint
+    tables (checkpoints,
     checkpoint_writes, checkpoint_blobs) for every thread_id seen for this
     customer (P0-2: previous version left sales_intent_logs + checkpoints).
 
@@ -488,7 +558,7 @@ async def delete_customer_memory(
         # Collect the customer's LangGraph thread_ids BEFORE deleting the rows
         # that record them.
         thread_ids: set[str] = set()
-        for model in (IntentTracking, ConversationSummary, SalesIntentLog):
+        for model in (IntentTracking, ConversationSummary, SalesIntentLog, EpisodicEvent):
             result = await db.execute(
                 select(model.thread_id).where(model.customer_id == customer_id)
             )
@@ -502,6 +572,7 @@ async def delete_customer_memory(
             ("conversation_summaries", ConversationSummary),
             ("sales_intent_logs", SalesIntentLog),
             ("intent_tracking", IntentTracking),
+            ("episodic_events", EpisodicEvent),  # WP-V2-4: episodic layer in RTBF
         ):
             result = await db.execute(delete(model).where(model.customer_id == customer_id))
             deleted_counts[name] = result.rowcount or 0

@@ -346,6 +346,35 @@ class IntentTracking(Base):
     )
 
 
+# WP-V2-4: Episodic memory — append-only per-turn event log
+
+
+class EpisodicEvent(Base):
+    """Why this exists: Time-stamped record of each consultation turn so the agent
+    can answer references to past conversations ("cái máy hôm qua em tư vấn ấy").
+    What it does: Append-only rows written from answer_node; read newest-first by
+    memory_retrieval_node for time-referenced queries. Strictly customer_id-scoped;
+    deleted by the RTBF cascade (WP-V2-4).
+    """
+
+    __tablename__ = "episodic_events"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        Index("idx_episodic_events_customer_created", "customer_id", "created_at"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    customer_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    user_message: Mapped[str] = mapped_column(Text, nullable=False)
+    response_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    intent: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    products: Mapped[list] = mapped_column(JSONB, default=list)  # [{name, sku}] mentioned
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+
+
 # Week 4: HITL & Order Models
 
 

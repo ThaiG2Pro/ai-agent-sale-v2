@@ -109,6 +109,38 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
             },
         )
 
+        # WP-V2-4: time-referenced queries ("hôm qua", "lần trước") also pull the
+        # customer's most recent episodic events — the semantic summaries alone
+        # cannot resolve "cái máy hôm qua em tư vấn ấy". Best-effort: an episodic
+        # failure must never break the semantic path.
+        try:
+            from services.memory.episodic import (
+                EpisodicMemoryService,
+                format_event_line,
+                has_time_reference,
+            )
+
+            if settings.EPISODIC_MEMORY_ENABLED and has_time_reference(user_message):
+                events = await EpisodicMemoryService().recent_events(
+                    customer_id=customer_id, db=db
+                )
+                for event in events:
+                    memory_context.append(
+                        {
+                            "summary_text": format_event_line(event),
+                            "thread_id": event.thread_id,
+                            "source": "episodic",
+                        }
+                    )
+                    # Recency-selected, not similarity-scored — keep score lists aligned.
+                    scores.append(1.0)
+                logger.debug(
+                    "Episodic memory retrieved",
+                    extra={"customer_id": customer_id, "events_count": len(events)},
+                )
+        except Exception:
+            logger.error("Episodic memory retrieval failed", exc_info=True)
+
         update_dict = {"memory_context": memory_context, "memory_retrieval_scores": scores}
         if memory_context:
             # Past cross-session memory retrieved — allow answer_node to process context
