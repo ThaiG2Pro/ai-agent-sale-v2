@@ -84,6 +84,22 @@ class Citation(BaseModel):
     model_config = ConfigDict(strict=True)
 
 
+class ClarifyingQuestion(BaseModel):
+    """One clarifying question for a borderline query (WP-V2-3, clarify loop)."""
+
+    question: str = Field(min_length=1, max_length=500)
+
+    model_config = ConfigDict(strict=True)
+
+
+class DecomposedQuery(BaseModel):
+    """LLM query decomposition output (WP-V2-3). Capped to 3 sub-queries by caller."""
+
+    sub_queries: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(strict=True)
+
+
 class IntentClassification(BaseModel):
     """Intent classification output with multi-intent support (FR-005, FR-007)."""
 
@@ -190,6 +206,11 @@ class AgentState(TypedDict):
     memory_retrieval_scores: list[float]  # Cosine similarity scores for each retrieved summary
     thread_summary_exists: bool  # True if a summary exists for this session_id
     sales_intent_skipped: bool  # True if intent extraction was skipped (low-signal turn)
+    # WP-V2-3: clarify loop fields
+    needs_clarification: bool  # per-turn: confidence_node routes to clarify_node
+    awaiting_clarification: bool  # cross-turn: a clarifying question is pending
+    clarify_original_query: str | None  # cross-turn: query that triggered the clarify
+    clarify_count: int  # cross-turn: clarifies spent on the current original query (max 1)
 
 
 class NodeStreamEvent(BaseModel):
@@ -258,4 +279,10 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
         "memory_retrieval_scores": [],
         "thread_summary_exists": False,
         "sales_intent_skipped": False,
+        # WP-V2-3: needs_clarification is per-turn → reset every invoke.
+        # awaiting_clarification / clarify_original_query / clarify_count are
+        # deliberately NOT set here: input keys overwrite checkpointer channels,
+        # so including them would wipe the pending-clarify state between turns.
+        # Nodes read them with state.get(...) defaults (missing on turn 1).
+        "needs_clarification": False,
     }

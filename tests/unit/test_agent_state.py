@@ -111,6 +111,11 @@ def test_agent_state_fields_complete():
         "memory_retrieval_scores",
         "thread_summary_exists",
         "sales_intent_skipped",
+        # WP-V2-3 clarify loop fields
+        "needs_clarification",
+        "awaiting_clarification",
+        "clarify_original_query",
+        "clarify_count",
     }
     actual_fields = set(AgentState.__annotations__.keys())
     assert required_fields == actual_fields, (

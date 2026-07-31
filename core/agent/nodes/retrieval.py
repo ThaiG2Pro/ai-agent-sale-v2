@@ -9,6 +9,8 @@ Does NOT call LLM — answer generation happens in answer_node only.
 Enhancements (2026):
 - SC09 fix: Expand short/pronoun queries using previous turn's citations
 - SC10 fix: COMPARISON intent → split by "và/vs" and merge sub-query results
+- WP-V2-3: clarify-reply merge (awaiting_clarification turn) + LLM query
+  decomposition for declined multi-intent queries (regex split kept as fallback)
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ import re
 from typing import TYPE_CHECKING
 
 from core.agent.tools import make_retrieval_tool
+from core.config import settings
 
 if TYPE_CHECKING:
     from langchain_core.runnables import RunnableConfig
@@ -37,6 +40,54 @@ _COMPARISON_SPLIT_RE = re.compile(
     r"\s+(?:và|vs\.?|versus|với|hay|hoặc)\s+",
     re.IGNORECASE | re.UNICODE,
 )
+
+# WP-V2-3: intents whose declined queries are worth an LLM decomposition pass
+# (multi-intent like "giá X và còn hàng không", not just COMPARISON)
+_DECOMPOSABLE_INTENTS = {"COMPARISON", "INFO_QUERY", "PRICING", "AVAILABILITY"}
+
+# Decomposition hard cap — more sub-queries than this is LLM noise, not intent
+_MAX_SUB_QUERIES = 3
+
+
+async def _decompose_query(query: str) -> list[str] | None:
+    """WP-V2-3: LLM query decomposition (economy model, Pydantic-validated).
+
+    Returns 2..3 self-contained sub-queries, or None when the LLM call fails /
+    returns malformed output / finds nothing to split (single-intent query).
+    Callers fall back to the COMPARISON regex split on None.
+    """
+    from core.agent.state import DecomposedQuery
+    from services.ai import AIGateway
+
+    system_prompt = (
+        "You split a Vietnamese/English e-commerce customer query into independent "
+        "sub-queries. Each sub-query must be self-contained (keep the full product "
+        "name in every sub-query it concerns) and answerable alone against a product "
+        "catalog. Split ONLY genuinely separate intents or separate products "
+        "(e.g. 'Giá Galaxy A55 và còn hàng không?' → "
+        "['Giá Galaxy A55', 'Galaxy A55 còn hàng không']). "
+        "If the query is a single intent about a single product, return it as the "
+        "only sub-query. Return at most 3 sub-queries. "
+        "Respond ONLY with valid JSON matching the schema."
+    )
+    try:
+        result = await AIGateway.complete(
+            model="economy-chat",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query},
+            ],
+            response_format=DecomposedQuery,
+        )
+        decomposed = DecomposedQuery.model_validate_json(result.choices[0].message.content)
+    except Exception as e:
+        logger.warning("Query decomposition LLM call failed for %r: %s", query, e)
+        return None
+
+    parts = [q.strip() for q in decomposed.sub_queries[:_MAX_SUB_QUERIES] if q and q.strip()]
+    if len(parts) < 2:
+        return None
+    return parts
 
 
 def _expand_pronoun_query(query: str, state: AgentState) -> str:
@@ -125,6 +176,18 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
     intent = state.get("intent")
     raw_query = state["user_message"]
 
+    # WP-V2-3: clarify-reply turn — merge the customer's reply into the stored
+    # original query and clear the pending flag. clarify_count stays at 1 so a
+    # still-borderline merged query declines instead of clarifying again.
+    clarify_updates: dict = {}
+    if state.get("awaiting_clarification") and state.get("clarify_original_query"):
+        raw_query = f"{state['clarify_original_query']} {raw_query}"
+        clarify_updates = {"awaiting_clarification": False, "clarify_original_query": None}
+        logger.info("Clarify merge → %r", raw_query)
+    elif int(state.get("clarify_count") or 0):
+        # Fresh query (no pending clarify) → the 1-clarify budget resets
+        clarify_updates = {"clarify_count": 0}
+
     # SC09: expand pronoun queries with previous citation context
     query = _expand_pronoun_query(raw_query, state)
 
@@ -142,61 +205,86 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
             "cached_answer": None,
             "canonical_query": None,
             "query_vector": None,
+            **clarify_updates,
         }
 
-    # SC10: COMPARISON fallback — split query and merge sub-results when main fails
-    if result.declined and intent == "COMPARISON":
-        parts = _COMPARISON_SPLIT_RE.split(query)
-        # Strip stop words left/right of the product names
-        parts = [p.strip() for p in parts if p.strip()]
-        if len(parts) >= 2:
-            logger.info("COMPARISON split fallback: %d sub-queries from %r", len(parts), query)
-            merged_citations: list[dict] = []
-            best_sim = 0.0
-            last_result = result  # fallback if all sub-queries also fail
+    # WP-V2-3 / SC10: declined multi-intent or comparison query → decompose with
+    # the LLM (kill switch: QUERY_DECOMPOSITION_ENABLED), search each sub-query
+    # and merge. The old COMPARISON regex split remains the fallback when the
+    # LLM call fails or the switch is off.
+    if result.declined and intent in _DECOMPOSABLE_INTENTS:
+        parts: list[str] | None = None
+        if settings.QUERY_DECOMPOSITION_ENABLED:
+            parts = await _decompose_query(query)
+            if parts:
+                logger.info("LLM decomposition: %d sub-queries from %r", len(parts), query)
+        if parts is None and intent == "COMPARISON":
+            regex_parts = [p.strip() for p in _COMPARISON_SPLIT_RE.split(query) if p.strip()]
+            if len(regex_parts) >= 2:
+                logger.info(
+                    "COMPARISON split fallback: %d sub-queries from %r", len(regex_parts), query
+                )
+                parts = regex_parts
+        if parts:
+            merged = await _merge_subquery_results(db, parts)
+            if merged is not None:
+                return {**merged, **clarify_updates}
 
-            from services.rag.pipeline import search_and_retrieve
+    return {**_build_result_dict(result, None), **clarify_updates}
 
-            for part in parts:
-                try:
-                    sub = await search_and_retrieve(db, part, intent="INFO_QUERY")
-                    if not sub.declined:
-                        # Deduplicate by chunk_id
-                        existing_ids = {c["chunk_id"] for c in merged_citations}
-                        for c in sub.citations:
-                            if c["chunk_id"] not in existing_ids:
-                                merged_citations.append(c)
-                                existing_ids.add(c["chunk_id"])
-                        best_sim = max(best_sim, sub.best_similarity)
-                        last_result = sub
-                except Exception as exc:
-                    logger.warning("COMPARISON sub-query failed for %r: %s", part, exc)
 
-            if merged_citations:
-                from core.agent.state import Citation
+async def _merge_subquery_results(db, parts: list[str]) -> dict | None:
+    """Search each sub-query and merge citations (dedup by chunk_id).
 
-                retrieved_chunks = [
-                    {
-                        "product_id": c["product_id"],
-                        "chunk_id": c["chunk_id"],
-                        "text": c["source_text"],
-                    }
-                    for c in merged_citations
-                ]
-                citations = []
-                for c in merged_citations:
-                    try:
-                        citations.append(Citation(**c))
-                    except Exception:
-                        pass
-                return {
-                    "retrieved_chunks": retrieved_chunks,
-                    "citations": citations,
-                    "similarity_score": best_sim,
-                    "declined": False,
-                    "cached_answer": None,
-                    "canonical_query": last_result.canonical_query,
-                    "query_vector": last_result.query_vector,
-                }
+    Returns a state-update dict, or None when every sub-query also declined
+    (caller falls through to the original declined result).
+    """
+    from services.rag.pipeline import search_and_retrieve
 
-    return _build_result_dict(result, None)
+    merged_citations: list[dict] = []
+    best_sim = 0.0
+    last_result = None
+
+    for part in parts:
+        try:
+            sub = await search_and_retrieve(db, part, intent="INFO_QUERY")
+            if not sub.declined:
+                # Deduplicate by chunk_id
+                existing_ids = {c["chunk_id"] for c in merged_citations}
+                for c in sub.citations:
+                    if c["chunk_id"] not in existing_ids:
+                        merged_citations.append(c)
+                        existing_ids.add(c["chunk_id"])
+                best_sim = max(best_sim, sub.best_similarity)
+                last_result = sub
+        except Exception as exc:
+            logger.warning("Sub-query retrieval failed for %r: %s", part, exc)
+
+    if not merged_citations or last_result is None:
+        return None
+
+    from core.agent.state import Citation
+
+    retrieved_chunks = [
+        {
+            "product_id": c["product_id"],
+            "chunk_id": c["chunk_id"],
+            "text": c["source_text"],
+        }
+        for c in merged_citations
+    ]
+    citations = []
+    for c in merged_citations:
+        try:
+            citations.append(Citation(**c))
+        except Exception:
+            pass
+    return {
+        "retrieved_chunks": retrieved_chunks,
+        "citations": citations,
+        "similarity_score": best_sim,
+        "declined": False,
+        "cached_answer": None,
+        "canonical_query": last_result.canonical_query,
+        "query_vector": last_result.query_vector,
+    }

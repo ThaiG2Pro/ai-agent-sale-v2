@@ -98,6 +98,15 @@ class Settings(BaseSettings):
     # PREMIUM_MODEL only when the groundedness verdict fails. False = old
     # behavior (premium directly).
     CASCADE_VERIFY_ENABLED: bool = True
+    # WP-V2-3: borderline queries (passed L1 but fused < AGENT_CONFIDENCE_THRESHOLD)
+    # get ONE clarifying question instead of a decline. False = kill switch
+    # (old decline behavior). Max 1 clarify per original query is hardcoded —
+    # the second borderline pass declines as before.
+    CLARIFY_ENABLED: bool = True
+    # WP-V2-3: LLM query decomposition for declined multi-intent/comparison
+    # queries in the graph retrieval node. False = regex COMPARISON split only
+    # (pre-V2-3 behavior). On LLM error the regex split remains the fallback.
+    QUERY_DECOMPOSITION_ENABLED: bool = True
 
     # Week 4: HITL Configuration
     HITL_TIMEOUT_WARN_MIN: int = Field(default=30, ge=1)

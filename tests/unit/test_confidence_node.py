@@ -83,7 +83,9 @@ async def test_confidence_node_layer2_threshold(mock_config):
     """Test Layer 2 threshold in confidence_node.
 
     Given: similarity=0.60, rerank=None, no previous decline
-    Expected: confidence_score=0.60, but declined=True (below 0.70 threshold)
+    Expected: confidence_score=0.60, below 0.70 threshold. WP-V2-3: instead of
+    an immediate decline the first borderline pass asks a clarifying question
+    (needs_clarification=True); with the clarify budget spent it declines.
     """
     state = make_initial_state("Test query", "session-004", "cust_001")
     state["similarity_score"] = 0.60
@@ -93,7 +95,14 @@ async def test_confidence_node_layer2_threshold(mock_config):
     result = await confidence_node(state, mock_config)
 
     assert result["confidence_score"] == 0.60
-    assert result["declined"] is True  # Below AGENT_CONFIDENCE_THRESHOLD
+    assert result["declined"] is False
+    assert result["needs_clarification"] is True
+
+    # Clarify budget spent → Layer 2 declines as pre-V2-3
+    state["clarify_count"] = 1
+    result = await confidence_node(state, mock_config)
+    assert result["declined"] is True
+    assert result["needs_clarification"] is False
 
 
 def test_route_after_confidence_info_query_borderline():
@@ -163,11 +172,16 @@ def test_route_after_confidence_info_query_high_confidence():
 
 @pytest.mark.asyncio
 async def test_confidence_node_layer2_guard_fires(mock_config):
-    """T073: Layer 2 guard fires for similarity=0.55 (below 0.70 threshold)."""
+    """T073: Layer 2 guard fires for similarity=0.55 (below 0.70 threshold).
+
+    WP-V2-3: the guard now asks one clarifying question first; the decline
+    fires once the clarify budget is spent (or CLARIFY_ENABLED=False).
+    """
     state = make_initial_state("Test query", "session-009", "cust_001")
     state["similarity_score"] = 0.55
     state["rerank_score"] = None
     state["declined"] = False
+    state["clarify_count"] = 1  # clarify budget spent → pre-V2-3 decline path
 
     result = await confidence_node(state, mock_config)
 

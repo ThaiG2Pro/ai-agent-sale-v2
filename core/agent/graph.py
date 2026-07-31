@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 from core.agent.nodes.answer import answer_node
 from core.agent.nodes.cancellation import cancellation_node
+from core.agent.nodes.clarify import clarify_node
 from core.agent.nodes.confidence import _route_after_confidence, confidence_node
 from core.agent.nodes.customer_support import customer_support_node
 from core.agent.nodes.escalation import escalation_node
@@ -37,6 +38,7 @@ GRAPH_NODES = {
     "retrieval_node",
     "memory_retrieval_node",
     "confidence_node",
+    "clarify_node",
     "escalation_node",
     "answer_node",
     "hitl_guard_node",
@@ -48,7 +50,8 @@ GRAPH_NODES = {
 }
 
 # Week 5: Graph schema version for checkpoint compatibility (FR-018)
-GRAPH_SCHEMA_VERSION = "005"
+# 006: WP-V2-3 adds clarify_node + clarify state channels
+GRAPH_SCHEMA_VERSION = "006"
 
 # Article X: max 5 turns per conversation. One turn traverses at most ~4 graph
 # super-steps (router → retrieval → memory → confidence → escalation/hitl → answer),
@@ -101,6 +104,7 @@ def build_graph(checkpointer=None):
     builder.add_node("retrieval_node", retrieval_node)
     builder.add_node("memory_retrieval_node", memory_retrieval_node)
     builder.add_node("confidence_node", confidence_node)
+    builder.add_node("clarify_node", clarify_node)
     builder.add_node("escalation_node", escalation_node)
     builder.add_node("answer_node", answer_node)
     builder.add_node("hitl_guard_node", hitl_guard_node)
@@ -141,11 +145,16 @@ def build_graph(checkpointer=None):
             "escalation_node": "escalation_node",
             "hitl_guard_node": "hitl_guard_node",
             "answer_node": "answer_node",
+            "clarify_node": "clarify_node",
         },
     )
 
     # escalation_node → answer_node
     builder.add_edge("escalation_node", "answer_node")
+
+    # WP-V2-3: clarify_node → answer_node (universal trace point traces the
+    # clarifying question via Path 0, then END)
+    builder.add_edge("clarify_node", "answer_node")
 
     # HITL graph pathways
     # These nodes return Command(goto=...) directly, so no static edges are needed.

@@ -91,9 +91,24 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     if intent in _borderline_answer_intents and is_declined:
         is_declined = False  # escalation_node decides model, answer_node generates
 
+    # WP-V2-3 clarify loop: a Layer 2 decline (passed L1, low fused score) gets
+    # ONE clarifying question instead. ORDER_PLACEMENT keeps its HITL path.
+    # clarify_count >= 1 → the merged retry was still borderline → decline as
+    # before (anti-loop). Kill switch: CLARIFY_ENABLED=False = old behavior.
+    needs_clarification = False
+    if (
+        is_declined
+        and settings.CLARIFY_ENABLED
+        and intent != "ORDER_PLACEMENT"
+        and int(state.get("clarify_count") or 0) < 1
+    ):
+        needs_clarification = True
+        is_declined = False
+
     result: dict = {
         "confidence_score": fused,
         "declined": is_declined,
+        "needs_clarification": needs_clarification,
     }
 
     # For ORDER_PLACEMENT: extract order_info from the top citation so it lands
@@ -143,6 +158,12 @@ def _route_after_confidence(state: AgentState) -> str:
     # Week 4: Always route ORDER_PLACEMENT through the HITL guard
     if intent == "ORDER_PLACEMENT":
         return "hitl_guard_node"
+
+    # WP-V2-3: confidence_node flagged a borderline query → ask ONE clarifying
+    # question instead of declining (confidence_node never sets this for
+    # ORDER_PLACEMENT or when CLARIFY_ENABLED is off).
+    if state.get("needs_clarification"):
+        return "clarify_node"
 
     # INFO_QUERY, PRICING, AVAILABILITY, COMPARISON borderline: Layer 1 didn't fire but below
     # Layer 2 threshold → route to escalation_node (which selects premium vs economy)
