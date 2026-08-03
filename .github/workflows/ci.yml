@@ -23,6 +23,10 @@ on:
 
 env:
   UV_LOCKED: "1" # every `uv run/sync` respects uv.lock exactly
+  # Pin the interpreter: on an unpinned runner uv picks the newest Python
+  # (3.14+), where lxml 5.4.0 has no wheel → source build → fails without
+  # libxml2/libxslt headers. Dev machines run 3.13; CI must match.
+  UV_PYTHON: "3.13"
 
 jobs:
   lint:
