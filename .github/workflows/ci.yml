@@ -61,7 +61,14 @@ jobs:
       DB_PORT: "5432"
       DB_USER: user
       DB_PASSWORD: password
-      # No .env in CI — all other Settings fields have safe dev defaults.
+      # No .env in CI — other Settings fields have safe dev defaults, EXCEPT the
+      # two Telegram fields whose defaults fail their own min_length validators
+      # (Settings() raises at import without these). Obvious dummies, not secrets.
+      TELEGRAM_BOT_TOKEN: ci-dummy-telegram-bot-token-not-real-000
+      # Must match the dev secret hardcoded in the webhook tests
+      # (tests/performance/test_telegram_webhook_response_time.py) — a committed
+      # dev-only value, not a real credential.
+      TELEGRAM_WEBHOOK_SECRET: dev_test_secret_min_20_chars_12345678
       # tests/conftest.py force-overrides DB_NAME to ai_agent_test, creates that
       # database itself, and applies Alembic migrations before the first test.
     steps:
@@ -95,6 +102,9 @@ jobs:
       DB_USER: user
       DB_PASSWORD: password
       DB_NAME: ai_agent
+      # Same import-time Settings requirement as the unit job — dummies, not secrets.
+      TELEGRAM_BOT_TOKEN: ci-dummy-telegram-bot-token-not-real-000
+      TELEGRAM_WEBHOOK_SECRET: ci-dummy-webhook-secret-not-real
       # Embeddings run in-process (fastembed ONNX CPU) — the ONLY model call in
       # Tier-R. Chat models point at nothing on purpose: demo_seed's LLM keyword/
       # metadata extraction fails fast (connection refused) and falls back

@@ -15,6 +15,7 @@ from httpx import ASGITransport, AsyncClient
 from api.main import app
 
 
+@pytest.mark.performance
 @pytest.mark.asyncio
 async def test_webhook_response_time_under_200ms():
     """Verify webhook returns 200 OK within 200ms."""
