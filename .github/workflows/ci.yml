@@ -1,0 +1,128 @@
+# Why this exists: WP-V3-0 — nothing blocked a broken commit from landing on main;
+# lint/test/eval only ran locally via a voluntary pre-commit hook.
+# What it does: 3 SEQUENTIAL jobs ordered by cost (fail fast, cheap first):
+#   lint → unit (real Postgres+pgvector, LLM fully mocked) → eval-tier-r
+# (retrieval-only recall gate: fastembed ONNX on CPU — NO LLM API key anywhere,
+# per the project's Zero-Cost-First principle).
+#
+# Deliberately NOT in CI (run manually / nightly later):
+#   - `-m integration` suite      — needs a real chat LLM (Groq key / Ollama)
+#   - Tier-F eval                 — needs a chat LLM AND V3-3 must stabilize the
+#                                   multi-intent flakiness first (TODO → WP-V3-3
+#                                   adds it as a nightly workflow with GROQ_API_KEY)
+#   - `-m performance` benchmarks — test_search_latency_10k is flaky on weak/loaded
+#                                   runners (measured 2026-08-03)
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  UV_LOCKED: "1" # every `uv run/sync` respects uv.lock exactly
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  unit:
+    needs: lint
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: ai_agent
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: user
+      DB_PASSWORD: password
+      # No .env in CI — all other Settings fields have safe dev defaults.
+      # tests/conftest.py force-overrides DB_NAME to ai_agent_test, creates that
+      # database itself, and applies Alembic migrations before the first test.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      - name: Unit tests (LLM mocked, real Postgres)
+        run: uv run pytest -q -m "not integration and not performance"
+
+  eval-tier-r:
+    needs: unit
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: ai_agent
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: user
+      DB_PASSWORD: password
+      DB_NAME: ai_agent
+      # Embeddings run in-process (fastembed ONNX CPU) — the ONLY model call in
+      # Tier-R. Chat models point at nothing on purpose: demo_seed's LLM keyword/
+      # metadata extraction fails fast (connection refused) and falls back
+      # gracefully; hybrid search FTS ranks on name+description, not keywords.
+      EMBED_MODEL: local/multilingual-e5-large
+      FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Cache fastembed ONNX model (~2 GB, download once)
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-multilingual-e5-large-v1
+      - run: uv sync
+      - name: Enable pgvector extension
+        # Migrations create `unaccent` themselves but assume `vector` already
+        # exists (dev DBs get it from conftest/compose init).
+        run: |
+          uv run python -c "
+          import asyncio, asyncpg
+          async def main():
+              conn = await asyncpg.connect('postgresql://user:password@localhost:5432/ai_agent')
+              await conn.execute('CREATE EXTENSION IF NOT EXISTS vector')
+              await conn.close()
+          asyncio.run(main())
+          "
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+      - name: Seed catalog (embeddings via fastembed, no chat LLM)
+        run: uv run python scripts/demo_seed.py --limit 27
+      - name: Tier-R retrieval gate (recall@k vs committed baseline)
+        run: ./scripts/eval_gate.sh --tier r --rerun

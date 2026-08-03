@@ -32,6 +32,7 @@ async def benchmark_db():
     await engine.dispose()
 
 
+@pytest.mark.performance
 @pytest.mark.asyncio
 async def test_search_latency_10k(benchmark_db: AsyncSession):
     """

@@ -104,6 +104,10 @@ pythonpath = ["."]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+markers = [
+    "integration: needs real Postgres + an LLM backend — excluded from CI unit job",
+    "performance: latency benchmarks, flaky on weak/loaded machines — excluded from CI",
+]
 # DB_NAME is force-overridden to "ai_agent_test" by tests/conftest.py at
 # module-load time, before any application code is imported.  This means
 # every Settings() instantiation during a test run uses the isolated test

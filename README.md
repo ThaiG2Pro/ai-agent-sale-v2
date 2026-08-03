@@ -62,3 +62,40 @@ To run the system locally with AI capabilities (via Ollama), the following minim
 Notes:
 - These commands use `uv` (the project's task runner). Ensure you have the environment set up and `uv` installed.
 - The `check` action runs `ruff check`, `ruff format --check` and `uv sync --dry-run` to validate environment rules for `uv sync`.
+
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on every push/PR to `main`, three sequential jobs
+ordered by cost (fail fast, cheap first):
+
+1. **lint** — `ruff check` + `ruff format --check`.
+2. **unit** — `pytest -m "not integration and not performance"` against a real
+   Postgres 17 + pgvector service container (LLM calls are fully mocked).
+3. **eval-tier-r** — seeds the demo catalog and runs the retrieval recall gate
+   (`./scripts/eval_gate.sh --tier r`) with in-process fastembed embeddings.
+   **No LLM API key is needed anywhere in CI** (Zero-Cost-First).
+
+Not in CI (run manually): `pytest -m integration` (needs a chat LLM),
+Tier-F eval (needs Groq key; nightly workflow planned in WP-V3-3), and
+`pytest -m performance` benchmarks (flaky on weak runners).
+
+### Branch protection (one-time, needs repo owner)
+
+To make a red CI actually block merges, enable branch protection on GitHub —
+Settings → Branches → Add branch ruleset for `main`:
+
+- ✅ Require status checks to pass before merging — select **lint**, **unit**,
+  **eval-tier-r**.
+- ✅ Require branches to be up to date before merging.
+
+Or via CLI:
+
+```bash
+gh api -X PUT repos/ThaiG2Pro/ai-agent-sale-v2/branches/main/protection \
+  -f 'required_status_checks[strict]=true' \
+  -f 'required_status_checks[contexts][]=lint' \
+  -f 'required_status_checks[contexts][]=unit' \
+  -f 'required_status_checks[contexts][]=eval-tier-r' \
+  -F enforce_admins=false \
+  -F 'required_pull_request_reviews=null' -F 'restrictions=null'
+```

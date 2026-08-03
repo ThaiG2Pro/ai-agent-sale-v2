@@ -73,7 +73,7 @@ mise.toml
 GEMINI.md 
 
 .gemini/
-.github/
+# .github/ must be tracked — GitHub Actions CI lives there (WP-V3-0)
 #docs/
 
 .agent/
