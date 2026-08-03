@@ -88,7 +88,12 @@ def _mock_retrieval_tool(similarity_score: float, declined: bool):
 
 @pytest.mark.asyncio
 async def test_hitl_happy_path_approve_execute(monkeypatch):
-    """T065: ORDER_PLACEMENT triggers pause → admin approve → order executed."""
+    """T065 + WP-V2-4: HIGH-VALUE ORDER_PLACEMENT triggers pause → approve → executed.
+
+    Since WP-V2-4 risk tiers, a small low-risk order auto-approves (no pause) — so this
+    happy path uses an order above HITL_HIGH_VALUE_ORDER_THRESHOLD (5M VND), which
+    always pauses regardless of tier (safety invariant).
+    """
     # 1. Setup mocks
     mock_db = AsyncMock()
     # Configure execute() result so scalars().all() returns [] (no queued messages)
@@ -97,7 +102,7 @@ async def test_hitl_happy_path_approve_execute(monkeypatch):
     mock_exec_result.scalars.return_value.all.return_value = []
     mock_product = MagicMock()
     mock_product.id = "prod_1"
-    mock_product.price = 100.0
+    mock_product.price = 10_000_000.0
     mock_product.stock_quantity = 10
     mock_exec_result.scalar_one_or_none.return_value = mock_product
     mock_db.execute.return_value = mock_exec_result
@@ -111,7 +116,7 @@ async def test_hitl_happy_path_approve_execute(monkeypatch):
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-happy", "db": mock_db}}
     state = make_initial_state("Tôi muốn mua sản phẩm A", "test-happy", "cust-happy")
-    state["order_info"] = {"product_id": "prod_1", "quantity": 1, "price": 100.0}
+    state["order_info"] = {"product_id": "prod_1", "quantity": 1, "price": 10_000_000.0}
 
     with patch("services.ai.ai_router.acompletion", return_value=mock_router_resp):
         with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):

@@ -191,8 +191,10 @@ async def test_comparison_intent_no_double_retrieval_storm(db_session, monkeypat
 
 @pytest.mark.asyncio
 async def test_answer_with_rag_caches_only_final_accepted_query(db_session):
-    """AC-2026-023: only the FINAL accepted (rewritten) query/answer is cached — the original,
-    insufficient attempt-0 query is never written to semantic_cache."""
+    """AC-2026-023 + WP-V2-2: exactly ONE cache row per accepted answer — intermediate
+    rewrite attempts are never cached. Since WP-V2-2 the row is keyed on the RAW user
+    query (so the L1 raw-first lookup finds it); the answer/embedding still come from
+    the FINAL accepted (rewritten) retrieval."""
     await _insert_product(
         db_session,
         name="Loa Bluetooth Mini SoundBox",
@@ -243,4 +245,6 @@ async def test_answer_with_rag_caches_only_final_accepted_query(db_session):
 
     rows = (await db_session.execute(select(SemanticCache))).scalars().all()
     assert len(rows) == 1  # exactly one cache row — no intermediate-attempt cache pollution
-    assert rows[0].query_text == rewritten_query  # the FINAL accepted query, not the original
+    # WP-V2-2: keyed on the RAW user query so the deterministic L1 lookup can hit it
+    assert rows[0].query_text == "mưa có to không ngày mai"
+    assert rows[0].response == "Loa Bluetooth Mini SoundBox có pin 12 giờ."

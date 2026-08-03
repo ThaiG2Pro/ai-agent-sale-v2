@@ -136,9 +136,12 @@ def test_graph_with_checkpointer():
 
 @pytest.mark.asyncio
 async def test_complaint_escalation_flow(monkeypatch):
-    """T071: COMPLAINT intent routes to escalation_node → premium model used (SC-002).
+    """T071 + WP-V2-1: COMPLAINT routes to escalation_node → cascade verification.
 
-    LLM call order: 1=router (COMPLAINT), 2=answer (with premium model).
+    Since WP-V2-1, intent escalations answer on economy-chat FIRST; PREMIUM_MODEL is
+    reserved and only spent when the groundedness verdict fails. The escalation flag
+    still carries the intent_escalation reason.
+    LLM call order: 1=router (COMPLAINT), 2=answer (economy first pass, accepted).
     """
     monkeypatch.setattr("core.agent.nodes.escalation.settings.PREMIUM_MODEL", "premium-chat")
 
@@ -158,7 +161,8 @@ async def test_complaint_escalation_flow(monkeypatch):
 
     assert result["escalation_flag"] is True
     assert result["escalation_reason"] == "intent_escalation"
-    assert result["model_used"] == "premium-chat"
+    # WP-V2-1 cascade: economy first pass accepted → premium never spent this turn
+    assert result["model_used"] == "economy-chat"
 
 
 # ---------------------------------------------------------------------------
