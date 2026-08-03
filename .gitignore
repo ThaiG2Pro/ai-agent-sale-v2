@@ -99,3 +99,6 @@ reports/eval_runs/
 
 # Local setup script
 setup_local.sh
+
+# Editor/tool local snapshots (.bak backups of context files)
+.snapshots/
