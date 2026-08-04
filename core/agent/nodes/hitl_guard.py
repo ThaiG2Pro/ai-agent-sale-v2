@@ -237,6 +237,18 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
         # LangGraph re-runs this node from the start on resume (checkpoint is input state),
         # so we must detect resume vs. fresh trigger via DB to avoid duplicate records.
         # On resume, service.py sets status="resuming" before calling graph.ainvoke().
+        #
+        # WHY DB status and not a state flag (V3-5): service.py cannot write the
+        # flag into checkpoint state — aupdate_state() before resume creates a new
+        # checkpoint that CLEARS the pending interrupt (see the NOTE in
+        # HITLService.review_action), and the resume payload only becomes visible
+        # AFTER interrupt() returns, i.e. below this dedup check. The DB lookup is
+        # the only signal available at this point. Known fragility: a second fresh
+        # turn racing the "resuming" window would match this query and reuse the
+        # pause_id instead of creating its own record — accepted, since sessions
+        # are single-conversation and a paused session queues new messages instead
+        # of re-entering the graph. Behavior locked by
+        # tests/unit/test_hitl_guard_node.py::test_hitl_guard_resume_*.
         from sqlalchemy import select as sa_select
 
         existing_stmt = (

@@ -127,6 +127,56 @@ async def test_hitl_guard_overflow_protection(initial_state, mock_config):
 
 
 @pytest.mark.asyncio
+async def test_hitl_guard_resume_reuses_pause_id_without_new_records(initial_state, mock_db):
+    """V3-5: resume detection contract — an existing paused/resuming HITLMetadata
+    row means LangGraph is re-running the node after service.py resume; the node
+    must reuse that pause_id and must NOT insert duplicate pause records."""
+    initial_state["confidence_score"] = 0.5
+
+    existing = MagicMock()
+    existing.pause_id = "existing-pause-id"
+    mock_db.execute.return_value.scalar_one_or_none = MagicMock(return_value=existing)
+    config = {"configurable": {"db": mock_db}}
+
+    with patch(
+        "core.agent.nodes.hitl_guard.interrupt",
+        return_value={"action": "approve", "admin_user_id": "admin1"},
+    ) as mock_interrupt:
+        with patch("litellm.token_counter", return_value=100):
+            result = await hitl_guard_node(initial_state, config)
+
+    # Reuses the pause_id from the DB record, end to end
+    assert mock_interrupt.call_args[0][0]["pause_id"] == "existing-pause-id"
+    assert result.update["hitl_pause_id"] == "existing-pause-id"
+    # No duplicate HITLMetadata / InterruptedSession records on resume
+    mock_db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_hitl_guard_fresh_trigger_creates_pause_records(initial_state, mock_config, mock_db):
+    """V3-5: fresh-trigger contract — no paused/resuming row in DB means this is
+    a brand-new pause; the node must create HITLMetadata + InterruptedSession and
+    commit BEFORE interrupt() suspends execution (else the admin API can't see it)."""
+    initial_state["confidence_score"] = 0.5
+
+    with patch(
+        "core.agent.nodes.hitl_guard.interrupt",
+        return_value={"action": "approve", "admin_user_id": "admin1"},
+    ):
+        with patch("litellm.token_counter", return_value=100):
+            result = await hitl_guard_node(initial_state, mock_config)
+
+    # New HITLMetadata added and persisted before the graph suspends
+    mock_db.add.assert_called_once()
+    added = mock_db.add.call_args[0][0]
+    assert added.status == "paused"
+    assert added.session_id == "test-session"
+    mock_db.commit.assert_called()
+    # The freshly minted pause_id flows through to the resume update
+    assert result.update["hitl_pause_id"] == str(added.pause_id)
+
+
+@pytest.mark.asyncio
 async def test_hitl_guard_reject_resume(initial_state, mock_config):
     """Test resume path with rejection (T059)."""
     initial_state["confidence_score"] = 0.5
