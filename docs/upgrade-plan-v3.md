@@ -163,6 +163,19 @@ Ba mục P2/P3 tồn đọng từ scorecard, không chặn gì, mỗi mục ≤ 
 
 ---
 
+## Lưu ý & Gợi ý bổ sung khi triển khai
+
+1. **Caching Model trên GitHub Actions (Cho WP-V3-0 / Tier-R)**:
+   - Khi chạy `fastembed` trên CI, runner phải tải ONNX weights về mỗi lần. Nên bổ sung `actions/cache` cho thư mục `~/.cache/huggingface` và `~/.cache/fastembed` trong `.github/workflows/ci.yml` để tối ưu thời gian chạy CI (rút ngắn từ 3-5 phút xuống < 1 phút).
+
+2. **Wrapper `traced_node` cho cả Async & Sync (Cho WP-V3-2)**:
+   - Các node function trong LangGraph chủ yếu là `async def`. Khi triển khai decorator/wrapper tự động bọc node trong `core/agent/graph.py`, cần dùng `inspect.iscoroutinefunction` để xử lý an toàn cho cả coroutine function và sync function, đảm bảo không làm gián đoạn trace context propagation.
+
+3. **Cập nhật Trạng thái Thực tế WP-V3-0**:
+   - **WP-V3-0 đã hoàn thành** (commits `b23b767`, `b83b869`, `79826f1` trong lượt pull ngày 2026-08-04). Pipeline CI/CD trên GitHub Actions đã hoạt động, sẵn sàng làm móng cho WP-V3-1 (Coverage Gate) và WP-V3-2.
+
+---
+
 ## Verification tổng V3 (sau khi mọi WP xong)
 
 1. CI xanh trên PR thật (lint + unit + coverage ≥80% + Tier-R); commit cố ý hỏng bị chặn.
