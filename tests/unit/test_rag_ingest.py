@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.config import settings
 from services.ai import ProductMetadata
 from services.rag.ingest import (
     enrich_metadata_async,
@@ -154,6 +155,8 @@ async def test_ingest_stores_enriched_metadata_when_valid():
     assert product.metadata_ == meta.model_dump()
     embedding = db.add.call_args_list[1].args[0]
     assert embedding.keywords == ["pin trâu"]
+    # V3-5: model_version must identify the embed model, not a hardcoded "v1.0"
+    assert embedding.model_version == f"{settings.EMBED_MODEL}@{settings.EMBED_DIMENSION}"
     db.commit.assert_awaited_once()
     inv.assert_awaited_once()  # catalog changed → semantic cache invalidated
 

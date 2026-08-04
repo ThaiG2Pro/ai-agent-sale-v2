@@ -283,7 +283,9 @@ async def ingest_product_text(
         source_type="product_description",
         embedding=vector,
         model_name=settings.EMBED_MODEL,
-        model_version="v1.0",
+        # Same convention as SemanticMemoryService — switching embed models must
+        # leave old/new embeddings distinguishable in the DB (V3-5).
+        model_version=f"{settings.EMBED_MODEL}@{settings.EMBED_DIMENSION}",
         keywords=keywords,
     )
     db.add(embedding_record)
