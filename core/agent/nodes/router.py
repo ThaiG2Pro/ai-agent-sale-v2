@@ -52,9 +52,13 @@ async def router_node(state: AgentState) -> Command:
         "(e.g. 'I want to order the Vivobook Pro', 'đặt sản phẩm đó', 'mua cái này'). "
         "NOT for browsing by price range or asking 'do you have X under Y price?'\n"
         "- SMALLTALK: greetings (xin chào, hi), general chitchat unrelated to products or sales. "
-        "NOT for product browsing or catalog queries — those are INFO_QUERY.\n\n"
+        "NOT for product browsing or catalog queries — those are INFO_QUERY.\n"
+        "- FOLLOW_UP: asking about order status, checking progress of a previous order/request, "
+        "or short status inquiries (e.g. 'đặt chưa?', 'đã đặt chưa?', 'rồi sao'). "
+        "NOT for confirming a new purchase.\n\n"
         "CRITICAL: 'I want laptops under 25 million' = PRICING. "
         "'Order THIS specific product' = ORDER_PLACEMENT. "
+        "Asking 'Did you place it?' / 'đặt chưa?' = FOLLOW_UP. "
         "Respond ONLY with valid JSON matching the schema. "
         "Set primary_intent to the best matching intent. "
         "Set confidence 0.0-1.0. Keep reasoning concise."
@@ -99,6 +103,7 @@ def _get_next_node(classification: IntentClassification) -> str:
     - Primary intent is COMPLAINT or NEGOTIATION → escalation_node (premium model)
     - Secondary intent COMPLAINT/NEGOTIATION (non-ORDER) → escalation_node
     - SMALLTALK primary intent → answer_node (no retrieval needed, save cost)
+    - FOLLOW_UP primary intent → memory_retrieval_node (retrieve past memory/context)
     - INFO_QUERY, PRICING, COMPARISON, AVAILABILITY → retrieval_node (need context)
     - Unknown → retrieval_node (safe fallback)
     """
@@ -114,6 +119,8 @@ def _get_next_node(classification: IntentClassification) -> str:
         return "escalation_node"
     if classification.primary_intent == IntentEnum.SMALLTALK:
         return "answer_node"
+    if classification.primary_intent == IntentEnum.FOLLOW_UP:
+        return "memory_retrieval_node"
     # INFO_QUERY, PRICING, COMPARISON, AVAILABILITY, unknown
     return "retrieval_node"
 
@@ -127,7 +134,7 @@ def _route_after_router(state: AgentState) -> str:
     uses Command(goto=...) returned by router_node.
 
     Returns:
-        One of: "retrieval_node", "escalation_node", "answer_node"
+        One of: "retrieval_node", "memory_retrieval_node", "escalation_node", "answer_node"
     """
     intent_str = state.get("intent", "unknown")
     secondary_intents = state.get("secondary_intents", [])
@@ -141,6 +148,8 @@ def _route_after_router(state: AgentState) -> str:
     # SMALLTALK primary intent → answer_node (no retrieval needed, save cost)
     if intent_str == "SMALLTALK":
         return "answer_node"
+    if intent_str == "FOLLOW_UP":
+        return "memory_retrieval_node"
 
     # ORDER_PLACEMENT, INFO_QUERY, PRICING, COMPARISON, AVAILABILITY → retrieval_node
     return "retrieval_node"

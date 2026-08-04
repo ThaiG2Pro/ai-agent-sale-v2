@@ -35,6 +35,12 @@ _PRONOUN_RE = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# Ordinal / Index references to previous citations (e.g. '1', '2', 'lap 1', 'mẫu 1', 'số 2')
+_ORDINAL_RE = re.compile(
+    r"\b(?:lap|mẫu|sản\s+phẩm|cái|số)\s*([1-9])\b|\b([1-9])\b",
+    re.IGNORECASE | re.UNICODE,
+)
+
 # COMPARISON query splitters
 _COMPARISON_SPLIT_RE = re.compile(
     r"\s+(?:và|vs\.?|versus|với|hay|hoặc)\s+",
@@ -90,34 +96,54 @@ async def _decompose_query(query: str) -> list[str] | None:
     return parts
 
 
+def _get_citation_name(citations: list, index: int) -> str | None:
+    """Safely extract product name from citation at 0-based index."""
+    if not citations or index < 0 or index >= len(citations):
+        return None
+    item = citations[index]
+    if isinstance(item, dict):
+        return item.get("name")
+    return getattr(item, "name", None)
+
+
 def _expand_pronoun_query(query: str, state: AgentState) -> str:
-    """SC09 fix: expand short/pronoun queries using the last cited product.
+    """SC09 & Ordinal index fix: expand pronouns and ordinal references using citations in state.
 
-    If query contains Vietnamese pronouns AND previous citations exist in state,
-    prepend the first citation's product name so retrieval finds the right product.
-
-    E.g.: "Nó có phù hợp để làm video editing không?" +
-          citations=[Dell XPS 15] →
-          "Dell XPS 15 có phù hợp để làm video editing không?"
+    E.g. 1: "Nó có phù hợp không?" + citations=[Dell XPS 15] → "Dell XPS 15 có phù hợp không?"
+    E.g. 2: "so sánh 1 và 2" + citations=[ASUS VivoBook, Lenovo ThinkPad] →
+            "so sánh ASUS VivoBook và Lenovo ThinkPad"
+    E.g. 3: "lap 1" + citations=[ASUS VivoBook] → "ASUS VivoBook"
     """
-    if not _PRONOUN_RE.search(query):
-        return query
-
     citations = state.get("citations") or []
     if not citations:
         return query
 
-    first = citations[0]
-    if isinstance(first, dict):
-        product_name = first.get("name")
-    else:
-        product_name = getattr(first, "name", None)
-    if not product_name:
-        return query
+    # 1. Expand ordinal / index references (e.g., '1', '2', 'lap 1', 'mẫu 1', 'số 2')
+    def replace_ordinal(match: re.Match) -> str:
+        num_str = match.group(1) or match.group(2)
+        if not num_str:
+            return match.group(0)
+        num = int(num_str)
+        citation_name = _get_citation_name(citations, num - 1)
+        if citation_name:
+            return citation_name
+        return match.group(0)
 
-    expanded = _PRONOUN_RE.sub(product_name, query)
-    logger.info("Pronoun expansion: %r → %r", query, expanded)
-    return expanded
+    if _ORDINAL_RE.search(query):
+        new_query = _ORDINAL_RE.sub(replace_ordinal, query)
+        if new_query != query:
+            logger.info("Ordinal expansion: %r → %r", query, new_query)
+            return new_query
+
+    # 2. Expand general pronouns (e.g. 'nó', 'cái đó', 'mẫu này') to citations[0]
+    if _PRONOUN_RE.search(query):
+        first_name = _get_citation_name(citations, 0)
+        if first_name:
+            expanded = _PRONOUN_RE.sub(first_name, query)
+            logger.info("Pronoun expansion: %r → %r", query, expanded)
+            return expanded
+
+    return query
 
 
 def _build_result_dict(result, citations_cls) -> dict:

@@ -352,3 +352,36 @@ class TestDecomposition:
 
         mock_decompose.assert_not_awaited()
         assert result["declined"] is False
+
+
+class TestOrdinalExpansion:
+    def test_expand_ordinal_comparison_query(self):
+        from core.agent.nodes.retrieval import _expand_pronoun_query
+
+        state = {
+            "citations": [
+                {"name": "ASUS VivoBook Pro 15 (2024)"},
+                {"name": "Lenovo ThinkPad X1 Carbon Gen 12"},
+            ]
+        }
+        res = _expand_pronoun_query("so sánh 1 và 2", state)
+        assert res == "so sánh ASUS VivoBook Pro 15 (2024) và Lenovo ThinkPad X1 Carbon Gen 12"
+
+    def test_expand_ordinal_single_query(self):
+        from core.agent.nodes.retrieval import _expand_pronoun_query
+
+        state = {"citations": [{"name": "ASUS VivoBook Pro 15 (2024)"}]}
+        res = _expand_pronoun_query("lap 1", state)
+        assert res == "ASUS VivoBook Pro 15 (2024)"
+
+    def test_expand_ordinal_prefix_query(self):
+        from core.agent.nodes.retrieval import _expand_pronoun_query
+
+        state = {
+            "citations": [
+                {"name": "ASUS VivoBook Pro 15 (2024)"},
+                {"name": "Lenovo ThinkPad X1 Carbon Gen 12"},
+            ]
+        }
+        res = _expand_pronoun_query("cho tôi thông tin mẫu 2", state)
+        assert res == "cho tôi thông tin Lenovo ThinkPad X1 Carbon Gen 12"

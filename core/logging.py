@@ -59,6 +59,8 @@ def setup_logging() -> None:
 _EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b")
 # Vietnamese phone formats: 0xxxxxxxxx (10 digits) or +84/84 prefix (9-10 more digits).
 _PHONE_RE = re.compile(r"(?<![\d\w])(?:\+?84|0)(?:[ .-]?\d){8,10}(?![\d\w])")
+# Large float vector arrays in raw log messages (e.g. LiteLLM debug output)
+_VECTOR_ARRAY_RE = re.compile(r"\[-?\d+\.\d+(?:e[-+]?\d+)?(?:,\s*-?\d+\.\d+(?:e[-+]?\d+)?){5,}\]")
 
 # Log-record keys treated as customer identity → masked in JSON output.
 _IDENTITY_KEYS = frozenset({"customer_id", "chat_id", "session_id", "thread_id", "email", "phone"})
@@ -93,9 +95,11 @@ def mask_identifier(value: object) -> str:
 
 
 def mask_pii(text: str) -> str:
-    """Scrub emails and Vietnamese phone numbers from free-form text."""
+    """Scrub emails, Vietnamese phone numbers, and raw float vector arrays from free-form text."""
     text = _EMAIL_RE.sub(lambda m: mask_email(m.group()), text)
-    return _PHONE_RE.sub(lambda m: mask_phone(m.group()), text)
+    text = _PHONE_RE.sub(lambda m: mask_phone(m.group()), text)
+    text = _VECTOR_ARRAY_RE.sub("[vector array truncated]", text)
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +164,9 @@ class JsonFormatter(logging.Formatter):
         for key, value in record.__dict__.items():
             if key in _BUILTIN_RECORD_ATTRS or key.startswith("_") or key in payload:
                 continue
-            if any(marker in key.lower() for marker in _SECRET_KEY_MARKERS):
+            if key in ("query_vector", "embedding", "vector") and isinstance(value, list):
+                payload[key] = f"[vector length {len(value)}]"
+            elif any(marker in key.lower() for marker in _SECRET_KEY_MARKERS):
                 payload[key] = "[REDACTED]"
             elif key in _IDENTITY_KEYS:
                 payload[key] = mask_identifier(value)
@@ -178,6 +184,9 @@ def _setup_python_logging() -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(JsonFormatter())
     logging.basicConfig(level=settings.LOG_LEVEL, handlers=[handler], force=True)
+    # Mute noisy raw vector dump loggers in LiteLLM and HTTP client
+    for logger_name in ("LiteLLM", "LiteLLM Router", "httpx", "httpcore"):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 
 # ---------------------------------------------------------------------------

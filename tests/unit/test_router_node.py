@@ -194,6 +194,9 @@ def test_get_next_node_routing_map():
     # Answer node (no retrieval)
     assert _get_next_node(make_clf(IntentEnum.SMALLTALK)) == "answer_node"
 
+    # Memory retrieval intents
+    assert _get_next_node(make_clf(IntentEnum.FOLLOW_UP)) == "memory_retrieval_node"
+
     # Retrieval intents
     assert _get_next_node(make_clf(IntentEnum.INFO_QUERY)) == "retrieval_node"
     assert _get_next_node(make_clf(IntentEnum.PRICING)) == "retrieval_node"
