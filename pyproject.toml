@@ -116,6 +116,30 @@ markers = [
 [tool.logfire]
 ignore_no_config = true
 
+# R-COV-001 (WP-V3-1): coverage measured over first-party packages only.
+# The gate itself (--cov-fail-under) lives in the CI unit job command, not
+# here, so local `uv run pytest` stays fast and gate-free by default.
+[tool.coverage.run]
+source = ["api", "core", "services", "models"]
+branch = true
+omit = [
+    "*/__pycache__/*",
+    "cli/*",
+    "migrations/*",
+    "scripts/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*.py" = ["E501", "F401"]
 "__init__.py" = ["F401"]
