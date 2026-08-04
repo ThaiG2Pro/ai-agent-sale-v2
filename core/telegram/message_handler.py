@@ -136,7 +136,12 @@ async def process_telegram_message(
                 customer_id=customer_id,
             )
 
-            final_state = await active_graph.ainvoke(initial_state, config=config)
+            # Tag OpenInference spans with session/user so Telegram turns show
+            # up in Phoenix's Sessions view like API turns do.
+            from openinference.instrumentation import using_attributes
+
+            with using_attributes(session_id=session_id, user_id=customer_id):
+                final_state = await active_graph.ainvoke(initial_state, config=config)
 
             # Detect HITL pause: aget_state().next is non-empty when interrupt() fired.
             snapshot = await active_graph.aget_state(config)

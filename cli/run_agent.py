@@ -52,16 +52,19 @@ async def main(
             # T082: Streaming mode — print each NodeStreamEvent
             print(f"\n[STREAM] Processing: {message!r}")
             print("-" * 60)
+            from openinference.instrumentation import using_attributes
+
             try:
-                async for event in astream_agent(
-                    message,
-                    session_id=session,
-                    customer_id=customer_id,
-                    db=db,
-                    checkpointer=MemorySaver(),
-                ):
-                    summary = json.dumps(event.state_snapshot, default=str)[:120]
-                    print(f"[{event.node_name}] {summary}")
+                with using_attributes(session_id=session, user_id=customer_id):
+                    async for event in astream_agent(
+                        message,
+                        session_id=session,
+                        customer_id=customer_id,
+                        db=db,
+                        checkpointer=MemorySaver(),
+                    ):
+                        summary = json.dumps(event.state_snapshot, default=str)[:120]
+                        print(f"[{event.node_name}] {summary}")
             except Exception as e:
                 print(f"\n[ERROR] Stream failed: {e}", file=sys.stderr)
                 if "--debug" in sys.argv:
@@ -78,8 +81,11 @@ async def main(
         config = make_agent_config(session, db=db)
         initial_state = make_initial_state(message, session_id=session, customer_id=customer_id)
 
+        from openinference.instrumentation import using_attributes
+
         try:
-            final_state = await graph.ainvoke(initial_state, config=config)
+            with using_attributes(session_id=session, user_id=customer_id):
+                final_state = await graph.ainvoke(initial_state, config=config)
 
             print("\n" + "=" * 60)
             print("AGENT OUTPUT")

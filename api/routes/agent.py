@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from langgraph.errors import GraphInterrupt
+from openinference.instrumentation import using_attributes
 from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
 from pydantic import BaseModel, Field
@@ -157,8 +158,11 @@ async def post_agent_query(
             customer_id=request.customer_id,
         )
 
-        # Invoke the agent
-        final_state = await graph.ainvoke(initial_state, config=config)
+        # Invoke the agent. using_attributes propagates session.id/user.id onto
+        # every OpenInference (LangGraph/LLM) child span — the root FastAPI span
+        # attribute alone is invisible to Phoenix's Sessions view.
+        with using_attributes(session_id=request.session_id, user_id=request.customer_id):
+            final_state = await graph.ainvoke(initial_state, config=config)
 
         elapsed_ms = (time.time() - start_time) * 1000
 
@@ -354,17 +358,20 @@ async def post_agent_stream(
     async def generate_events():
         """Generator yielding SSE-formatted NodeStreamEvent objects."""
         try:
-            # Use astream_agent which handles event streaming internally
-            async for event in astream_agent(
-                request.message,
-                session_id=request.session_id,
-                customer_id=request.customer_id,
-                db=db,
-                graph=graph,
-            ):
-                # astream_agent yields NodeStreamEvent Pydantic models
-                # Convert to SSE format: "data: {json}\n\n"
-                yield f"data: {event.model_dump_json()}\n\n"
+            # Use astream_agent which handles event streaming internally.
+            # using_attributes propagates session.id/user.id onto the
+            # OpenInference spans created inside the stream (Sessions view).
+            with using_attributes(session_id=request.session_id, user_id=request.customer_id):
+                async for event in astream_agent(
+                    request.message,
+                    session_id=request.session_id,
+                    customer_id=request.customer_id,
+                    db=db,
+                    graph=graph,
+                ):
+                    # astream_agent yields NodeStreamEvent Pydantic models
+                    # Convert to SSE format: "data: {json}\n\n"
+                    yield f"data: {event.model_dump_json()}\n\n"
 
         except Exception as e:
             yield f"event: error\ndata: {{'error': '{e!s}'}}\n\n"

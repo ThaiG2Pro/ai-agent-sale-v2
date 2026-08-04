@@ -83,16 +83,36 @@ docker compose up phoenix -d
 **Config (`.env` or `core/config.py` defaults):**
 
 ```env
-OTLP_ENDPOINT=http://localhost:4317
+OTLP_ENDPOINT=http://localhost:4317        # app on host; in compose → http://phoenix:4317 (auto)
 OTEL_SERVICE_NAME=ai-sales-agent
+PHOENIX_PROJECT_NAME=ai-sales-agent        # Phoenix UI project traces land in
 ```
+
+> **App on host vs in Docker:** when the API runs via `docker compose up api`, compose
+> overrides `OTLP_ENDPOINT` to `http://phoenix:4317` (the in-network service address) —
+> `localhost:4317` only works for a host-run app. Nothing to configure manually.
+
+> **Persistence:** Phoenix stores traces in the `phoenix_data` volume
+> (`PHOENIX_WORKING_DIR=/mnt/data`) — they survive container restarts.
+> `docker compose down -v` deletes them.
 
 **Verify traces are flowing:**
 
 1. Start the app: `uv run uvicorn api.main:app --reload`
 2. Make any request: `curl http://localhost:8000/health`
 3. Open Phoenix UI: `http://localhost:6006`
-4. Look for traces under the `ai-sales-agent` project
+4. Open the `ai-sales-agent` project (name = `PHOENIX_PROJECT_NAME`) → Traces
+
+**Find a customer conversation (Sessions view):**
+
+Every agent invocation (API `/agent/query` + `/agent/stream`, Telegram, CLI) is wrapped in
+`openinference.instrumentation.using_attributes(session_id=…, user_id=…)`, so all
+LangGraph/LLM spans carry `session.id` and `user.id`:
+
+1. Phoenix UI → project `ai-sales-agent` → **Sessions** tab: one row per `session_id`,
+   with full multi-turn conversation history.
+2. Or filter traces: `attributes.session.id == 'telegram_12345'` /
+   `attributes.user.id == '<customer_id>'`.
 
 ---
 

@@ -24,12 +24,22 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from datetime import UTC, datetime
 
 from core.config import settings
 
 _initialized = False
+
+
+def _merge_resource_attribute(existing: str, key: str, value: str) -> str:
+    """Merge `key=value` into an OTEL_RESOURCE_ATTRIBUTES string, keeping any
+    user-provided value for the same key untouched."""
+    if any(pair.strip().startswith(f"{key}=") for pair in existing.split(",") if pair):
+        return existing
+    pair = f"{key}={value}"
+    return f"{existing},{pair}" if existing else pair
 
 
 def setup_logging() -> None:
@@ -209,8 +219,18 @@ def _setup_logfire_with_phoenix() -> None:
     Switching backends → docs/observability.md.
     """
     import logfire
+    from openinference.semconv.resource import ResourceAttributes
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    # Phoenix routes traces into projects via this resource attribute. It must
+    # be in place BEFORE logfire.configure() builds the OTel Resource (the SDK
+    # reads OTEL_RESOURCE_ATTRIBUTES at that point).
+    os.environ["OTEL_RESOURCE_ATTRIBUTES"] = _merge_resource_attribute(
+        os.environ.get("OTEL_RESOURCE_ATTRIBUTES", ""),
+        ResourceAttributes.PROJECT_NAME,
+        settings.PHOENIX_PROJECT_NAME,
+    )
 
     phoenix_exporter = OTLPSpanExporter(
         endpoint=settings.OTLP_ENDPOINT,  # default: http://localhost:4317

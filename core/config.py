@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     LOGFIRE_TOKEN: str | None = None
     OTLP_ENDPOINT: str = "http://localhost:4317"
     OTEL_SERVICE_NAME: str = "ai-sales-agent"
+    # Phoenix groups traces by the `openinference.project.name` resource
+    # attribute — without it everything lands in the "default" project.
+    PHOENIX_PROJECT_NAME: str = "ai-sales-agent"
 
     # Week 3: Agent Configuration
     LAYER1_CONFIDENCE_THRESHOLD: float = 0.45  # RAG layer threshold (must be ≤ 0.6)
