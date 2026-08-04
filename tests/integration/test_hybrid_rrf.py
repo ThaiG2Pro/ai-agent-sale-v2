@@ -10,6 +10,11 @@ from uuid_utils import uuid7
 from services.ai import AIGateway
 from services.rag import hybrid_search_rrf, ingest_product_text
 
+# Needs a live embedding backend (Ollama) — must not run in the CI unit job.
+# Without this marker the CI selector picks these tests up, they skip on the
+# runner (no Ollama), and services/rag/ingest.py silently loses coverage.
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.asyncio
 async def test_hybrid_search_rrf_returns_ranked_results(db_session):
