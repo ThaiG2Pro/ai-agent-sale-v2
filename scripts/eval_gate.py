@@ -10,6 +10,9 @@ deterministic grading (no LLM-as-judge anywhere):
           generation needed to grade must_decline / expected_price /
           absent_terms hallucination traps). Sequential + backoff on rate
           limits, JSONL checkpoint so a crash/429 mid-run never loses results.
+          WP-V3-3: `multi_intent` cases run the production GRAPH path (router →
+          retrieval → decomposition) — see GRAPH_PATH_CATEGORIES; other
+          categories keep the direct answer_with_rag call.
 
 Results are compared against the latest committed baseline in
 tests/eval/baselines/ — exit code 1 when the pass rate regresses by more than
@@ -180,6 +183,19 @@ def is_retryable(exc: Exception) -> bool:
     )
 
 
+# WP-V3-3: categories that must run the production GRAPH path instead of a bare
+# answer_with_rag call. Bare answer_with_rag re-normalizes the query with an LLM
+# (non-deterministic → the mi_001/mi_002 flapping measured 2026-08-03) and skips
+# everything that only exists on the graph path (router intent pre-classification,
+# WP-V2-3 decomposition of declined multi-intent queries).
+GRAPH_PATH_CATEGORIES = {"multi_intent"}
+
+
+def uses_graph_path(case: dict) -> bool:
+    """True when this Tier-F case must be answered via the agent graph."""
+    return case.get("category") in GRAPH_PATH_CATEGORIES
+
+
 # ── Runners (I/O — imported lazily so unit tests never touch the app stack) ──
 
 
@@ -236,6 +252,33 @@ async def run_tier_r(cases: list[dict], ds_hash: str, resume: dict[str, dict]) -
     return results
 
 
+async def _answer_via_graph(db, query: str):
+    """WP-V3-3: run one query through the compiled agent graph and adapt the final
+    state to the answer_with_rag result shape (answer / declined / citations).
+
+    A fresh graph + MemorySaver + unique session per call keeps cases isolated
+    (no checkpoint bleed between cases or between backoff retries).
+    """
+    import uuid
+    from types import SimpleNamespace
+
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from core.agent.graph import build_graph, make_agent_config
+    from core.agent.state import make_initial_state
+
+    session = f"eval-tier-f-{uuid.uuid4().hex[:12]}"
+    graph = build_graph(checkpointer=MemorySaver())
+    config = make_agent_config(session, db=db)
+    state = make_initial_state(query, session_id=session, customer_id="eval-tier-f")
+    final = await graph.ainvoke(state, config=config)
+    return SimpleNamespace(
+        answer=final.get("response") or "",
+        declined=bool(final.get("declined")),
+        citations=final.get("citations") or [],
+    )
+
+
 async def run_tier_f(cases: list[dict], ds_hash: str, resume: dict[str, dict]) -> list[dict]:
     from services.database import AsyncSessionLocal
     from services.rag import answer_with_rag
@@ -246,10 +289,14 @@ async def run_tier_f(cases: list[dict], ds_hash: str, resume: dict[str, dict]) -
         for case in cases:
             if case["id"] in resume:
                 continue
+            via_graph = uses_graph_path(case)
+            runner = (
+                (lambda q=case["query"]: _answer_via_graph(db, q))
+                if via_graph
+                else (lambda q=case["query"]: answer_with_rag(db, q))
+            )
             try:
-                rag = await _with_backoff(
-                    lambda q=case["query"]: answer_with_rag(db, q), case["id"]
-                )
+                rag = await _with_backoff(runner, case["id"])
             except Exception as exc:
                 rec = {
                     "id": case["id"],
@@ -269,6 +316,7 @@ async def run_tier_f(cases: list[dict], ds_hash: str, resume: dict[str, dict]) -
                 "tier": "f",
                 "category": case.get("category"),
                 "dataset_hash": ds_hash,
+                "path": "graph" if via_graph else "rag",
                 "declined": rag.declined,
                 "answer_snippet": rag.answer[:200],
                 "citation_count": len(rag.citations),

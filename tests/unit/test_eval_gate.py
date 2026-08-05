@@ -21,6 +21,7 @@ from scripts.eval_gate import (
     load_completed,
     normalize_digits,
     summarize,
+    uses_graph_path,
 )
 
 # ── normalize_digits ─────────────────────────────────────────────────────────
@@ -214,3 +215,16 @@ def test_gold_dataset_shape():
             or c.get("absent_terms")
         )
         assert graded, f"{c['id']} has no deterministic expectation"
+
+
+# ── uses_graph_path (WP-V3-3) ────────────────────────────────────────────────
+
+
+def test_multi_intent_cases_route_through_graph_path():
+    """WP-V3-3: multi_intent must run the production graph path (decomposition
+    lives there); every other category keeps the direct answer_with_rag call."""
+    assert uses_graph_path({"id": "mi_001", "category": "multi_intent"}) is True
+    assert uses_graph_path({"id": "pr_001", "category": "pricing"}) is False
+    assert uses_graph_path({"id": "ht_001", "category": "hallucination_trap"}) is False
+    assert uses_graph_path({"id": "x", "category": None}) is False
+    assert uses_graph_path({"id": "x"}) is False

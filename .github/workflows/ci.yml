@@ -7,9 +7,9 @@
 #
 # Deliberately NOT in CI (run manually / nightly later):
 #   - `-m integration` suite      — needs a real chat LLM (Groq key / Ollama)
-#   - Tier-F eval                 — needs a chat LLM AND V3-3 must stabilize the
-#                                   multi-intent flakiness first (TODO → WP-V3-3
-#                                   adds it as a nightly workflow with GROQ_API_KEY)
+#   - Tier-F eval                 — needs a chat LLM (Groq key); runs nightly in
+#                                   nightly-eval.yml (WP-V3-3 — multi-intent
+#                                   stabilized 2026-08-05, 12/12 × 3 runs)
 #   - `-m performance` benchmarks — test_search_latency_10k is flaky on weak/loaded
 #                                   runners (measured 2026-08-03)
 

@@ -1,0 +1,81 @@
+# Why this exists: WP-V3-3 — Tier-F was deliberately kept out of the push/PR CI
+# (needs a chat LLM key + the multi-intent flakiness had to stabilize first).
+# With multi_intent cases now running the production graph path (12/12 × 3
+# consecutive runs, 2026-08-05), Tier-F runs nightly against the committed
+# baseline in tests/eval/baselines/.
+# What it does: one scheduled job — same Postgres+pgvector / fastembed setup as
+# the ci.yml eval-tier-r job, plus GROQ_API_KEY (repo secret, REQUIRED) for the
+# chat model. Fails when the Tier-F pass rate regresses >2pp vs baseline.
+
+name: Nightly Eval (Tier-F)
+
+on:
+  schedule:
+    - cron: "30 18 * * *" # 01:30 GMT+7 daily
+  workflow_dispatch: {}
+
+env:
+  UV_LOCKED: "1"
+  UV_PYTHON: "3.13"
+
+jobs:
+  eval-tier-f:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: ai_agent
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: user
+      DB_PASSWORD: password
+      DB_NAME: ai_agent
+      # Same import-time Settings requirement as ci.yml — dummies, not secrets.
+      TELEGRAM_BOT_TOKEN: ci-dummy-telegram-bot-token-not-real-000
+      TELEGRAM_WEBHOOK_SECRET: ci-dummy-webhook-secret-not-real
+      # Embeddings in-process (fastembed ONNX CPU); chat via Groq — the only
+      # cloud call in this workflow. Model pins mirror the dev .env.
+      EMBED_MODEL: local/multilingual-e5-large
+      CHAT_MODEL: groq/llama-3.3-70b-versatile
+      LIGHT_CHAT_MODEL: groq/llama-3.1-8b-instant
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Cache fastembed ONNX model (~2 GB, download once)
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-multilingual-e5-large-v1
+      - run: uv sync
+      - name: Enable pgvector extension
+        run: |
+          uv run python -c "
+          import asyncio, asyncpg
+          async def main():
+              conn = await asyncpg.connect('postgresql://user:password@localhost:5432/ai_agent')
+              await conn.execute('CREATE EXTENSION IF NOT EXISTS vector')
+              await conn.close()
+          asyncio.run(main())
+          "
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+      - name: Seed catalog (embeddings via fastembed, no chat LLM)
+        run: uv run python scripts/demo_seed.py --limit 27
+      - name: Tier-F full-pipeline gate (vs committed baseline)
+        # --flush-cache is redundant on a fresh DB but keeps the invocation
+        # identical to the documented local pre-release run.
+        run: ./scripts/eval_gate.sh --tier f --rerun --flush-cache
