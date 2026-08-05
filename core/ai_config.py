@@ -34,6 +34,9 @@ def _litellm_params(model: str, **extra: Any) -> dict[str, Any]:
     params: dict[str, Any] = {"model": model, **extra}
     if model.startswith("ollama/"):
         params["api_base"] = settings.OLLAMA_BASE_URL
+        # Ollama silently truncates at its ~2k-4k default context — fatal for
+        # RAG prompts (ADR-006). LiteLLM forwards num_ctx as options.num_ctx.
+        params["num_ctx"] = settings.OLLAMA_NUM_CTX
     return params
 
 

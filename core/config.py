@@ -40,6 +40,13 @@ class Settings(BaseSettings):
 
     # AI Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    # Ollama defaults num_ctx to ~2k-4k and SILENTLY truncates anything beyond
+    # it — for a RAG prompt (system + chunks + history) that means retrieval
+    # succeeds but the model never sees the chunks (ADR-006 mandatory
+    # mitigation). Applied to ollama/* models only; cloud providers manage
+    # their own context windows. 8192 covers the assembled RAG prompt for the
+    # default top-k; raise alongside RAG_TOP_K/history growth.
+    OLLAMA_NUM_CTX: int = 8192
     # Model tiers — any LiteLLM model string works (cloud fast-path):
     #   e.g. CHAT_MODEL=gemini/gemini-2.5-flash (needs GEMINI_API_KEY in env)
     #        CHAT_MODEL=gpt-4o-mini             (needs OPENAI_API_KEY in env)
