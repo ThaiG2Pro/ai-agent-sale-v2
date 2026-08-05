@@ -119,6 +119,10 @@ Commit `fix(eval): <ticket> Tier-F multi-intent runs production decomposition pa
 
 ## WP-V3-4 — Trục KHÔN hơn: clarify_node kích hoạt được với router thật (SDLC full)
 
+> **⏸ DEFERRED (2026-08-05)** — quyết định để lại sau plan V4 (`docs/upgrade-plan-v4.md`): không
+> chặn production, đổi hành vi decline nên cần sdlc-full + đo trước/sau kỹ. V3 đóng với 5/6 WP;
+> item 3 của Verification tổng V3 (demo clarify) dời theo WP này.
+
 Hiện tượng đo được (demo Verification tổng): điều kiện clarify yêu cầu intent **OTHER** + qua L1 +
 fused < 0.70 — nhưng router thật xếp gần như mọi câu mơ hồ về sản phẩm vào INFO_QUERY/AVAILABILITY/
 COMPARISON (nhóm FR-007 "borderline vẫn trả lời") → clarify_node gần như không bao giờ chạy live;
