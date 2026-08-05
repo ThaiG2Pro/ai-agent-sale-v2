@@ -9,12 +9,15 @@ and exports mermaid diagram for documentation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import functools
+import inspect
+from typing import TYPE_CHECKING, Any
 
 from langgraph.graph import END, START, StateGraph
+from opentelemetry import trace
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Callable
 
 from core.agent.nodes.answer import answer_node
 from core.agent.nodes.cancellation import cancellation_node
@@ -31,6 +34,108 @@ from core.agent.nodes.router import _route_after_router, router_node
 from core.agent.nodes.state_freshness import state_freshness_validator_node
 from core.agent.state import AgentState, NodeStreamEvent
 from core.config import settings
+
+tracer = trace.get_tracer("ai_sales_agent.graph")
+
+
+def _extract_attributes_from_state(
+    state: Any, kwargs: dict[str, Any], args: tuple[Any, ...]
+) -> dict[str, Any]:
+    """Extract span attributes (session_id, intent, model_used, declined) without PII.
+
+    Enforces R-SEC-002: no raw user message or PII in span attributes.
+    """
+    attrs: dict[str, Any] = {}
+    if isinstance(state, dict):
+        if session_id := state.get("session_id"):
+            attrs["session_id"] = str(session_id)
+        if intent := state.get("intent"):
+            attrs["intent"] = str(intent)
+        if model_used := state.get("model_used"):
+            attrs["model_used"] = str(model_used)
+        if (declined := state.get("declined")) is not None:
+            attrs["declined"] = bool(declined)
+
+    if "session_id" not in attrs:
+        config = kwargs.get("config") or (
+            args[1] if len(args) > 1 and isinstance(args[1], dict) else None
+        )
+        if isinstance(config, dict):
+            thread_id = config.get("configurable", {}).get("thread_id")
+            if thread_id:
+                attrs["session_id"] = str(thread_id)
+
+    return attrs
+
+
+def _update_span_attributes(span: trace.Span, attrs: dict[str, Any]) -> None:
+    for k, v in attrs.items():
+        if v is not None:
+            span.set_attribute(k, v)
+
+
+def traced_node(node_name: str, func: Callable[..., Any]) -> Callable[..., Any]:
+    """Wrap a graph node function with an OpenTelemetry span (WP-V3-2).
+
+    Respects settings.OTEL_NODE_SPANS_ENABLED kill-switch.
+    Extracts attributes from state without PII (R-SEC-002).
+    Handles both async and sync node functions via inspect.iscoroutinefunction.
+    """
+
+    if not settings.OTEL_NODE_SPANS_ENABLED:
+        return func
+
+    is_async = inspect.iscoroutinefunction(func)
+
+    if is_async:
+
+        @functools.wraps(func)
+        async def async_traced_wrapper(*args: Any, **kwargs: Any) -> Any:
+            state = args[0] if args else kwargs.get("state")
+            state_attrs = _extract_attributes_from_state(state, kwargs, args)
+
+            with tracer.start_as_current_span(f"node.{node_name}") as span:
+                span.set_attribute("node.name", node_name)
+                _update_span_attributes(span, state_attrs)
+
+                res = await func(*args, **kwargs)
+
+                output_state = (
+                    res.update
+                    if hasattr(res, "update") and isinstance(res.update, dict)
+                    else (res if isinstance(res, dict) else {})
+                )
+                out_attrs = _extract_attributes_from_state(output_state, kwargs, args)
+                _update_span_attributes(span, out_attrs)
+
+                return res
+
+        return async_traced_wrapper
+    else:
+
+        @functools.wraps(func)
+        def sync_traced_wrapper(*args: Any, **kwargs: Any) -> Any:
+            state = args[0] if args else kwargs.get("state")
+            state_attrs = _extract_attributes_from_state(state, kwargs, args)
+
+            with tracer.start_as_current_span(f"node.{node_name}") as span:
+                span.set_attribute("node.name", node_name)
+                _update_span_attributes(span, state_attrs)
+
+                res = func(*args, **kwargs)
+
+                output_state = (
+                    res.update
+                    if hasattr(res, "update") and isinstance(res.update, dict)
+                    else (res if isinstance(res, dict) else {})
+                )
+                out_attrs = _extract_attributes_from_state(output_state, kwargs, args)
+                _update_span_attributes(span, out_attrs)
+
+                return res
+
+        return sync_traced_wrapper
+
 
 # All registered node names — used to filter streaming events (T081)
 GRAPH_NODES = {
@@ -99,20 +204,32 @@ def build_graph(checkpointer=None):
     """
     builder = StateGraph(AgentState)
 
-    # Add all nodes
-    builder.add_node("router_node", router_node)
-    builder.add_node("retrieval_node", retrieval_node)
-    builder.add_node("memory_retrieval_node", memory_retrieval_node)
-    builder.add_node("confidence_node", confidence_node)
-    builder.add_node("clarify_node", clarify_node)
-    builder.add_node("escalation_node", escalation_node)
-    builder.add_node("answer_node", answer_node)
-    builder.add_node("hitl_guard_node", hitl_guard_node)
-    builder.add_node("queue_consumer_node", queue_consumer_node)
-    builder.add_node("state_freshness_validator_node", state_freshness_validator_node)
-    builder.add_node("order_execution_node", order_execution_node)
-    builder.add_node("cancellation_node", cancellation_node)
-    builder.add_node("customer_support_node", customer_support_node)
+    # Add all nodes wrapped with traced_node (WP-V3-2)
+    builder.add_node("router_node", traced_node("router_node", router_node))
+    builder.add_node("retrieval_node", traced_node("retrieval_node", retrieval_node))
+    builder.add_node(
+        "memory_retrieval_node", traced_node("memory_retrieval_node", memory_retrieval_node)
+    )
+    builder.add_node("confidence_node", traced_node("confidence_node", confidence_node))
+    builder.add_node("clarify_node", traced_node("clarify_node", clarify_node))
+    builder.add_node("escalation_node", traced_node("escalation_node", escalation_node))
+    builder.add_node("answer_node", traced_node("answer_node", answer_node))
+    builder.add_node("hitl_guard_node", traced_node("hitl_guard_node", hitl_guard_node))
+    builder.add_node(
+        "queue_consumer_node", traced_node("queue_consumer_node", queue_consumer_node)
+    )
+
+    builder.add_node(
+        "state_freshness_validator_node",
+        traced_node("state_freshness_validator_node", state_freshness_validator_node),
+    )
+    builder.add_node(
+        "order_execution_node", traced_node("order_execution_node", order_execution_node)
+    )
+    builder.add_node("cancellation_node", traced_node("cancellation_node", cancellation_node))
+    builder.add_node(
+        "customer_support_node", traced_node("customer_support_node", customer_support_node)
+    )
 
     # START → router_node (router returns Command with goto)
     builder.add_edge(START, "router_node")
