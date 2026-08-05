@@ -14,6 +14,7 @@ import inspect
 from typing import TYPE_CHECKING, Any
 
 from langgraph.graph import END, START, StateGraph
+from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
 
 if TYPE_CHECKING:
@@ -41,14 +42,18 @@ tracer = trace.get_tracer("ai_sales_agent.graph")
 def _extract_attributes_from_state(
     state: Any, kwargs: dict[str, Any], args: tuple[Any, ...]
 ) -> dict[str, Any]:
-    """Extract span attributes (session_id, intent, model_used, declined) without PII.
+    """Extract span attributes (session.id, user.id, intent, model_used, declined) without PII.
 
+    Uses OpenInference attribute names (session.id / user.id) so node spans match the
+    `using_attributes(...)` tagging on the parent trace and Phoenix session filters.
     Enforces R-SEC-002: no raw user message or PII in span attributes.
     """
     attrs: dict[str, Any] = {}
     if isinstance(state, dict):
         if session_id := state.get("session_id"):
-            attrs["session_id"] = str(session_id)
+            attrs[SpanAttributes.SESSION_ID] = str(session_id)
+        if customer_id := state.get("customer_id"):
+            attrs[SpanAttributes.USER_ID] = str(customer_id)
         if intent := state.get("intent"):
             attrs["intent"] = str(intent)
         if model_used := state.get("model_used"):
@@ -56,14 +61,14 @@ def _extract_attributes_from_state(
         if (declined := state.get("declined")) is not None:
             attrs["declined"] = bool(declined)
 
-    if "session_id" not in attrs:
+    if SpanAttributes.SESSION_ID not in attrs:
         config = kwargs.get("config") or (
             args[1] if len(args) > 1 and isinstance(args[1], dict) else None
         )
         if isinstance(config, dict):
             thread_id = config.get("configurable", {}).get("thread_id")
             if thread_id:
-                attrs["session_id"] = str(thread_id)
+                attrs[SpanAttributes.SESSION_ID] = str(thread_id)
 
     return attrs
 
@@ -74,85 +79,88 @@ def _update_span_attributes(span: trace.Span, attrs: dict[str, Any]) -> None:
             span.set_attribute(k, v)
 
 
+def _annotate_span_start(span: trace.Span, node_name: str, attrs: dict[str, Any]) -> None:
+    span.set_attribute("node.name", node_name)
+    span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "CHAIN")
+    _update_span_attributes(span, attrs)
+
+
+def _unwrap_output_state(res: Any) -> dict[str, Any]:
+    # Command(update={...}) → its update dict; guard isinstance because a plain
+    # dict's own `.update` attribute is the bound method, not a dict.
+    if hasattr(res, "update") and isinstance(res.update, dict):
+        return res.update
+    return res if isinstance(res, dict) else {}
+
+
 def traced_node(node_name: str, func: Callable[..., Any]) -> Callable[..., Any]:
     """Wrap a graph node function with an OpenTelemetry span (WP-V3-2).
 
-    Respects settings.OTEL_NODE_SPANS_ENABLED kill-switch.
+    Respects settings.OTEL_NODE_SPANS_ENABLED kill-switch — read at graph-build
+    time, so toggling the env var requires an app restart.
     Extracts attributes from state without PII (R-SEC-002).
     Handles both async and sync node functions via inspect.iscoroutinefunction.
+    Exceptions propagate unchanged; the span records them with status ERROR
+    (start_as_current_span default).
     """
 
     if not settings.OTEL_NODE_SPANS_ENABLED:
         return func
 
-    is_async = inspect.iscoroutinefunction(func)
-
-    if is_async:
+    if inspect.iscoroutinefunction(func):
 
         @functools.wraps(func)
-        async def async_traced_wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def traced_wrapper(*args: Any, **kwargs: Any) -> Any:
             state = args[0] if args else kwargs.get("state")
-            state_attrs = _extract_attributes_from_state(state, kwargs, args)
-
             with tracer.start_as_current_span(f"node.{node_name}") as span:
-                span.set_attribute("node.name", node_name)
-                _update_span_attributes(span, state_attrs)
-
-                res = await func(*args, **kwargs)
-
-                output_state = (
-                    res.update
-                    if hasattr(res, "update") and isinstance(res.update, dict)
-                    else (res if isinstance(res, dict) else {})
+                _annotate_span_start(
+                    span, node_name, _extract_attributes_from_state(state, kwargs, args)
                 )
-                out_attrs = _extract_attributes_from_state(output_state, kwargs, args)
-                _update_span_attributes(span, out_attrs)
-
+                res = await func(*args, **kwargs)
+                _update_span_attributes(
+                    span,
+                    _extract_attributes_from_state(_unwrap_output_state(res), kwargs, args),
+                )
                 return res
-
-        return async_traced_wrapper
     else:
 
         @functools.wraps(func)
-        def sync_traced_wrapper(*args: Any, **kwargs: Any) -> Any:
+        def traced_wrapper(*args: Any, **kwargs: Any) -> Any:
             state = args[0] if args else kwargs.get("state")
-            state_attrs = _extract_attributes_from_state(state, kwargs, args)
-
             with tracer.start_as_current_span(f"node.{node_name}") as span:
-                span.set_attribute("node.name", node_name)
-                _update_span_attributes(span, state_attrs)
-
-                res = func(*args, **kwargs)
-
-                output_state = (
-                    res.update
-                    if hasattr(res, "update") and isinstance(res.update, dict)
-                    else (res if isinstance(res, dict) else {})
+                _annotate_span_start(
+                    span, node_name, _extract_attributes_from_state(state, kwargs, args)
                 )
-                out_attrs = _extract_attributes_from_state(output_state, kwargs, args)
-                _update_span_attributes(span, out_attrs)
-
+                res = func(*args, **kwargs)
+                _update_span_attributes(
+                    span,
+                    _extract_attributes_from_state(_unwrap_output_state(res), kwargs, args),
+                )
                 return res
 
-        return sync_traced_wrapper
+    return traced_wrapper
 
+
+# Single node registry (WP-V3-2): build_graph() wraps + registers every entry,
+# so a new node can't be added without tracing, and GRAPH_NODES can't drift.
+_NODE_FUNCS: dict[str, Any] = {
+    "router_node": router_node,
+    "retrieval_node": retrieval_node,
+    "memory_retrieval_node": memory_retrieval_node,
+    "confidence_node": confidence_node,
+    "clarify_node": clarify_node,
+    "escalation_node": escalation_node,
+    "answer_node": answer_node,
+    "hitl_guard_node": hitl_guard_node,
+    "queue_consumer_node": queue_consumer_node,
+    "state_freshness_validator_node": state_freshness_validator_node,
+    "order_execution_node": order_execution_node,
+    "cancellation_node": cancellation_node,
+    "customer_support_node": customer_support_node,
+}
 
 # All registered node names — used to filter streaming events (T081)
-GRAPH_NODES = {
-    "router_node",
-    "retrieval_node",
-    "memory_retrieval_node",
-    "confidence_node",
-    "clarify_node",
-    "escalation_node",
-    "answer_node",
-    "hitl_guard_node",
-    "queue_consumer_node",
-    "state_freshness_validator_node",
-    "order_execution_node",
-    "cancellation_node",
-    "customer_support_node",
-}
+GRAPH_NODES = set(_NODE_FUNCS)
 
 # Week 5: Graph schema version for checkpoint compatibility (FR-018)
 # 006: WP-V2-3 adds clarify_node + clarify state channels
@@ -204,32 +212,9 @@ def build_graph(checkpointer=None):
     """
     builder = StateGraph(AgentState)
 
-    # Add all nodes wrapped with traced_node (WP-V3-2)
-    builder.add_node("router_node", traced_node("router_node", router_node))
-    builder.add_node("retrieval_node", traced_node("retrieval_node", retrieval_node))
-    builder.add_node(
-        "memory_retrieval_node", traced_node("memory_retrieval_node", memory_retrieval_node)
-    )
-    builder.add_node("confidence_node", traced_node("confidence_node", confidence_node))
-    builder.add_node("clarify_node", traced_node("clarify_node", clarify_node))
-    builder.add_node("escalation_node", traced_node("escalation_node", escalation_node))
-    builder.add_node("answer_node", traced_node("answer_node", answer_node))
-    builder.add_node("hitl_guard_node", traced_node("hitl_guard_node", hitl_guard_node))
-    builder.add_node(
-        "queue_consumer_node", traced_node("queue_consumer_node", queue_consumer_node)
-    )
-
-    builder.add_node(
-        "state_freshness_validator_node",
-        traced_node("state_freshness_validator_node", state_freshness_validator_node),
-    )
-    builder.add_node(
-        "order_execution_node", traced_node("order_execution_node", order_execution_node)
-    )
-    builder.add_node("cancellation_node", traced_node("cancellation_node", cancellation_node))
-    builder.add_node(
-        "customer_support_node", traced_node("customer_support_node", customer_support_node)
-    )
+    # Add all nodes wrapped with traced_node (WP-V3-2) — single registration point
+    for node_name, node_func in _NODE_FUNCS.items():
+        builder.add_node(node_name, traced_node(node_name, node_func))
 
     # START → router_node (router returns Command with goto)
     builder.add_edge(START, "router_node")

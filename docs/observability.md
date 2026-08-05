@@ -114,6 +114,20 @@ LangGraph/LLM spans carry `session.id` and `user.id`:
 2. Or filter traces: `attributes.session.id == 'telegram_12345'` /
    `attributes.user.id == '<customer_id>'`.
 
+**Per-node spans (WP-V3-2):**
+
+Every LangGraph node execution emits a `node.<name>` span (kind `CHAIN`) as a child of the
+turn's trace — so one `/agent/query` shows a parent-child tree with per-node latency:
+`node.router_node → node.retrieval_node → node.confidence_node → node.answer_node → …`.
+
+- Attributes: `session.id`, `user.id` (same OpenInference names as the parent trace, so the
+  session filters above also match node spans), plus `node.name`, `intent`, `model_used`,
+  `declined`. Raw message content is never attached (R-SEC-002).
+- A node exception is recorded on its span (status `ERROR` + exception event) — failed turns
+  show exactly which node broke.
+- Kill-switch: `OTEL_NODE_SPANS_ENABLED=false` disables the wrapper entirely (zero overhead).
+  It is read at **graph build time** — restart the app after changing it.
+
 ---
 
 ## Switching Backends

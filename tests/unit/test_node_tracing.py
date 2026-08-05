@@ -1,7 +1,8 @@
 """
 Why: Unit tests for WP-V3-2 OpenTelemetry per-node tracing (R-SEC-002, kill-switch).
-What: Tests traced_node wrapper for async/sync functions, span attribute extraction,
-      PII protection, kill-switch behavior, and graph build compatibility.
+What: Tests traced_node wrapper for async/sync functions, OpenInference span attribute
+      extraction (session.id / user.id / span kind), PII protection, kill-switch behavior,
+      exception recording, and graph build compatibility.
 """
 
 from __future__ import annotations
@@ -10,12 +11,14 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from openinference.semconv.trace import SpanAttributes
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import StatusCode
 
 import core.agent.graph as graph_module
-from core.agent.graph import build_graph, traced_node
+from core.agent.graph import GRAPH_NODES, build_graph, traced_node
 from core.config import settings
 
 
@@ -47,7 +50,7 @@ def test_traced_node_kill_switch_disabled():
 
 @pytest.mark.asyncio
 async def test_traced_node_async_span_creation(memory_exporter):
-    """Async node function creates an OTel span with state attributes and output updates."""
+    """Async node function creates an OTel span with OpenInference attributes."""
 
     async def sample_async_node(
         state: dict[str, Any], config: dict[str, Any] | None = None
@@ -58,6 +61,7 @@ async def test_traced_node_async_span_creation(memory_exporter):
         wrapped = traced_node("sample_async_node", sample_async_node)
         input_state = {
             "session_id": "sess-12345",
+            "customer_id": "cust-777",
             "message": "SECRET PII USER MESSAGE nguyen@example.com 0912345678",
         }
         res = await wrapped(input_state)
@@ -70,7 +74,11 @@ async def test_traced_node_async_span_creation(memory_exporter):
 
     attrs = span.attributes
     assert attrs.get("node.name") == "sample_async_node"
-    assert attrs.get("session_id") == "sess-12345"
+    # OpenInference names — must match using_attributes() tagging on the parent
+    # trace so Phoenix session filters (attributes.session.id) also hit node spans.
+    assert attrs.get(SpanAttributes.SESSION_ID) == "sess-12345"
+    assert attrs.get(SpanAttributes.USER_ID) == "cust-777"
+    assert attrs.get(SpanAttributes.OPENINFERENCE_SPAN_KIND) == "CHAIN"
     assert attrs.get("intent") == "INFO_QUERY"
     assert attrs.get("model_used") == "groq/llama-3.3-70b"
 
@@ -100,7 +108,8 @@ def test_traced_node_sync_span_creation(memory_exporter):
 
     attrs = span.attributes
     assert attrs.get("node.name") == "sample_sync_node"
-    assert attrs.get("session_id") == "sess-67890"
+    assert attrs.get(SpanAttributes.SESSION_ID) == "sess-67890"
+    assert attrs.get(SpanAttributes.OPENINFERENCE_SPAN_KIND) == "CHAIN"
     assert attrs.get("intent") == "OTHER"
     assert attrs.get("declined") is True
 
@@ -118,15 +127,53 @@ def test_traced_node_config_session_id_fallback(memory_exporter):
 
     spans = memory_exporter.get_finished_spans()
     assert len(spans) == 1
-    assert spans[0].attributes.get("session_id") == "thread-abc"
+    assert spans[0].attributes.get(SpanAttributes.SESSION_ID) == "thread-abc"
+
+
+@pytest.mark.asyncio
+async def test_traced_node_command_update_unwrapped(memory_exporter):
+    """A node returning Command(update={...}) contributes output attributes to the span."""
+    from langgraph.types import Command
+
+    async def command_node(state: dict[str, Any]) -> Command:
+        return Command(goto="answer_node", update={"intent": "PURCHASE", "declined": False})
+
+    with patch.object(settings, "OTEL_NODE_SPANS_ENABLED", True):
+        wrapped = traced_node("command_node", command_node)
+        res = await wrapped({"session_id": "sess-cmd"})
+        assert res.goto == "answer_node"
+
+    spans = memory_exporter.get_finished_spans()
+    assert len(spans) == 1
+    attrs = spans[0].attributes
+    assert attrs.get("intent") == "PURCHASE"
+    assert attrs.get("declined") is False
+
+
+@pytest.mark.asyncio
+async def test_traced_node_records_exception(memory_exporter):
+    """A raising node propagates the exception AND the span records status ERROR."""
+
+    async def failing_node(state: dict[str, Any]) -> dict[str, Any]:
+        raise ValueError("boom")
+
+    with patch.object(settings, "OTEL_NODE_SPANS_ENABLED", True):
+        wrapped = traced_node("failing_node", failing_node)
+        with pytest.raises(ValueError, match="boom"):
+            await wrapped({"session_id": "sess-err"})
+
+    spans = memory_exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    assert span.status.status_code == StatusCode.ERROR
+    assert any(event.name == "exception" for event in span.events)
 
 
 def test_build_graph_with_traced_nodes():
-    """build_graph() compiles successfully with traced_node wrapped nodes."""
+    """build_graph() compiles successfully and registers exactly the GRAPH_NODES registry."""
     graph = build_graph()
     assert graph is not None
-    # Verify graph contains expected nodes
-    graph_nodes = graph.get_graph().nodes
-    assert "router_node" in graph_nodes
-    assert "retrieval_node" in graph_nodes
-    assert "answer_node" in graph_nodes
+    compiled_nodes = set(graph.get_graph().nodes) - {"__start__", "__end__"}
+    # GRAPH_NODES is derived from the same registry build_graph() iterates —
+    # this locks streaming-event filtering against registry drift.
+    assert compiled_nodes == GRAPH_NODES
