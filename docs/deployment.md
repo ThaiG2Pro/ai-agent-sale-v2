@@ -103,6 +103,22 @@ curl -s http://localhost:8000/health/readiness
 - DB auth failures: ensure `./secrets/db_password.txt` matches DB credentials.
 - slow startup: first build compiles dependencies; subsequent builds are cached.
 
+## Branch Protection (one-time, needs repo owner)
+
+To make a red CI actually block merges, enable branch protection on GitHub —
+Settings → Branches → ruleset for `main`: require status checks **lint**,
+**unit**, **eval-tier-r** + require branches up to date. Or via CLI:
+
+```bash
+gh api -X PUT repos/ThaiG2Pro/ai-agent-sale-v2/branches/main/protection \
+  -f 'required_status_checks[strict]=true' \
+  -f 'required_status_checks[contexts][]=lint' \
+  -f 'required_status_checks[contexts][]=unit' \
+  -f 'required_status_checks[contexts][]=eval-tier-r' \
+  -F enforce_admins=false \
+  -F 'required_pull_request_reviews=null' -F 'restrictions=null'
+```
+
 ## Security Note
 
 - Never commit `.env` or `secrets/*`.
