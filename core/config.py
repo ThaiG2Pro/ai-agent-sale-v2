@@ -115,6 +115,8 @@ class Settings(BaseSettings):
     # (old decline behavior). Max 1 clarify per original query is hardcoded —
     # the second borderline pass declines as before.
     CLARIFY_ENABLED: bool = True
+    # WP-V3-4: similarity gap threshold for clarify node eligibility
+    CLARIFY_SIMILARITY_GAP_MAX: float = Field(default=0.05, ge=0.0, le=1.0)
     # WP-V2-3: LLM query decomposition for declined multi-intent/comparison
     # queries in the graph retrieval node. False = regex COMPARISON split only
     # (pre-V2-3 behavior). On LLM error the regex split remains the fallback.

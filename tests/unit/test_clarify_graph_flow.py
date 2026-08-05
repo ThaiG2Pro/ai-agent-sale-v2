@@ -42,7 +42,7 @@ def _fake_llm_dispatcher():
     return AsyncMock(side_effect=complete)
 
 
-def _retrieval_result(declined: bool, similarity: float):
+def _retrieval_result(declined: bool, similarity: float, similarity_gap: float = 0.0):
     citations = (
         []
         if declined
@@ -60,6 +60,7 @@ def _retrieval_result(declined: bool, similarity: float):
         declined=declined,
         citations=citations,
         best_similarity=similarity,
+        similarity_gap=similarity_gap,
         cached_answer=None,
         canonical_query="canonical",
         query_vector=None,
@@ -154,3 +155,75 @@ async def test_merged_turn_still_borderline_declines(monkeypatch):
         )
         assert state2["response"] == DECLINE_MESSAGE
         assert state2["declined"] is True
+
+
+@pytest.mark.asyncio
+async def test_two_turn_clarify_flow_info_query_borderline(monkeypatch):
+    """WP-V3-4: INFO_QUERY borderline query with small similarity_gap triggers clarify turn 1."""
+    monkeypatch.setattr("core.config.settings.GROUNDEDNESS_CHECK_ENABLED", False)
+
+    graph = build_graph(checkpointer=MemorySaver())
+    config = make_agent_config("session-clarify-info-query", db=AsyncMock())
+
+    def _info_query_llm_dispatcher():
+        async def complete(*, model, messages, response_format=None, **kwargs):
+            name = getattr(response_format, "__name__", None)
+            if name == "IntentClassification":
+                return _llm(
+                    '{"primary_intent": "INFO_QUERY", "secondary_intents": [], '
+                    '"confidence": 0.9, "reasoning": "test"}'
+                )
+            if name == "ClarifyingQuestion":
+                return _llm(f'{{"question": "{CLARIFY_QUESTION}"}}')
+            return _llm(FINAL_ANSWER)
+
+        return AsyncMock(side_effect=complete)
+
+    seen_queries: list[str] = []
+
+    def make_fake_tool(_db):
+        async def ainvoke(payload):
+            seen_queries.append(payload["query"])
+            if len(seen_queries) == 1:
+                # Turn 1: borderline INFO_QUERY with small gap (0.0019)
+                return _retrieval_result(False, similarity=0.60, similarity_gap=0.0019)
+            # Turn 2: merged query has strong similarity (0.90)
+            return _retrieval_result(False, similarity=0.90, similarity_gap=0.15)
+
+        tool = MagicMock()
+        tool.ainvoke = AsyncMock(side_effect=ainvoke)
+        return tool
+
+    patches = (
+        patch("services.ai.AIGateway.complete", new=_info_query_llm_dispatcher()),
+        patch("core.agent.nodes.retrieval.make_retrieval_tool", side_effect=make_fake_tool),
+        patch(
+            "services.memory.semantic_memory.SemanticMemoryService.retrieve",
+            new=AsyncMock(return_value=[]),
+        ),
+    )
+    with patches[0], patches[1], patches[2]:
+        # Turn 1: "Điện thoại Samsung ấy còn hàng không?" classified as INFO_QUERY with gap 0.0019
+        state1 = await graph.ainvoke(
+            make_initial_state(
+                "Điện thoại Samsung ấy còn hàng không?", "session-clarify-info-query", "cust_9"
+            ),
+            config,
+        )
+        assert state1["response"] == CLARIFY_QUESTION
+        assert state1["model_used"] == "clarify"
+
+        checkpoint = await graph.aget_state(config)
+        assert checkpoint.values["awaiting_clarification"] is True
+        assert (
+            checkpoint.values["clarify_original_query"] == "Điện thoại Samsung ấy còn hàng không?"
+        )
+
+        # Turn 2: customer specifies "S24 Ultra" → merged retrieval → answer
+        state2 = await graph.ainvoke(
+            make_initial_state("S24 Ultra", "session-clarify-info-query", "cust_9"),
+            config,
+        )
+        assert seen_queries[1] == "Điện thoại Samsung ấy còn hàng không? S24 Ultra"
+        assert state2["response"] == FINAL_ANSWER
+        assert state2["awaiting_clarification"] is False

@@ -175,6 +175,7 @@ class AgentState(TypedDict):
     retrieved_chunks: list[dict]
     citations: Annotated[list, operator.add]
     similarity_score: float
+    similarity_gap: float
     rerank_score: float | None
     confidence_score: float
     model_used: str | None
@@ -252,6 +253,7 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
         "retrieved_chunks": [],
         "citations": [],
         "similarity_score": 0.0,
+        "similarity_gap": 0.0,
         "rerank_score": None,
         "confidence_score": 0.0,
         "model_used": None,

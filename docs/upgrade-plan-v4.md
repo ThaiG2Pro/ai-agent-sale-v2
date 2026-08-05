@@ -2,10 +2,9 @@
 
 ## Context
 
-Plan V3 đóng 5/6 WP (V3-0 CI · V3-1 coverage gate · V3-2 OTel per-node · V3-3 Tier-F graph-path
-12/12×3 + nightly workflow · V3-5 dọn nợ). **WP-V3-4 (clarify borderline intents) DEFERRED** —
-quyết định 2026-08-05: không chặn prod, mở lại sau khi V4 xong. Scorecard ~4.7/5; phần còn thiếu
-tới 5.0 được nêu đích danh trong Verification tổng V3: **deploy pipeline thật** — và khi soi kỹ,
+Plan V3 đóng đủ 6/6 WP (V3-0 CI · V3-1 coverage gate · V3-2 OTel per-node · V3-3 Tier-F graph-path
+12/12×3 + nightly workflow · V3-4 clarify borderline intents COMPLETED 2026-08-05 · V3-5 dọn nợ).
+Scorecard ~4.8/5; phần còn thiếu tới 5.0 được nêu đích danh trong Verification tổng V3: **deploy pipeline thật** — và khi soi kỹ,
 "thật" nghĩa là cả một lớp ops chưa tồn tại:
 
 **Khoảng cách đo được tới prod (khảo sát 2026-08-05):**

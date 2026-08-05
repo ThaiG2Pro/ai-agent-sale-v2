@@ -85,25 +85,36 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     if state.get("memory_context"):
         is_declined = False
 
-    # FR-007: INFO_QUERY, PRICING, AVAILABILITY, COMPARISON borderline (0.45 ≤ sim < 0.70)
-    # must NOT be declined here. _route_after_confidence routes them to escalation_node.
-    _borderline_answer_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY", "COMPARISON"}
-    if intent in _borderline_answer_intents and is_declined:
-        is_declined = False  # escalation_node decides model, answer_node generates
-
-    # WP-V2-3 clarify loop: a Layer 2 decline (passed L1, low fused score) gets
-    # ONE clarifying question instead. ORDER_PLACEMENT keeps its HITL path.
-    # clarify_count >= 1 → the merged retry was still borderline → decline as
-    # before (anti-loop). Kill switch: CLARIFY_ENABLED=False = old behavior.
+    # WP-V3-4: Expand clarify loop to borderline INFO_QUERY, AVAILABILITY, COMPARISON
+    # when similarity_gap is small (<= CLARIFY_SIMILARITY_GAP_MAX, default 0.05).
+    # PRICING keeps old path (usually specific pricing questions).
+    # Anti-loop: clarify_count < 1. Kill switch: CLARIFY_ENABLED=False.
     needs_clarification = False
+    borderline_clarify_intents = {"INFO_QUERY", "AVAILABILITY", "COMPARISON"}
+    similarity_gap = state.get("similarity_gap", 0.0)
     if (
-        is_declined
+        fused < confidence_threshold
         and settings.CLARIFY_ENABLED
         and intent != "ORDER_PLACEMENT"
+        and not state.get("memory_context")
         and int(state.get("clarify_count") or 0) < 1
     ):
-        needs_clarification = True
-        is_declined = False
+        if intent in borderline_clarify_intents:
+            if similarity_gap <= settings.CLARIFY_SIMILARITY_GAP_MAX:
+                needs_clarification = True
+                is_declined = False
+        elif intent == "PRICING":
+            needs_clarification = False
+        else:
+            needs_clarification = True
+            is_declined = False
+
+    # FR-007: INFO_QUERY, PRICING, AVAILABILITY, COMPARISON borderline (0.45 ≤ sim < 0.70)
+    # that did NOT trigger clarify must NOT be declined here.
+    # _route_after_confidence routes them to escalation_node.
+    _borderline_answer_intents = {"INFO_QUERY", "PRICING", "AVAILABILITY", "COMPARISON"}
+    if intent in _borderline_answer_intents and is_declined and not needs_clarification:
+        is_declined = False  # escalation_node decides model, answer_node generates
 
     result: dict = {
         "confidence_score": fused,

@@ -114,13 +114,38 @@ class TestClarifyGate:
 
     @pytest.mark.asyncio
     async def test_borderline_answer_intents_keep_escalation_path(self):
-        """INFO_QUERY borderline already answers via escalation — no clarify."""
-        state = _state(intent="INFO_QUERY", similarity_score=0.60, declined=False)
-        result = await confidence_node(state, _mock_config())
-        assert result["needs_clarification"] is False
-        assert result["declined"] is False
-        state.update(result)
-        assert _route_after_confidence(state) == "escalation_node"
+        """PRICING and large-gap INFO_QUERY keep escalation path;
+        small-gap INFO_QUERY clarifies (WP-V3-4).
+        """
+        # PRICING keeps escalation path
+        state_pricing = _state(
+            intent="PRICING", similarity_score=0.60, similarity_gap=0.01, declined=False
+        )
+        result_pricing = await confidence_node(state_pricing, _mock_config())
+        assert result_pricing["needs_clarification"] is False
+        assert result_pricing["declined"] is False
+        state_pricing.update(result_pricing)
+        assert _route_after_confidence(state_pricing) == "escalation_node"
+
+        # INFO_QUERY with large gap (> 0.05) keeps escalation path
+        state_info_large = _state(
+            intent="INFO_QUERY", similarity_score=0.60, similarity_gap=0.10, declined=False
+        )
+        result_info_large = await confidence_node(state_info_large, _mock_config())
+        assert result_info_large["needs_clarification"] is False
+        assert result_info_large["declined"] is False
+        state_info_large.update(result_info_large)
+        assert _route_after_confidence(state_info_large) == "escalation_node"
+
+        # INFO_QUERY with small gap (<= 0.05) clarifies (WP-V3-4)
+        state_info_small = _state(
+            intent="INFO_QUERY", similarity_score=0.60, similarity_gap=0.01, declined=False
+        )
+        result_info_small = await confidence_node(state_info_small, _mock_config())
+        assert result_info_small["needs_clarification"] is True
+        assert result_info_small["declined"] is False
+        state_info_small.update(result_info_small)
+        assert _route_after_confidence(state_info_small) == "clarify_node"
 
     def test_route_needs_clarification_to_clarify_node(self):
         state = _state(similarity_score=0.60, needs_clarification=True, declined=False)
