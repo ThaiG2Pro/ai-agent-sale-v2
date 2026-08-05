@@ -59,7 +59,7 @@ requires-dist = [
     { name = "asyncpg" },
     { name = "crawl4ai" },
     { name = "fastapi" },
-    { name = "fastembed", specifier = ">=0.8.0" },
+    { name = "fastembed", specifier = "==0.8.0" },
     { name = "httpx" },
     { name = "langgraph", specifier = ">=0.3" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.0.4" },

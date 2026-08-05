@@ -29,32 +29,39 @@ Model settings (`LIGHT_CHAT_MODEL`, `CHAT_MODEL`, `POWERFUL_CHAT_MODEL`,
 keys straight from the environment; `docker-compose.yml` passes them through
 (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`).
 
-### Option A — Cloud chat + local embeddings (recommended for fast demos)
+> **Which backend for which deployment?** See
+> [ADR-006](adr/006-model-provider-and-embedding-runtime.md) — the decision
+> table (Ollama for dev, llama.cpp for SME self-host, vLLM for GPU
+> concurrency, cloud API for zero-ops) and the mandatory Ollama mitigations
+> (`num_ctx`, exact quant tags).
 
-No Ollama needed for chat; keeps embeddings compatible with the existing DB:
+### Option A — Cloud chat + local embeddings (current default)
+
+No Ollama needed at all; embeddings run in-process (fastembed ONNX, CPU):
 
 ```bash
 # .env
-CHAT_MODEL=gemini/gemini-2.5-flash
-LIGHT_CHAT_MODEL=gemini/gemini-2.5-flash
-POWERFUL_CHAT_MODEL=gemini/gemini-2.5-pro
-GEMINI_API_KEY=<your key>
-# EMBED_MODEL stays ollama/bge-m3 (local)
+CHAT_MODEL=groq/llama-3.3-70b-versatile
+LIGHT_CHAT_MODEL=groq/llama-3.1-8b-instant
+GROQ_API_KEY=<your key>
+EMBED_MODEL=local/multilingual-e5-large   # fastembed, in-process
 ```
 
-### Option B — Fully local (Ollama on the host)
+### Option B — Fully local chat (Ollama on the host)
 
 The `api` container reaches host Ollama via `host.docker.internal`
 (`extra_hosts: host-gateway` is preconfigured); the default
 `OLLAMA_BASE_URL=http://host.docker.internal:11434` works out of the box.
+Set `num_ctx` explicitly and pin exact quant tags — see ADR-006.
 
-### ⚠️ Embedding dimension constraint
+### ⚠️ Embedding model / dimension constraint
 
-pgvector columns are `Vector(1024)` (bge-m3). Only switch `EMBED_MODEL` to a
-model that can emit **1024-dim vectors** (e.g. OpenAI `text-embedding-3-large`
-with `dimensions=1024`). Otherwise keep `EMBED_MODEL=ollama/bge-m3` and switch
-chat models only. A mismatched dimension fails fast at the AI gateway with
-"Configuration Error: Model Mismatch".
+pgvector columns are `Vector(1024)`. Only switch `EMBED_MODEL` to a model
+emitting **1024-dim vectors**; a mismatched dimension fails fast at the AI
+gateway with "Configuration Error: Model Mismatch". More importantly:
+**changing the embedding model (or the exact-pinned `fastembed` version) is a
+migration event** — re-embed + re-baseline per the runbook in
+[ADR-006](adr/006-model-provider-and-embedding-runtime.md).
 
 ### Semantic cache freshness
 

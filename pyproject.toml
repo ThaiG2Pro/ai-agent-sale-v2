@@ -40,7 +40,10 @@ dependencies = [
     "arize-phoenix-otel>=0.15.0",
     "langgraph-checkpoint-postgres>=3.0.4",
     "psycopg[binary]>=3.1.9",
-    "fastembed>=0.8.0",
+    # Pinned EXACT: fastembed changed multilingual-e5-large pooling (CLS→mean)
+    # between minor versions — a silent embedding-space change that model_name
+    # filters cannot detect. Bumping this = re-embed migration (see ADR-006).
+    "fastembed==0.8.0",
     "onnxruntime<1.28",
 ]
 
