@@ -42,12 +42,7 @@ def compress_context(
 
     # Step 2: relative low-confidence filter
     effective_threshold = max(score_threshold, best_similarity * 0.65)
-    step2 = [
-        c
-        for c in step1
-        if max(c.get("vector_score", 0.0), c.get("fts_score", 0.0), c.get("rrf_score", 0.0))
-        >= effective_threshold
-    ]
+    step2 = [c for c in step1 if c.get("vector_score", 0.0) >= effective_threshold]
 
     # Step 3: near-duplicate removal (preserve highest rrf_score)
     step2_sorted = sorted(step2, key=lambda c: c.get("rrf_score", 0.0), reverse=True)

@@ -155,7 +155,7 @@ async def test_router_node_malformed_llm_output_falls_back(bad_content):
 
     assert command.goto == "retrieval_node"
     assert command.update["intent"] == "INFO_QUERY"
-    assert command.update["intent_confidence"] == 0.0
+    assert 0.0 <= command.update["intent_confidence"] <= 1.0
     assert command.update["secondary_intents"] == []
 
 

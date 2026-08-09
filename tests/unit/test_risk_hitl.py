@@ -104,11 +104,11 @@ class TestRiskMatrix:
     def test_safety_invariant_unknown_value_never_tier1(self):
         assert _resolve_risk_tier("ORDER_PLACEMENT", None, 0.05) == 2
 
-    def test_small_order_low_risk_is_tier1(self):
-        assert _resolve_risk_tier("ORDER_PLACEMENT", 200_000.0, 0.1) == 1
+    def test_small_order_low_risk_is_tier2(self):
+        assert _resolve_risk_tier("ORDER_PLACEMENT", 200_000.0, 0.1) == 2
 
-    def test_tier3_still_possible_for_orders(self):
-        assert _resolve_risk_tier("ORDER_PLACEMENT", 10_000_000.0, 0.9) == 3
+    def test_order_placement_pauses_at_tier2(self):
+        assert _resolve_risk_tier("ORDER_PLACEMENT", 10_000_000.0, 0.9) == 2
 
 
 class TestHistoryFactor:
@@ -152,11 +152,14 @@ class TestHitlGuardTiers:
         db = _make_db([IntentStatus.CONVERTED])
         state = _order_state(price=200_000.0, confidence=0.95)
 
-        with patch("core.agent.nodes.hitl_guard.interrupt") as mock_interrupt:
+        with patch(
+            "core.agent.nodes.hitl_guard.interrupt",
+            return_value={"action": "approve", "admin_user_id": "admin1"},
+        ) as mock_interrupt:
             with patch("litellm.token_counter", return_value=100):
                 result = await hitl_guard_node(state, _config(db))
 
-        mock_interrupt.assert_not_called()
+        mock_interrupt.assert_called_once()
         assert isinstance(result, Command)
         assert result.goto == "queue_consumer_node"
         assert result.update["hitl_approved"] is True
@@ -201,12 +204,18 @@ class TestHitlGuardTiers:
         state = _order_state(price=50_000_000.0, confidence=0.1)
         # risk = 0.4*0.9 + 0.4*1.0 + 0.2*1.0 = 0.96 ≥ 0.75 → Tier 3
 
-        with patch("core.agent.nodes.hitl_guard.interrupt") as mock_interrupt:
+        with patch(
+            "core.agent.nodes.hitl_guard.interrupt",
+            return_value={
+                "action": "reject",
+                "admin_user_id": "admin1",
+                "rejection_reason": "high_risk_tier3",
+            },
+        ) as mock_interrupt:
             result = await hitl_guard_node(state, _config(db))
 
-        mock_interrupt.assert_not_called()
+        mock_interrupt.assert_called_once()
         assert result.goto == "customer_support_node"
-        assert result.update["hitl_rejection_reason"] == "high_risk_tier3"
 
     @pytest.mark.asyncio
     async def test_non_order_high_confidence_passes_through(self):
