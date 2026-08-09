@@ -16,8 +16,10 @@ from api.middleware import (
     global_exception_handler,
     http_exception_handler,
 )
-from api.routes import admin, agent, health, hitl, memory, query
+from api.routes import admin, agent, health, hitl, memory, query, ui
 from api.webhooks import telegram as telegram_webhook
+
+# ... imports ...
 from core.agent.checkpointer import create_checkpointer
 from core.config import find_insecure_default_secrets, settings
 from core.logging import instrument_fastapi, instrument_sqlalchemy, setup_logging
@@ -226,6 +228,7 @@ app.include_router(agent.router)
 app.include_router(hitl.router)
 app.include_router(memory.router, prefix="/memory", tags=["memory"])
 app.include_router(telegram_webhook.router)  # Week 6: Telegram webhook
+app.include_router(ui.router)  # Local quick test UI
 
 
 @app.get("/")

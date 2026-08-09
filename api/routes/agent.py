@@ -385,3 +385,63 @@ async def post_agent_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/session/{session_id}/history")
+async def get_session_history(
+    session_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    graph: Annotated[Any, Depends(get_agent_graph)],
+) -> dict[str, Any]:
+    """Retrieves conversation history and graph state snapshot for a session ID.
+    Used by local test UI when resuming a session.
+    """
+    config = make_agent_config(session_id, db=db)
+    try:
+        snapshot = await graph.aget_state(config)
+        state_values = snapshot.values if snapshot else {}
+        messages_raw = state_values.get("messages", [])
+        formatted_messages = []
+        for msg in messages_raw:
+            role = getattr(msg, "type", None) or getattr(msg, "role", "unknown")
+            content = getattr(msg, "content", str(msg))
+            if role == "human":
+                role = "user"
+            elif role == "ai":
+                role = "assistant"
+            formatted_messages.append({"role": role, "content": content})
+
+        # Safeguard: if state_values has response but messages doesn't end with assistant response, append it
+        resp_text = state_values.get("response")
+        if resp_text and (
+            not formatted_messages
+            or formatted_messages[-1]["role"] != "assistant"
+            or formatted_messages[-1]["content"] != resp_text
+        ):
+            formatted_messages.append({"role": "assistant", "content": resp_text})
+
+        is_hitl_paused = bool(snapshot.next) if snapshot else False
+        pause_id = state_values.get("hitl_pause_id")
+        if is_hitl_paused and not pause_id and snapshot:
+            for task in snapshot.tasks or []:
+                for intr in getattr(task, "interrupts", None) or []:
+                    iv = getattr(intr, "value", None)
+                    if isinstance(iv, dict) and "pause_id" in iv:
+                        pause_id = iv["pause_id"]
+                        break
+                if pause_id:
+                    break
+
+        return {
+            "session_id": session_id,
+            "exists": bool(state_values),
+            "messages": formatted_messages,
+            "order_info": state_values.get("order_info"),
+            "customer_id": state_values.get("customer_id"),
+            "hitl_paused": is_hitl_paused,
+            "hitl_pause_id": str(pause_id) if pause_id else None,
+            "next_node": snapshot.next[0] if (snapshot and snapshot.next) else None,
+        }
+    except Exception as e:
+        logger.exception("Failed to load session history for %s: %s", session_id, e)
+        raise HTTPException(status_code=500, detail=f"Failed to load session history: {e}") from e

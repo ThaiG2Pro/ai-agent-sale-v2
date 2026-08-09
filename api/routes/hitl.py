@@ -25,6 +25,46 @@ router = APIRouter(prefix="/hitl", tags=["hitl"])
 logger = logging.getLogger(__name__)
 
 
+@router.get("/pending", dependencies=[Depends(verify_admin_key)])
+async def get_pending_sessions(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    graph: Annotated[Any, Depends(get_agent_graph)],
+) -> list[dict[str, Any]]:
+    """Retrieves all currently pending (paused) HITL sessions with state details for Admin UI."""
+    from sqlalchemy import select
+
+    stmt = (
+        select(HITLMetadata)
+        .where(HITLMetadata.status == "paused")
+        .order_by(HITLMetadata.paused_at.desc())
+    )
+    res = await db.execute(stmt)
+    records = res.scalars().all()
+
+    pending_list = []
+    for record in records:
+        item = {
+            "pause_id": str(record.pause_id),
+            "session_id": record.session_id,
+            "pause_reason": record.pause_reason,
+            "paused_at": record.paused_at.isoformat() if record.paused_at else None,
+            "status": record.status,
+            "escalation_count": record.escalation_count,
+            "admin_id": record.admin_id,
+            "state": None,
+        }
+        try:
+            config = make_agent_config(record.session_id, db=db)
+            state_data = await HITLService.get_session_state(record.session_id, graph, config, db)
+            item["state"] = state_data
+        except Exception as e:
+            logger.warning("Could not load state for paused session %s: %s", record.session_id, e)
+            item["state"] = None
+        pending_list.append(item)
+
+    return pending_list
+
+
 @router.get("/session/{session_id}/state", dependencies=[Depends(verify_admin_key)])
 async def get_paused_state(
     session_id: str,
@@ -32,7 +72,7 @@ async def get_paused_state(
     graph: Annotated[Any, Depends(get_agent_graph)],
 ) -> dict[str, Any]:
     """Retrieves current paused state for admin review (T050)."""
-    config = {"configurable": {"thread_id": session_id}}
+    config = make_agent_config(session_id, db=db)
     try:
         return await HITLService.get_session_state(session_id, graph, config, db)
     except HTTPException:

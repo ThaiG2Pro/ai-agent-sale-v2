@@ -19,7 +19,6 @@ from core.agent.state import (
     SalesIntentExtraction,
     UrgencyLevel,
 )
-from core.config import settings
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,19 +69,13 @@ class SalesIntentExtractor:
             db: AsyncSession (reserved for future context lookups).
 
         Returns:
-            SalesIntentExtraction model with extracted fields or safe defaults.
         """
         try:
-            import litellm
+            from services.ai import AIGateway
 
-            logger.debug(
-                "Extracting sales intent from conversation",
-                extra={"model": settings.LIGHT_CHAT_MODEL, "text_len": len(conversation_text)},
-            )
-
-            # LiteLLM call with response_format for structured output (Article XII)
-            response = await litellm.acompletion(
-                model=settings.LIGHT_CHAT_MODEL,
+            # LiteLLM call via AIGateway with response_format for structured output (Article XII)
+            response = await AIGateway.complete(
+                model="light-chat",
                 messages=[
                     {
                         "role": "system",

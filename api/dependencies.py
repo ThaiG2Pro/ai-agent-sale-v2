@@ -106,11 +106,56 @@ async def check_paused_session(
     hitl_meta = res.scalars().first()
 
     if hitl_meta:
-        # Session is paused, enqueue message and return early response info
+        # Check if customer wants to cancel their pending order
+        cancel_keywords = [
+            "hủy đơn",
+            "không mua nữa",
+            "hủy giúp",
+            "muốn hủy",
+            "cancel order",
+            "thôi không mua",
+            "hủy đơn hàng",
+        ]
+        msg_lower = message.lower()
+        if any(kw in msg_lower for kw in cancel_keywords):
+            hitl_meta.status = "rejected"
+            hitl_meta.pause_reason = "cancelled_by_customer"
+            from sqlalchemy import update
+
+            from models.schema import Order
+
+            await db.execute(
+                update(Order).where(Order.session_id == session_id).values(status="cancelled")
+            )
+            await db.commit()
+            return {
+                "queued": True,
+                "message": "Dạ, đơn hàng đang chờ duyệt của anh/chị đã được hủy thành công theo yêu cầu ạ. Cảm ơn anh/chị đã nhắn cho shop!",
+            }
+
+        # Check if customer wants to update shipping address or phone number
+        update_info_keywords = [
+            "đổi địa chỉ",
+            "địa chỉ mới",
+            "đổi sđt",
+            "sđt mới",
+            "giao sang",
+            "đổi số điện thoại",
+        ]
+        if any(kw in msg_lower for kw in update_info_keywords):
+            hitl_meta.pause_reason = f"Cập nhật: {message}"[:50]
+            await db.flush()
+            await HITLService.enqueue_message(session_id, f"[CẬP NHẬT THÔNG TIN]: {message}", db)
+            return {
+                "queued": True,
+                "message": f"Dạ, shop đã ghi nhận thông tin cập nhật của anh/chị: '{message}'. Nhân viên shop sẽ kiểm tra và giao đúng theo thông tin mới này ạ!",
+            }
+
+        # Otherwise enqueue message for admin review
         await HITLService.enqueue_message(session_id, message, db)
         return {
             "queued": True,
-            "message": "Your message has been received. An agent is reviewing your request.",
+            "message": "Dạ, tin nhắn của bạn đã được ghi nhận. Nhân viên shop sẽ xem xét và xử lý ngay cho bạn ạ.",
         }
 
     return {"queued": False}

@@ -52,11 +52,12 @@ echo "🔹 Tunnel tool detected: $TUNNEL_TOOL"
 PUBLIC_URL=""
 
 if [ "$TUNNEL_TOOL" = "ngrok" ]; then
-    # Check if ngrok is already running
-    if ! pgrep -f "ngrok http" >/dev/null 2>&1; then
+    # Verify if ngrok local API is responding
+    if ! curl -s http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
         echo "🚀 Starting ngrok tunnel on port $API_PORT..."
+        pkill -f ngrok || true
         nohup ngrok http "$API_PORT" >/tmp/ngrok.log 2>&1 &
-        sleep 3
+        sleep 4
     else
         echo "ℹ️  ngrok is already running."
     fi

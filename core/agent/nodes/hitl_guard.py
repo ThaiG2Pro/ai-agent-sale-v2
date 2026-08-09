@@ -102,16 +102,16 @@ def _resolve_risk_tier(intent: str | None, order_value: float | None, risk: floa
     HITL_HIGH_VALUE_ORDER_THRESHOLD — or whose value is unknown — is always
     >= Tier 2. No weight/threshold tuning can auto-approve such an order.
     """
+    if intent == "ORDER_PLACEMENT":
+        # All valid order placement requests pause at Tier 2 for Admin Queue review
+        return 2
+
     if risk >= settings.HITL_RISK_TIER3_THRESHOLD:
         tier = 3
     elif risk >= settings.HITL_RISK_TIER1_THRESHOLD:
         tier = 2
     else:
         tier = 1
-    if intent == "ORDER_PLACEMENT" and (
-        order_value is None or order_value > settings.HITL_HIGH_VALUE_ORDER_THRESHOLD
-    ):
-        tier = max(tier, 2)
     return tier
 
 
@@ -143,6 +143,13 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
 
     intent = state.get("intent")
     confidence_score = state.get("confidence_score", 0.0)
+
+    # Guard: ORDER_PLACEMENT variant mismatch check (e.g. requested 256GB when only 512GB exists)
+    if intent == "ORDER_PLACEMENT" and state.get("variant_mismatch_msg"):
+        return Command(
+            goto="answer_node",
+            update={"response": state["variant_mismatch_msg"]},
+        )
 
     # Guard: ORDER_PLACEMENT needs order_info resolved by confidence_node
     # (product found in catalog). If order_info is None the product was not

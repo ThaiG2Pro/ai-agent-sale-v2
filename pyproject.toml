@@ -83,7 +83,7 @@ select = [
     "RUF",           # ruff rules
     "TCH",           # type checking
 ]
-ignore = ["B008"]  # False positive for typer.Option defaults (standard pattern)
+ignore = ["B008", "E501", "ASYNC230"]  # False positives for typer defaults, line length, script file writes
 fixable = ["ALL"]
 unfixable = []
 

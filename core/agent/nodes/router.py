@@ -35,6 +35,26 @@ async def router_node(state: AgentState) -> Command:
     Uses economy-chat model (not light-chat due to Ollama G1 constraint).
     Returns Command with goto and state updates.
     """
+    user_msg_lower = (state.get("user_message") or "").lower()
+    cancel_keywords = [
+        "hủy đơn",
+        "không mua nữa",
+        "hủy giúp",
+        "muốn hủy",
+        "cancel order",
+        "thôi không mua",
+        "hủy đơn hàng",
+    ]
+    if any(kw in user_msg_lower for kw in cancel_keywords):
+        return Command(
+            goto="cancellation_node",
+            update={
+                "intent": IntentEnum.CANCEL.value,
+                "secondary_intents": [],
+                "intent_confidence": 1.0,
+            },
+        )
+
     system_prompt = (
         "You are an intent classifier for a Vietnamese e-commerce sales agent. "
         "Classify the user message into one of these intents:\n"
@@ -55,25 +75,61 @@ async def router_node(state: AgentState) -> Command:
         "NOT for product browsing or catalog queries — those are INFO_QUERY.\n"
         "- FOLLOW_UP: asking about order status, checking progress of a previous order/request, "
         "or short status inquiries (e.g. 'đặt chưa?', 'đã đặt chưa?', 'rồi sao'). "
-        "NOT for confirming a new purchase.\n\n"
+        "NOT for confirming a new purchase.\n"
+        "- CANCEL: user explicitly requests to cancel an order, stop a purchase, or change their mind "
+        "(e.g. 'hủy đơn', 'không mua nữa', 'hủy giúp tôi', 'tôi muốn hủy', 'cancel order').\n\n"
         "CRITICAL: 'I want laptops under 25 million' = PRICING. "
         "'Order THIS specific product' = ORDER_PLACEMENT. "
         "Asking 'Did you place it?' / 'đặt chưa?' = FOLLOW_UP. "
+        "Asking to cancel an order = CANCEL. "
         "Respond ONLY with valid JSON matching the schema. "
         "Set primary_intent to the best matching intent. "
         "Set confidence 0.0-1.0. Keep reasoning concise."
     )
     try:
-        result = await AIGateway.complete(
-            model="economy-chat",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": state["user_message"]},
-            ],
-            response_format=IntentClassification,
-        )
-        classification = IntentClassification.model_validate_json(
-            result.choices[0].message.content
+        try:
+            result = await AIGateway.complete(
+                model="economy-chat",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": state["user_message"]},
+                ],
+                response_format=IntentClassification,
+            )
+            raw_content = result.choices[0].message.content
+        except Exception:
+            result = await AIGateway.complete(
+                model="economy-chat",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": state["user_message"]},
+                ],
+                response_format={"type": "json_object"},
+            )
+            raw_content = result.choices[0].message.content
+
+        # Flexible parsing for primary_intent & secondary_intents
+        import json
+
+        data = json.loads(raw_content)
+        primary = data.get("primary_intent") or data.get("intent") or "INFO_QUERY"
+        try:
+            primary_enum = IntentEnum(primary)
+        except ValueError:
+            primary_enum = IntentEnum.INFO_QUERY
+
+        valid_secondaries = []
+        for sec in data.get("secondary_intents") or []:
+            try:
+                valid_secondaries.append(IntentEnum(sec))
+            except ValueError:
+                pass
+
+        classification = IntentClassification(
+            primary_intent=primary_enum,
+            secondary_intents=valid_secondaries,
+            confidence=float(data.get("confidence", 0.9)),
+            reasoning=str(data.get("reasoning", "")),
         )
     except Exception as e:
         logger.warning(
@@ -94,23 +150,10 @@ async def router_node(state: AgentState) -> Command:
 
 
 def _get_next_node(classification: IntentClassification) -> str:
-    """Routing map from intent to next node (T045).
+    """Routing map from intent to next node (T045)."""
+    if classification.primary_intent == IntentEnum.CANCEL:
+        return "cancellation_node"
 
-    Routing logic (FR-007):
-    - ORDER_PLACEMENT → retrieval_node (ALWAYS; HITL is the safety net for orders,
-      secondary COMPLAINT/NEGOTIATION on order messages are often small-model artifacts
-      and must not short-circuit the retrieval → confidence → HITL flow)
-    - Primary intent is COMPLAINT or NEGOTIATION → escalation_node (premium model)
-    - Secondary intent COMPLAINT/NEGOTIATION (non-ORDER) → escalation_node
-    - SMALLTALK primary intent → answer_node (no retrieval needed, save cost)
-    - FOLLOW_UP primary intent → memory_retrieval_node (retrieve past memory/context)
-    - INFO_QUERY, PRICING, COMPARISON, AVAILABILITY → retrieval_node (need context)
-    - Unknown → retrieval_node (safe fallback)
-    """
-    # ORDER_PLACEMENT MUST always go through retrieval → confidence → HITL.
-    # HITL is its safety net. Secondary COMPLAINT/NEGOTIATION on an order message
-    # are often LLM hallucinations with a small model; routing to escalation_node
-    # would bypass retrieval entirely and produce no order_info.
     if classification.primary_intent == IntentEnum.ORDER_PLACEMENT:
         return "retrieval_node"
 

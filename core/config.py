@@ -39,7 +39,9 @@ class Settings(BaseSettings):
     X_ADMIN_KEY: str = "dev-secret-key"
 
     # AI Configuration
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    LLAMA_SERVER_BASE_URL: str = "http://llama-server:8080/v1"
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:8080"
+    OLLAMA_EMBED_BASE_URL: str = "http://ai-agent-ollama:11434"
     # Ollama defaults num_ctx to ~2k-4k and SILENTLY truncates anything beyond
     # it — for a RAG prompt (system + chunks + history) that means retrieval
     # succeeds but the model never sees the chunks (ADR-006 mandatory
@@ -55,9 +57,9 @@ class Settings(BaseSettings):
     #   LIGHT  — fast, cheap (qwen3:0.6b): normalization, keyword extraction
     #   CHAT   — general (qwen3-4b-q6):    metadata enrichment, RAG generation
     #   POWERFUL — deep reasoning (deepseek-r1): escalation, complex queries
-    LIGHT_CHAT_MODEL: str = "ollama/qwen3:0.6b"
-    CHAT_MODEL: str = "ollama/qwen3-1.7b"
-    POWERFUL_CHAT_MODEL: str = "ollama/deepseek-r1:1.5b"
+    LIGHT_CHAT_MODEL: str = "hosted_vllm/economy-chat"
+    CHAT_MODEL: str = "hosted_vllm/economy-chat"
+    POWERFUL_CHAT_MODEL: str = "hosted_vllm/economy-chat"
     # ⚠️ Embedding dimension constraint: pgvector columns are Vector(1024) (bge-m3).
     # If you switch EMBED_MODEL, the new model MUST produce 1024-dim vectors
     # (e.g. OpenAI text-embedding-3-large with dimensions=1024). Recommended
@@ -69,7 +71,12 @@ class Settings(BaseSettings):
     # from os.environ, so core/ai_config.py exports these at router init).
     GROQ_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
-    OPENAI_API_KEY: str | None = None
+    OPENAI_API_KEY: str | None = "sk-no-key-required"
+    ANTHROPIC_API_KEY: str | None = None
+    OPENROUTER_API_KEY: str | None = None
+    DEEPSEEK_API_KEY: str | None = None
+    COHERE_API_KEY: str | None = None
+    MISTRAL_API_KEY: str | None = None
 
     # Semantic cache TTL (seconds). Entries older than this are ignored by
     # L1/L2 lookups so price/stock changes stop serving stale answers.

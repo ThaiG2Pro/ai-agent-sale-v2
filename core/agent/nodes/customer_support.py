@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-import litellm
 from langgraph.types import Command
 from sqlalchemy.dialects.postgresql import insert
 
@@ -38,17 +37,19 @@ async def customer_support_node(state: AgentState, config: RunnableConfig) -> Co
     # --- T040: Empathetic Message ---
     try:
         system_prompt = (
-            "You are a compassionate sales assistant. "
-            "The customer's request could not be processed. "
-            f"Compose a brief, empathetic response explaining the reason: '{reason}'. "
-            f"Direct them to contact support at {settings.SUPPORT_CONTACT_LINK}."
+            "Bạn là trợ lý bán hàng chu đáo, chân thành và thấu hiểu. "
+            "Yêu cầu của khách hàng hiện chưa thể xử lý tự động được. "
+            f"Hãy viết một phản hồi ngắn gọn, lịch sự và đồng cảm bằng tiếng Việt giải thích lý do: '{reason}'. "
+            f"Hướng dẫn khách liên hệ bộ phận hỗ trợ khách hàng tại {settings.SUPPORT_CONTACT_LINK}."
         )
 
-        response = await litellm.acompletion(
-            model=settings.LIGHT_CHAT_MODEL,
+        from services.ai import AIGateway
+
+        response = await AIGateway.complete(
+            model="light-chat",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Please help me with my request."},
+                {"role": "user", "content": "Nhờ shop hỗ trợ giúp mình yêu cầu này."},
             ],
             temperature=0.3,
         )
@@ -56,8 +57,8 @@ async def customer_support_node(state: AgentState, config: RunnableConfig) -> Co
     except Exception as e:
         logger.error(f"Failed to compose empathetic message for {session_id}: {e}")
         empathetic_message = (
-            f"I apologize, but we encountered an issue processing your request: {reason}. "
-            f"Please reach out to our human support team here: {settings.SUPPORT_CONTACT_LINK}"
+            f"Dạ rất xin lỗi bạn, hệ thống chưa thể xử lý hoàn tất yêu cầu: {reason}. "
+            f"Bạn vui lòng liên hệ bộ phận hỗ trợ của shop tại đây để được hỗ trợ trực tiếp nhé: {settings.SUPPORT_CONTACT_LINK} 🙏"
         )
 
     # --- T041: SupportQueue Escalation ---

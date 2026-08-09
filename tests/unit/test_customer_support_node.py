@@ -45,7 +45,7 @@ def state():
 @pytest.mark.asyncio
 async def test_support_uses_llm_message_and_queues_escalation(state, mock_config, mock_db):
     with patch(
-        "core.agent.nodes.customer_support.litellm.acompletion",
+        "services.ai.AIGateway.complete",
         AsyncMock(return_value=_llm_response("We're sorry — a human will help you.")),
     ):
         result = await customer_support_node(state, mock_config)
@@ -62,7 +62,7 @@ async def test_support_uses_llm_message_and_queues_escalation(state, mock_config
 @pytest.mark.asyncio
 async def test_support_falls_back_when_llm_fails(state, mock_config):
     with patch(
-        "core.agent.nodes.customer_support.litellm.acompletion",
+        "services.ai.AIGateway.complete",
         AsyncMock(side_effect=RuntimeError("model offline")),
     ):
         result = await customer_support_node(state, mock_config)
@@ -76,7 +76,7 @@ async def test_support_falls_back_when_llm_fails(state, mock_config):
 async def test_support_updates_hitl_metadata_when_paused(state, mock_config, mock_db):
     state["hitl_pause_id"] = "pause-1"
     with patch(
-        "core.agent.nodes.customer_support.litellm.acompletion",
+        "services.ai.AIGateway.complete",
         AsyncMock(return_value=_llm_response("ok")),
     ):
         await customer_support_node(state, mock_config)
@@ -90,7 +90,7 @@ async def test_support_survives_persistence_failure(state, mock_config, mock_db)
     """DB failure must not crash the turn — the customer still gets a response."""
     mock_db.execute.side_effect = RuntimeError("db down")
     with patch(
-        "core.agent.nodes.customer_support.litellm.acompletion",
+        "services.ai.AIGateway.complete",
         AsyncMock(return_value=_llm_response("ok")),
     ):
         result = await customer_support_node(state, mock_config)

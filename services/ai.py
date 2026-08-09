@@ -193,6 +193,7 @@ ai_router = Router(**LITELLM_CONFIG)
 _LOCAL_EMBED_ALIASES = {
     # 1024-dim — matches the pgvector Vector(1024) column seeded by ingest.
     "multilingual-e5-large": "intfloat/multilingual-e5-large",
+    "bge-m3": "intfloat/multilingual-e5-large",
 }
 _local_embedder: Any = None
 
@@ -269,6 +270,7 @@ class AIGateway:
 
             # Link LiteLLM sub-spans to the conversation session
             with using_session(session_id) if session_id else contextlib.nullcontext():
+                kwargs.setdefault("max_tokens", 512)
                 response = await ai_router.acompletion(
                     model=model, messages=messages, stream=stream, **kwargs
                 )
@@ -291,11 +293,11 @@ class AIGateway:
                 err=str(e),
             )
 
-            # FR-015: Manual fallback if router fallback fails
-            if model == "economy-chat":
-                logfire.warn("Falling back to premium-chat due to error")
+            # FR-015: Manual fallback to economy-chat (local) if model call fails
+            if model != "economy-chat":
+                logfire.warn("Falling back to economy-chat due to error: {err}", err=str(e))
                 return await AIGateway.complete(
-                    messages=messages, model="premium-chat", stream=stream, **kwargs
+                    messages=messages, model="economy-chat", stream=stream, **kwargs
                 )
             raise e
 

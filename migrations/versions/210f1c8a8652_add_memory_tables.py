@@ -239,7 +239,7 @@ def downgrade() -> None:
             "content_tsvector",
             postgresql.TSVECTOR(),
             sa.Computed(
-                "(setweight(to_tsvector('simple'::regconfig, agent_v1.immutable_unaccent((COALESCE(name, ''::character varying))::text)), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, agent_v1.immutable_unaccent(COALESCE(description, ''::text))), 'B'::\"char\"))",  # noqa: E501
+                "(setweight(to_tsvector('simple'::regconfig, agent_v1.immutable_unaccent((COALESCE(name, ''::character varying))::text)), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, agent_v1.immutable_unaccent(COALESCE(description, ''::text))), 'B'::\"char\"))",
                 persisted=True,
             ),
             autoincrement=False,

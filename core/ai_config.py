@@ -14,85 +14,163 @@ from core.config import settings
 # Premium Tier: Cloud fallback (Groq/OpenAI)
 
 
-# LiteLLM resolves provider API keys from os.environ. pydantic-settings loads
-# .env into the Settings object only, so without this export a key set in .env
-# is invisible when running outside docker compose (seed scripts, eval gate,
-# bare uvicorn). setdefault: a real environment variable always wins.
-for _key in ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"):
+# Export all supported API keys to os.environ for LiteLLM
+_API_KEY_NAMES = (
+    "GROQ_API_KEY",
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENROUTER_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "COHERE_API_KEY",
+    "MISTRAL_API_KEY",
+)
+
+for _key in _API_KEY_NAMES:
     _val = getattr(settings, _key, None)
     if _val:
         os.environ.setdefault(_key, _val)
 
 
-def _litellm_params(model: str, **extra: Any) -> dict[str, Any]:
-    """Build litellm_params for a model string.
+PROVIDER_KEY_MAP = {
+    "groq": "GROQ_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "cohere": "COHERE_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+}
 
-    OLLAMA_BASE_URL must only be attached to local Ollama models — cloud
-    model strings (e.g. "gemini/gemini-2.5-flash", "gpt-4o-mini") resolve
-    their endpoint + API key from the environment via LiteLLM itself.
+
+def _litellm_params(model_str: str, **extra: Any) -> dict[str, Any]:
+    """Build litellm_params for any model string.
+
+    Supports:
+    1. Local llama-server (llama.cpp ROCm/CUDA/CPU):
+       Model format: "hosted_vllm/<name>" or "openai/<name>" (when pointing to local llama-server)
+       Example: "hosted_vllm/economy-chat", "hosted_vllm/qwen2.5-3b"
+       Sets api_base = settings.LLAMA_SERVER_BASE_URL, custom_llm_provider = "hosted_vllm"
+
+    2. Local Ollama:
+       Model format: "ollama/<name>" or "ollama_chat/<name>"
+       Example: "ollama/qwen2.5:3b", "ollama/bge-m3"
+       Sets api_base = settings.OLLAMA_BASE_URL (or OLLAMA_EMBED_BASE_URL for embeddings)
+       Sets num_ctx = settings.OLLAMA_NUM_CTX
+
+    3. In-Process ONNX CPU Embedding (fastembed):
+       Model format: "local/<name>"
+       Example: "local/bge-m3" (short-circuited in AIGateway.embed)
+
+    4. Cloud Provider Models (OpenAI, Groq, Gemini, Anthropic, OpenRouter, DeepSeek, Cohere, etc.):
+       Model format: "groq/llama-3.3-70b-versatile", "gemini/gemini-2.5-flash", "gpt-4o-mini",
+                     "anthropic/claude-3-5-sonnet-20241022", "openrouter/cheap", "deepseek/deepseek-chat"
+       Passes model_str directly to LiteLLM, which uses the provider API key from os.environ.
+       If provider API key is NOT set, automatically skips and falls back to settings.CHAT_MODEL.
     """
-    params: dict[str, Any] = {"model": model, **extra}
-    if model.startswith("ollama/"):
-        params["api_base"] = settings.OLLAMA_BASE_URL
-        # Ollama silently truncates at its ~2k-4k default context — fatal for
-        # RAG prompts (ADR-006). LiteLLM forwards num_ctx as options.num_ctx.
+    # 1. Resolve app alias shortcuts if set in env (e.g. PREMIUM_MODEL=premium-chat)
+    if model_str == "premium-chat":
+        if settings.GROQ_API_KEY and settings.GROQ_API_KEY not in ("", "sk-no-key-required"):
+            model_str = "groq/llama-3.3-70b-versatile"
+        elif settings.GEMINI_API_KEY and settings.GEMINI_API_KEY not in ("", "sk-no-key-required"):
+            model_str = "gemini/gemini-2.5-flash"
+        elif settings.OPENAI_API_KEY and settings.OPENAI_API_KEY not in ("", "sk-no-key-required"):
+            model_str = "gpt-4o-mini"
+        else:
+            model_str = settings.CHAT_MODEL
+
+    # 2. Check if requested Cloud Provider has a valid API key configured
+    if "/" in model_str:
+        prefix = model_str.split("/", 1)[0].lower()
+        if prefix in PROVIDER_KEY_MAP:
+            key_attr = PROVIDER_KEY_MAP[prefix]
+            key_val = getattr(settings, key_attr, None) or os.environ.get(key_attr)
+            if not key_val or key_val in ("", "sk-no-key-required"):
+                # Missing cloud key → automatically fallback to default local model
+                if model_str != settings.CHAT_MODEL:
+                    model_str = settings.CHAT_MODEL
+
+    params: dict[str, Any] = {"model": model_str, **extra}
+
+    if model_str.startswith("hosted_vllm/"):
+        target = model_str.removeprefix("hosted_vllm/")
+        params["model"] = target
+        params["api_base"] = settings.LLAMA_SERVER_BASE_URL
+        params["custom_llm_provider"] = "hosted_vllm"
+        params.setdefault("api_key", "sk-no-key-required")
+    elif (
+        model_str.startswith("openai/")
+        and (
+            "localhost" in settings.LLAMA_SERVER_BASE_URL
+            or "llama-server" in settings.LLAMA_SERVER_BASE_URL
+        )
+        and settings.OPENAI_API_KEY == "sk-no-key-required"
+    ):
+        target = model_str.removeprefix("openai/")
+        params["model"] = target
+        params["api_base"] = settings.LLAMA_SERVER_BASE_URL
+        params["custom_llm_provider"] = "hosted_vllm"
+        params.setdefault("api_key", "sk-no-key-required")
+    elif model_str.startswith("ollama/") or model_str.startswith("ollama_chat/"):
+        real_model = model_str.split("/", 1)[1] if "/" in model_str else model_str
+        params["model"] = f"ollama/{real_model}"
+        if "bge" in real_model or "embed" in real_model:
+            params["api_base"] = settings.OLLAMA_EMBED_BASE_URL
+        else:
+            params["api_base"] = settings.OLLAMA_BASE_URL
         params["num_ctx"] = settings.OLLAMA_NUM_CTX
+
     return params
 
 
 LITELLM_CONFIG = {
     "model_list": [
-        # ── Light tier: fast, cheap — normalization, keyword extraction ──────
+        # ── Light tier: fast, cheap (query normalization, keyword extraction) ──────
         {
             "model_name": "light-chat",
-            "model_info": {"id": "light-chat-local"},
+            "model_info": {"id": "light-chat-model"},
             "litellm_params": _litellm_params(settings.LIGHT_CHAT_MODEL, stream=False),
         },
-        # ── Economy tier: general tasks — normalize_query + RAG generation ──
-        # Same model as normalize_query to avoid Ollama model swap mid-request
+        # ── Economy tier: general RAG & chat generation ────────────────────────────
         {
             "model_name": "economy-chat",
-            "model_info": {"id": "economy-chat-local"},
-            "litellm_params": _litellm_params(settings.CHAT_MODEL, stream=True),
+            "model_info": {"id": "economy-chat-model"},
+            "litellm_params": _litellm_params(settings.CHAT_MODEL, stream=False),
         },
-        # economy-embedding is appended below — omitted entirely when
-        # EMBED_MODEL is "local/<name>" (in-process fastembed): the LiteLLM
-        # Router validates providers at init and rejects the local/ prefix,
-        # and AIGateway.embed short-circuits before the router in that mode.
-        # ── Powerful tier: deep reasoning — escalation, complex queries ──────
+        # ── Powerful tier: deep reasoning / complex queries ─────────────────────────
+        {
+            "model_name": "powerful-chat",
+            "model_info": {"id": "powerful-chat-model"},
+            "litellm_params": _litellm_params(settings.POWERFUL_CHAT_MODEL, stream=False),
+        },
+        # Aliases for backward compatibility / dev configs
         {
             "model_name": "premium-local-chat",
             "model_info": {"id": "premium-local-deepseek"},
-            "litellm_params": _litellm_params(settings.POWERFUL_CHAT_MODEL, stream=True),
+            "litellm_params": _litellm_params(settings.POWERFUL_CHAT_MODEL, stream=False),
         },
-        # qwen3-4b: alias used by PREMIUM_MODEL env var in dev environments
         {
             "model_name": "qwen3-4b",
             "model_info": {"id": "qwen3-4b-local"},
             "litellm_params": _litellm_params("ollama/qwen3-4b-q6", stream=False),
         },
-        # ── Cloud fallback — when local unavailable ───────────────────────────
+        # ── Premium tier: cloud or escalated model ──────────────────────────────────
         {
             "model_name": "premium-chat",
-            "model_info": {"id": "premium-chat-groq"},
-            "litellm_params": {
-                # llama-3.1-70b-versatile was decommissioned by Groq; 3.3 is the
-                # current versatile tier (verified against /v1/models).
-                "model": "groq/llama-3.3-70b-versatile",
-            },
+            "model_info": {"id": "premium-chat-model"},
+            "litellm_params": _litellm_params(settings.PREMIUM_MODEL, stream=False),
         },
     ],
-    # simple-shuffle avoids registering a global lowest-latency callback that
-    # crashes when litellm is called directly (outside the router) with no
-    # litellm_params context.
     "routing_strategy": "simple-shuffle",
+    "cooldown_time": 0,
 }
 
 if not settings.EMBED_MODEL.startswith("local/"):
     LITELLM_CONFIG["model_list"].append(
         {
             "model_name": "economy-embedding",
-            "model_info": {"id": "economy-embedding-local"},
+            "model_info": {"id": "economy-embedding-model"},
             "litellm_params": _litellm_params(settings.EMBED_MODEL),
         }
     )

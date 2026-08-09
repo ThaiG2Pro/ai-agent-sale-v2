@@ -28,6 +28,7 @@ class IntentEnum(StrEnum):
     AVAILABILITY = "AVAILABILITY"
     ORDER_PLACEMENT = "ORDER_PLACEMENT"
     FOLLOW_UP = "FOLLOW_UP"  # Week 5: low-signal follow-up (e.g., "Ok")
+    CANCEL = "CANCEL"  # Order cancellation / change mind
     OTHER = "OTHER"  # Week 5: unclassified intent
 
 
@@ -243,10 +244,12 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
     if not customer_id:
         raise ValueError("customer_id cannot be empty (must be non-blank)")
 
+    from langchain_core.messages import HumanMessage
+
     return {
         "session_id": session_id,
         "user_message": user_message,
-        "messages": [],
+        "messages": [HumanMessage(content=user_message)],
         "intent": None,
         "secondary_intents": [],
         "intent_confidence": 0.0,

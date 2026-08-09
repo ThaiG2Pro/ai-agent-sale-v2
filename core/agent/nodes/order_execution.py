@@ -74,8 +74,15 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
                 update={"hitl_rejection_reason": "out_of_stock_last_minute"},
             )
 
-        # 2. Insert order record
+        # 2. Insert order record with unique Order ID (e.g. ORD-8F3A2109)
+        import uuid
+
+        order_uuid = uuid.uuid4()
+        order_code = f"ORD-{str(order_uuid)[:8].upper()}"
+        order_info = {**order_info, "order_id": order_code, "status": "confirmed"}
+
         order_stmt = insert(Order).values(
+            id=order_uuid,
             session_id=session_id,
             customer_id=customer_id,
             order_info=order_info,
@@ -105,18 +112,24 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
             )
 
         # 3. Compose confirmation message (SC5: append pending INFO answers if any)
+        total_price = (
+            float(order_info.get("approved_price", order_info.get("price", 0))) * quantity
+        )
+        price_str = f"{total_price:,.0f} đ".replace(",", ".") if total_price > 0 else ""
+        price_suffix = f" (Tổng tiền: {price_str})" if price_str else ""
+
         confirmation_msg = (
-            f"Great news! Your order for {order_info.get('name', 'the product')} "
-            f"(Quantity: {quantity}) has been successfully placed. "
-            f"Order Reference: {session_id}"
+            f"🎉 **Đặt hàng thành công!**\n"
+            f"Đơn hàng **{order_info.get('name', 'sản phẩm')}** (Số lượng: {quantity}){price_suffix} "
+            f"đã được hệ thống xác nhận thành công.\n"
+            f"Mã đơn hàng: `{order_code}`.\n"
+            f"Cảm ơn quý khách đã ủng hộ shop!"
         )
 
         # SC5-fix: if customer asked INFO questions while waiting, answer them now.
         pending_questions = state.get("pending_info_questions")
         if pending_questions:
-            import litellm
-
-            from core.config import settings
+            from services.ai import AIGateway
 
             try:
                 citations = state.get("citations") or []
@@ -125,8 +138,8 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
                     for c in citations
                     if isinstance(c, dict)
                 )
-                qa_resp = await litellm.acompletion(
-                    model=settings.LIGHT_CHAT_MODEL,
+                qa_resp = await AIGateway.complete(
+                    model="light-chat",
                     messages=[
                         {
                             "role": "system",

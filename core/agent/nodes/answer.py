@@ -73,7 +73,12 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             },
         )
         await _write_episodic_event(state, state["response"], db)
-        return {}  # No additional updates needed
+        from langchain_core.messages import AIMessage
+
+        return {
+            "messages": [AIMessage(content=state["response"])],
+            "response": state["response"],
+        }
 
     # Path 1: Cache hit — use pre-generated answer, skip LLM entirely
     cached_answer = state.get("cached_answer")
@@ -91,13 +96,39 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             },
         )
         await _write_episodic_event(state, cached_answer, db)
+        from langchain_core.messages import AIMessage
+
         return {
+            "messages": [AIMessage(content=cached_answer)],
             "response": cached_answer,
             "model_used": "cache",
         }
 
+    # Path 1.5: FOLLOW_UP status inquiry (e.g. "đặt chưa?")
+    if state.get("intent") == "FOLLOW_UP":
+        from langchain_core.messages import AIMessage
+
+        followup_resp = await _generate_followup_response(state, db)
+        await _write_model_trace(
+            state,
+            db=db,
+            metadata_={
+                "guard_decision": "FOLLOW_UP_STATUS",
+                "escalation_flag": False,
+                "declined": False,
+                "intended_model": "followup_status",
+            },
+        )
+        return {
+            "messages": [AIMessage(content=followup_resp)],
+            "response": followup_resp,
+            "model_used": "followup_status",
+        }
+
     # Path 2: Declined (Layer 1 or Layer 2 guard) → return without LLM
     if state.get("declined", False):
+        from langchain_core.messages import AIMessage
+
         # SC01 fix: vague browse INFO_QUERY → show product catalog instead of DECLINE_MESSAGE
         if state.get("intent") == "INFO_QUERY" and db:
             catalog_response = await _generate_catalog_response(state, db)
@@ -112,7 +143,11 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
                         "intended_model": "catalog_fallback",
                     },
                 )
-                return {"response": catalog_response, "model_used": "catalog_fallback"}
+                return {
+                    "messages": [AIMessage(content=catalog_response)],
+                    "response": catalog_response,
+                    "model_used": "catalog_fallback",
+                }
 
         await _write_model_trace(
             state,
@@ -126,6 +161,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             },
         )
         return {
+            "messages": [AIMessage(content=DECLINE_MESSAGE)],
             "response": DECLINE_MESSAGE,
             "model_used": None,
         }
@@ -211,10 +247,16 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             memory_note = f"\n[Ngữ cảnh từ các cuộc hội thoại trước]:\n{memory_context_text}"
 
         system_prompt = (
-            "Bạn là trợ lý bán hàng AI chuyên nghiệp. "
-            "Trả lời bằng tiếng Việt, thân thiện và hữu ích. "
+            "Bạn là trợ lý bán hàng AI chuyên nghiệp, nhiệt tình, khéo léo và thấu hiểu khách hàng. "
+            "Trả lời bằng tiếng Việt, thân thiện, rõ ràng và hữu ích. "
+            "TUYỆT ĐỐI KHÔNG xuất ra định dạng JSON, code block hay metadata schema. Chỉ trả lời bằng văn bản tự nhiên. "
             "Chỉ dùng thông tin từ context sản phẩm và ngữ cảnh hội thoại trước được cung cấp. "
-            f"Nếu không có thông tin phù hợp, nói rõ điều đó.{rejection_note}{memory_note}"
+            "NGUYÊN TẮC TƯ VẤN GIÁ TRỊ: Khi giải thích về sản phẩm, luôn tập trung vào LỢI ÍCH THỰC TẾ mang lại cho người dùng thay vì chỉ liệt kê thông số kỹ thuật thuần túy. "
+            "KHI KHÁCH HỎI GIÁ HOẶC THÔNG TIN SẢN PHẨM: Nếu khách hỏi dung lượng/màu sắc/cấu hình cụ thể (như 256GB) mà trong context cửa hàng có phiên bản khác thuộc cùng dòng sản phẩm (như 512GB), bạn PHẢI trả lời chi tiết thông tin giá và thông số của phiên bản đang có (ví dụ: 'Shop hiện có phiên bản iPhone 15 Pro Max 512GB với giá 28.900.000 VND...'). "
+            "KHI KHÁCH XIN GIẢM GIÁ / MẶC CẢ: Hãy giải thích các ưu đãi/quà tặng hiện có của shop (như Tặng Củ sạc GaN 65W, Miễn phí giao hàng). Nếu khách muốn giảm thêm giá ngoài chính sách, hãy báo bạn sẽ ghi nhận để chuyển Quản lý shop (Admin) duyệt ưu đãi riêng. "
+            "KHI TƯ VẤN SẢN PHẨM / GIÁ CẢ / SO SÁNH: Sau khi cung cấp thông tin, bạn LUÔN LUÔN kết thúc bằng một lời mời chào đặt hàng thân thiện hoặc câu hỏi định hướng (Sales CTA) như: 'Anh/chị có muốn shop giữ hàng và hỗ trợ đặt đơn giao tận nhà cho mình không ạ?' "
+            "TUYỆT ĐỐI KHÔNG báo 'không tìm thấy thông tin' khi context có thông tin về dòng sản phẩm đó. "
+            f"Chỉ báo không tìm thấy khi context hoàn toàn không có thông tin sản phẩm liên quan.{rejection_note}{memory_note}"
         )
 
     if state.get("intent") == "SMALLTALK":
@@ -274,6 +316,17 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             response = f"Lỗi khi tạo phản hồi: {e!s}"
             model = None
 
+    # Guard against raw JSON schema leaks (e.g. LLM returning IntentClassification JSON string)
+    if response and ("primary_intent" in response or "sensitive_intent" in response):
+        if db:
+            cat_resp = await _generate_catalog_response(state, db)
+            if cat_resp:
+                response = cat_resp
+            else:
+                response = DECLINE_MESSAGE
+        else:
+            response = DECLINE_MESSAGE
+
     # ── WP-V2-1 groundedness self-check (kill switch: GROUNDEDNESS_CHECK_ENABLED).
     # Skipped for SMALLTALK (no retrieval context to ground against) and when
     # generation itself failed (metrics is None).
@@ -330,7 +383,10 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     if not grounded_declined:
         await _write_episodic_event(state, response, db)
 
+    from langchain_core.messages import AIMessage
+
     return {
+        "messages": [AIMessage(content=response)],
         "response": response,
         "model_used": model,
         "escalation_failure": escalation_failure,
@@ -416,27 +472,45 @@ async def _generate_catalog_response(state: AgentState, db: AsyncSession) -> str
     query = state.get("user_message", "")
     words = query.split()
 
-    # Specific product keywords that should NOT trigger catalog fallback
+    # Specific product keywords that should NOT trigger generic catalog fallback
     _specific_keywords = _re.compile(
-        r"\b(laptop|điện thoại|phone|tablet|máy tính|tai nghe|headphone|"
-        r"keyboard|chuột|mouse|ssd|ram|gpu|card|màn hình|monitor|charger|"
-        r"pin|sạc|macbook|iphone|samsung|xiaomi|asus|dell|lenovo|sony)\b",
+        r"\b(laptop|lap|dt|đt|phone|tablet|máy tính|tai nghe|headphone|tai|"
+        r"keyboard|bàn phím|chuột|mouse|ssd|ram|gpu|card|màn hình|monitor|charger|"
+        r"pin|sạc|củ sạc|sạc dự phòng|macbook|mac|iphone|ip|samsung|xiaomi|asus|dell|lenovo|sony|watch|đồng hồ|nguồn|psu)\b",
         _re.IGNORECASE | _re.UNICODE,
     )
-    if len(words) > 6 or _specific_keywords.search(query):
+
+    # Check category filters
+    is_laptop = bool(_re.search(r"\b(laptop|lap|máy tính|macbook)\b", query, _re.IGNORECASE))
+    is_phone = bool(
+        _re.search(r"\b(điện thoại|phone|dt|đt|iphone|ip|samsung|xiaomi)\b", query, _re.IGNORECASE)
+    )
+
+    # If query is long (> 8 words) or specifies a product that should go through RAG, skip catalog fallback
+    if len(words) > 8 and not (is_laptop or is_phone):
         return None
 
     try:
         from sqlalchemy import text as sql_text
 
-        rows = await db.execute(
-            sql_text("SELECT name, sku FROM agent_v1.products ORDER BY name LIMIT 12")
-        )
+        if is_laptop:
+            sql = "SELECT name, sku FROM agent_v1.products WHERE sku ILIKE 'LAPTOP%' OR name ILIKE '%laptop%' OR name ILIKE '%swift%' OR name ILIKE '%strix%' OR name ILIKE '%vivobook%' OR name ILIKE '%xps%' OR name ILIKE '%envy%' ORDER BY name LIMIT 12"
+            header = "**Các mẫu Laptop hiện có tại shop:**\n"
+        elif is_phone:
+            sql = "SELECT name, sku FROM agent_v1.products WHERE sku ILIKE 'PHONE%' OR name ILIKE '%iphone%' OR name ILIKE '%galaxy%' OR name ILIKE '%xiaomi%' ORDER BY name LIMIT 12"
+            header = "**Các mẫu Điện thoại hiện có tại shop:**\n"
+        else:
+            if _specific_keywords.search(query):
+                return None
+            sql = "SELECT name, sku FROM agent_v1.products ORDER BY name LIMIT 12"
+            header = "**Sản phẩm hiện có tại shop:**\n"
+
+        rows = await db.execute(sql_text(sql))
         products = rows.fetchall()
         if not products:
             return None
 
-        lines = ["**Sản phẩm hiện có tại shop:**\n"]
+        lines = [header]
         for name, sku in products:
             lines.append(f"• {name} ({sku})")
         lines.append(
@@ -575,3 +649,66 @@ def _compress_context(memory_context: list[dict]) -> str:
             compressed.append(f"- {text_content}")
 
     return "\n".join(compressed)
+
+
+async def _generate_followup_response(state: AgentState, db: object) -> str:
+    """Generate response for status follow-up queries (e.g. 'đặt chưa?')."""
+    session_id = state.get("session_id")
+    order_info = state.get("order_info")
+
+    # 1. Check order_info in current state
+    if order_info and isinstance(order_info, dict):
+        status = order_info.get("status", "pending")
+        name = order_info.get("name") or order_info.get("product_name") or "sản phẩm"
+        qty = order_info.get("quantity", 1)
+        if status == "confirmed":
+            return (
+                f"Dạ, đơn hàng **{name}** (Số lượng: {qty}) của anh/chị đã được hệ thống "
+                f"xác nhận thành công rồi ạ! Mã đơn: `{session_id}`."
+            )
+        elif status == "pending":
+            return (
+                f"Dạ, yêu cầu đặt hàng **{name}** (Số lượng: {qty}) của anh/chị đã được ghi nhận "
+                "và đang chờ duyệt từ nhân viên shop. Cảm ơn anh/chị đã kiên nhẫn ạ!"
+            )
+
+    # 2. Check DB records if available
+    if db and session_id:
+        from sqlalchemy import select
+
+        from models.schema import HITLMetadata, Order
+
+        # Check Order table
+        ord_stmt = (
+            select(Order)
+            .where(Order.session_id == session_id)
+            .order_by(Order.created_at.desc())
+            .limit(1)
+        )
+        ord_res = (await db.execute(ord_stmt)).scalar_one_or_none()
+        if ord_res:
+            info = ord_res.order_info or {}
+            pname = info.get("name") or info.get("product_name") or "sản phẩm"
+            pqty = info.get("quantity", 1)
+            return (
+                f"Dạ, đơn hàng **{pname}** (Số lượng: {pqty}) của anh/chị đã được đặt thành công "
+                f"trên hệ thống rồi ạ! Mã đơn: `{session_id}`."
+            )
+
+        # Check HITLMetadata table
+        hitl_stmt = (
+            select(HITLMetadata)
+            .where(HITLMetadata.session_id == session_id)
+            .order_by(HITLMetadata.paused_at.desc())
+            .limit(1)
+        )
+        hitl_res = (await db.execute(hitl_stmt)).scalar_one_or_none()
+        if hitl_res:
+            if hitl_res.status in ("paused", "resuming"):
+                return "Dạ, yêu cầu đặt hàng của anh/chị đang được nhân viên shop kiểm tra và xử lý. Shop sẽ phản hồi ngay khi hoàn tất ạ!"
+            elif hitl_res.status == "approved":
+                return f"Dạ, đơn hàng của anh/chị đã được phê duyệt thành công rồi ạ! Mã đơn: `{session_id}`."
+            elif hitl_res.status == "rejected":
+                return f"Dạ, đơn hàng của anh/chị chưa thể hoàn tất do: {hitl_res.pause_reason or 'chưa đủ điều kiện'}. Anh/chị có cần hỗ trợ gì khác không ạ?"
+
+    return "Dạ, hiện tại shop chưa tìm thấy đơn hàng nào được khởi tạo trong phiên chat này. Anh/chị có muốn đặt mua sản phẩm nào không ạ?"

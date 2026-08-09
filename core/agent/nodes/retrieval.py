@@ -209,7 +209,31 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
     # still-borderline merged query declines instead of clarifying again.
     clarify_updates: dict = {}
     if state.get("awaiting_clarification") and state.get("clarify_original_query"):
-        raw_query = f"{state['clarify_original_query']} {raw_query}"
+        orig_q = state["clarify_original_query"]
+        user_reply_clean = raw_query.strip().lower()
+        affirmation_words = {
+            "đúng",
+            "đúng rồi",
+            "ừ",
+            "uh",
+            "dạ",
+            "chính xác",
+            "yes",
+            "ok",
+            "chuẩn",
+            "được",
+        }
+        if user_reply_clean in affirmation_words:
+            citations = state.get("citations") or []
+            cand_names = [
+                c.get("name") if isinstance(c, dict) else getattr(c, "name", None)
+                for c in citations
+            ]
+            cand_names = [n for n in cand_names if n]
+            cand_note = f" ({', '.join(cand_names[:2])})" if cand_names else ""
+            raw_query = f"{orig_q}{cand_note} {raw_query}"
+        else:
+            raw_query = f"{orig_q} {raw_query}"
         clarify_updates = {"awaiting_clarification": False, "clarify_original_query": None}
         logger.info("Clarify merge → %r", raw_query)
     elif int(state.get("clarify_count") or 0):

@@ -12,7 +12,7 @@ from services.ai import AIGateway
 from services.rag.compression import compress_context
 from services.rag.constants import (
     ANSWER_SYSTEM_PROMPT,
-    CONFIDENCE_THRESHOLD,
+    COMPRESSION_SCORE_THRESHOLD,
     DECLINE_MESSAGE,
 )
 from services.rag.query import classify_query, compute_adaptive_topk
@@ -224,16 +224,25 @@ async def search_and_retrieve(db, query: str, intent: str | None = None) -> Retr
     # Hybrid retrieval
     retrieved = await hybrid_search_rrf(db, query_vector, fts_query_text, top_k)
 
-    # Similarity scores
-    vec_scores = sorted((c["vector_score"] for c in retrieved), reverse=True)
-    best_similarity = vec_scores[0] if vec_scores else 0.0
+    # Similarity scores — hybrid evaluation (vector + FTS)
+    vec_scores = sorted((c.get("vector_score", 0.0) for c in retrieved), reverse=True)
+    best_vec = vec_scores[0] if vec_scores else 0.0
+    fts_scores = sorted((c.get("fts_score", 0.0) for c in retrieved), reverse=True)
+    best_fts = fts_scores[0] if fts_scores else 0.0
+
+    # Effective similarity incorporates FTS keyword match signal
+    best_similarity = max(best_vec, best_fts)
+    if best_vec >= COMPRESSION_SCORE_THRESHOLD:
+        best_similarity = max(best_similarity, 0.50)  # Boost valid vector matches above threshold
+
     similarity_gap = vec_scores[0] - vec_scores[1] if len(vec_scores) >= 2 else best_similarity
     chunks_before = len(retrieved)
     logfire.info(
-        "Retrieved {n} chunks, best_similarity={s:.4f}, similarity_gap={g:.4f}",
+        "Retrieved {n} chunks, best_vec={v:.4f}, best_fts={f:.4f}, effective_sim={s:.4f}",
         n=chunks_before,
+        v=best_vec,
+        f=best_fts,
         s=best_similarity,
-        g=similarity_gap,
     )
 
     # Context compression
@@ -248,12 +257,13 @@ async def search_and_retrieve(db, query: str, intent: str | None = None) -> Retr
     )
 
     # Layer 1 guard (FR-013)
-    if best_similarity < CONFIDENCE_THRESHOLD or chunks_after == 0:
+    if best_similarity < COMPRESSION_SCORE_THRESHOLD or chunks_after == 0:
         logfire.info(
             "Layer 1 guard fired: best_sim={s:.4f}, chunks_after={n}",
             s=best_similarity,
             n=chunks_after,
         )
+
         return RetrievalResult(
             cached_answer=None,
             cached_citations=[],

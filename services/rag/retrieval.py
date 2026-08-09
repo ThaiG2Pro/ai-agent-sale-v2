@@ -56,12 +56,30 @@ async def hybrid_search_rrf(
         logfire.error("Vector search timed out (junk/complex query)")
         return []
 
-    # ── FTS search — stored content_tsvector column with unaccent + setweight ──
-    # content_tsvector is a GENERATED ALWAYS AS stored column:
-    #   setweight(to_tsvector('simple', immutable_unaccent(name)), 'A') ||
-    #   setweight(to_tsvector('simple', immutable_unaccent(description)), 'B')
-    # immutable_unaccent strips diacritics so Vietnamese users can search
-    # without accents ("dien thoai" matches "điện thoại").
+    # ── FTS search — dynamic tsvector with unaccent & category fallback ──────────
+    import re as _re
+
+    # Clean conversational prefixes for better FTS keyword extraction
+    clean_qtext = _re.sub(
+        r"^(tôi muốn mua|tôi mua|mình muốn mua|mình mua|shop có những mẫu|shop có mẫu|shop có|cho tôi|tư vấn|bán cho tôi)\s+",
+        "",
+        query_text,
+        flags=_re.IGNORECASE,
+    ).strip()
+    if not clean_qtext:
+        clean_qtext = query_text
+
+    is_laptop_query = bool(_re.search(r"\b(lap|laptop|máy tính)\b", query_text, _re.IGNORECASE))
+    is_phone_query = bool(
+        _re.search(r"\b(dt|đt|điện thoại|phone|iphone|samsung)\b", query_text, _re.IGNORECASE)
+    )
+
+    category_filter = ""
+    if is_laptop_query:
+        category_filter = "OR p.sku ILIKE 'LAPTOP%'"
+    elif is_phone_query:
+        category_filter = "OR p.sku ILIKE 'PHONE%'"
+
     fts_sql = text(f"""
         SELECT
             p.id::text                                                    AS product_id,
@@ -72,19 +90,21 @@ async def hybrid_search_rrf(
             p.metadata,
             te.id::text                                                   AS chunk_id,
             ts_rank(
-                p.content_tsvector,
+                to_tsvector('simple', {SCHEMA}.immutable_unaccent(coalesce(p.name, '') || ' ' || coalesce(p.description, '') || ' ' || coalesce(p.sku, ''))),
                 plainto_tsquery('simple', {SCHEMA}.immutable_unaccent(:qtext))
             )                                                             AS fts_score
         FROM {SCHEMA}.products p
         JOIN {SCHEMA}.text_embeddings te ON te.source_id = p.id
-        WHERE p.content_tsvector
+        WHERE to_tsvector('simple', {SCHEMA}.immutable_unaccent(coalesce(p.name, '') || ' ' || coalesce(p.description, '') || ' ' || coalesce(p.sku, '')))
               @@ plainto_tsquery('simple', {SCHEMA}.immutable_unaccent(:qtext))
+           OR {SCHEMA}.immutable_unaccent(p.name) ILIKE '%' || {SCHEMA}.immutable_unaccent(:qtext) || '%'
+           {category_filter}
         ORDER BY fts_score DESC
         LIMIT :lim
     """)
     try:
         result = await asyncio.wait_for(
-            db.execute(fts_sql, {"qtext": query_text, "lim": fetch_k}), timeout=10.0
+            db.execute(fts_sql, {"qtext": clean_qtext, "lim": fetch_k}), timeout=10.0
         )
         fts_rows = result.all()
     except TimeoutError:

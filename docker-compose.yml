@@ -4,10 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ai-agent-api
-    ports:
-      - "${API_PORT:-8000}:8000"
+    network_mode: host
     environment:
-      DB_HOST: db
+      DB_HOST: localhost
       DB_USER: ${DB_USER:-user}
       DB_PASSWORD: ${DB_PASSWORD:-password}
       DB_NAME: ${DB_NAME:-ai_agent}
@@ -23,7 +22,9 @@ services:
       # Cloud fast-path: set CHAT_MODEL etc. to any LiteLLM model string
       # (e.g. gemini/gemini-2.5-flash) + the matching provider API key.
       # Empty pass-through values are ignored by the app (env_ignore_empty).
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:8080}
+      LLAMA_SERVER_BASE_URL: ${LLAMA_SERVER_BASE_URL:-http://localhost:8080/v1}
+      OLLAMA_EMBED_BASE_URL: ${OLLAMA_EMBED_BASE_URL:-http://localhost:11434}
       LIGHT_CHAT_MODEL: ${LIGHT_CHAT_MODEL:-}
       CHAT_MODEL: ${CHAT_MODEL:-}
       POWERFUL_CHAT_MODEL: ${POWERFUL_CHAT_MODEL:-}
@@ -39,19 +40,13 @@ services:
       # Inside the compose network the OTLP collector is the phoenix service,
       # NOT localhost (the app default) — without this override no trace ever
       # leaves the api container.
-      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-http://phoenix:4317}
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-http://localhost:4317}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-ai-sales-agent}
       PHOENIX_PROJECT_NAME: ${PHOENIX_PROJECT_NAME:-ai-sales-agent}
-    # Lets the container reach an Ollama server running on the host machine
-    # via host.docker.internal (works on Linux, Docker Desktop has it built in).
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
       phoenix:
-        # started (not healthy) — the app must boot even if Phoenix is slow;
-        # BatchSpanProcessor buffers and retries export on its own.
         condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/readiness', timeout=5)"]
@@ -59,11 +54,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    volumes:
+      - .:/app
     restart: unless-stopped
     secrets:
       - db_password
-    networks:
-      - ai_agent_net
 
   db:
     image: pgvector/pgvector:pg17

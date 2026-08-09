@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Sales Agent - Quick Test Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b0f19;
+      --card-bg: rgba(19, 27, 46, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-hover-border: rgba(99, 102, 241, 0.3);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --accent-primary: #6366f1;
+      --accent-primary-hover: #4f46e5;
+      --accent-success: #10b981;
+      --accent-success-hover: #059669;
+      --accent-warning: #f59e0b;
+      --accent-danger: #ef4444;
+      --accent-danger-hover: #dc2626;
+      --user-msg-bg: #1e1b4b;
+      --user-msg-border: #4338ca;
+      --ai-msg-bg: #0f172a;
+      --ai-msg-border: #1e293b;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top Bar */
+    header {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent-primary), #8b5cf6);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+      color: white;
+      box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+    }
+
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-tag {
+      font-size: 11px;
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+
+    .admin-key-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .admin-key-control label {
+      color: var(--text-muted);
+    }
+
+    .input-sm {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .input-sm:focus {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+
+    /* Main Container (Split Screen) */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 450px 1fr;
+      gap: 0;
+      height: calc(100vh - 57px);
+      overflow: hidden;
+    }
+
+    /* Zone Base Styling */
+    .zone {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .zone-admin {
+      background: rgba(13, 19, 33, 0.95);
+      border-right: 1px solid var(--card-border);
+    }
+
+    .zone-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.4);
+    }
+
+    .zone-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-count {
+      background: var(--accent-warning);
+      color: #000;
+      font-weight: 700;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+    }
+
+    .btn {
+      background: var(--accent-primary);
+      color: white;
+      border: none;
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: var(--accent-primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-success {
+      background: var(--accent-success);
+    }
+
+    .btn-success:hover {
+      background: var(--accent-success-hover);
+    }
+
+    .btn-danger {
+      background: var(--accent-danger);
+    }
+
+    .btn-danger:hover {
+      background: var(--accent-danger-hover);
+    }
+
+    /* Admin Zone Content */
+    .admin-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .hitl-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .hitl-card:hover {
+      border-color: var(--card-hover-border);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .hitl-card.active-selected {
+      border-color: var(--accent-warning);
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+    }
+
+    .hitl-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .hitl-reason {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--accent-warning);
+      background: rgba(245, 158, 11, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+
+    .hitl-time {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .hitl-session {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      word-break: break-all;
+    }
+
+    .order-details-box {
+      background: rgba(10, 15, 26, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .order-field {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .order-field:last-child {
+      margin-bottom: 0;
+    }
+
+    .order-label {
+      color: var(--text-dim);
+    }
+
+    .order-val {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .action-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Chat Zone Content */
+    .zone-chat {
+      background: #080c14;
+    }
+
+    .session-bar {
+      padding: 10px 20px;
+      background: rgba(15, 23, 42, 0.4);
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .session-selector {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .msg-row {
+      display: flex;
+      flex-direction: column;
+      max-width: 80%;
+    }
+
+    .msg-row.user {
+      align-self: flex-end;
+    }
+
+    .msg-row.ai {
+      align-self: flex-start;
+    }
+
+    .msg-bubble {
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      line-height: 1.5;
+      position: relative;
+    }
+
+    .user .msg-bubble {
+      background: var(--user-msg-bg);
+      border: 1px solid var(--user-msg-border);
+      color: #e0e7ff;
+      border-bottom-right-radius: 2px;
+    }
+
+    .ai .msg-bubble {
+      background: var(--ai-msg-bg);
+      border: 1px solid var(--ai-msg-border);
+      color: var(--text-main);
+      border-bottom-left-radius: 2px;
+    }
+
+    .ai-meta {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+      font-size: 11px;
+    }
+
+    .meta-tag {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .meta-tag.hitl-alert {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: var(--accent-warning);
+      font-weight: 600;
+    }
+
+    .preset-bar {
+      padding: 8px 20px;
+      background: rgba(15, 23, 42, 0.2);
+      border-top: 1px solid var(--card-border);
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+    }
+
+    .preset-chip {
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      color: #c7d2fe;
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .preset-chip:hover {
+      background: rgba(99, 102, 241, 0.25);
+      border-color: var(--accent-primary);
+    }
+
+    .chat-input-area {
+      padding: 14px 20px;
+      background: rgba(15, 23, 42, 0.6);
+      border-top: 1px solid var(--card-border);
+      display: flex;
+      gap: 10px;
+    }
+
+    .chat-input {
+      flex: 1;
+      background: rgba(11, 15, 25, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .chat-input:focus {
+      border-color: var(--accent-primary);
+    }
+
+    /* Modal for Edit Order */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .modal-backdrop.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: #131b2e;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      width: 480px;
+      max-width: 90%;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+
+    .modal-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text-main);
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .form-control {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent-primary);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--accent-primary);
+      color: white;
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+      z-index: 200;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">AI</div>
+      <div class="brand-title">SME Sales Agent Workspace</div>
+      <span class="brand-tag">Internal Test UI (No Tele Required)</span>
+    </div>
+    <div class="admin-key-control">
+      <label for="adminKey">X-Admin-Key:</label>
+      <input type="password" id="adminKey" class="input-sm" value="dev-key" placeholder="Enter admin key..." />
+    </div>
+
+
+  </header>
+
+  <!-- Main Split-Screen Workspace -->
+  <main>
+
+    <!-- Zone 1: Admin Zone (HITL Management) -->
+    <section class="zone zone-admin">
+      <div class="zone-header">
+        <div class="zone-title">
+          🛡️ Admin Zone
+          <span id="pendingBadge" class="badge-count">0</span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button class="btn btn-secondary" onclick="fetchPendingHITL()" title="Manual refresh">
+            🔄 Refresh
+          </button>
+        </div>
+      </div>
+
+      <div class="admin-content" id="adminContent">
+        <!-- HITL pending cards rendered dynamically here -->
+        <div style="text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 13px;">
+          Đang tải danh sách đơn cần duyệt...
+        </div>
+      </div>
+    </section>
+
+    <!-- Zone 2: Chat Zone (Direct Agent Interface) -->
+    <section class="zone zone-chat">
+      <!-- Session Bar -->
+      <div class="session-bar">
+        <div class="session-selector">
+          <button class="btn btn-success" onclick="startNewSession()" title="Tạo Session ID ngẫu nhiên mới">
+            ➕ New Session
+          </button>
+          <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+            <span style="font-size: 12px; color: var(--text-muted); font-weight: 600; white-space: nowrap;">Session ID:</span>
+            <input type="text" id="sessionIdInput" class="input-sm" style="flex: 1; font-family: monospace; font-weight: 600; color: #a5b4fc; background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.3);" placeholder="Nhập hoặc copy Session ID..." />
+            <button class="btn btn-secondary" onclick="copySessionId()" title="Copy Session ID hiện tại">
+              📋 Copy
+            </button>
+          </div>
+          <button class="btn btn-secondary" onclick="resumeSession()" title="Tải lại lịch sử chat theo Session ID">
+            🔄 Resume Session
+          </button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted);">
+          <span>Customer ID:</span>
+          <input type="text" id="customerIdInput" class="input-sm" value="customer-test-1" style="width: 130px; font-family: monospace;" />
+        </div>
+      </div>
+
+
+      <!-- Messages Stream -->
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg-row ai">
+          <div class="msg-bubble">
+            👋 Chào mừng bạn đến với môi trường test nhanh Agent Sales! Hãy thử chọn một câu hỏi mẫu bên dưới hoặc gõ yêu cầu mua hàng để test luồng HITL Admin.
+          </div>
+        </div>
+      </div>
+
+      <!-- Presets Bar -->
+      <div class="preset-bar">
+        <span style="font-size: 11px; color: var(--text-dim); align-self: center;">Mẫu test:</span>
+        <div class="preset-chip" onclick="sendPreset('iPhone 15 Pro Max 256GB giá bao nhiêu và có khuyến mãi gì?')">💬 Hỏi giá sản phẩm</div>
+        <div class="preset-chip" onclick="sendPreset('Tôi muốn mua 2 chiếc iPhone 15 Pro Max 256GB, giao về 123 Nguyễn Huệ Q1, SĐT 0901234567')">🛒 Đặt hàng (Kích hoạt HITL)</div>
+        <div class="preset-chip" onclick="sendPreset('Đổi giúp tôi số lượng thành 3 chiếc')">✏️ Sửa số lượng đơn</div>
+      </div>
+
+      <!-- Chat Input Area -->
+      <div class="chat-input-area">
+        <input type="text" id="chatInput" class="chat-input" placeholder="Nhập tin nhắn test cho AI Agent..." onkeydown="if(event.key === 'Enter') sendQuery()" />
+        <button class="btn" onclick="sendQuery()">Gửi 🚀</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal for Request Edit -->
+  <div class="modal-backdrop" id="editModal">
+    <div class="modal">
+      <div class="modal-title">✏️ Chỉnh sửa chi tiết đơn hàng (Request Edit)</div>
+      <input type="hidden" id="editPauseId" />
+      <input type="hidden" id="editSessionId" />
+      <input type="hidden" id="editVersion" />
+
+      <div class="form-group">
+        <label>Tên sản phẩm / SKU:</label>
+        <input type="text" id="editProductName" class="form-control" placeholder="Tên sản phẩm..." />
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div class="form-group">
+          <label>Số lượng:</label>
+          <input type="number" id="editQuantity" class="form-control" min="1" />
+        </div>
+        <div class="form-group">
+          <label>Đơn giá duyệt (VND):</label>
+          <input type="number" id="editUnitPrice" class="form-control" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Địa chỉ giao hàng:</label>
+        <input type="text" id="editAddress" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label>Số điện thoại:</label>
+        <input type="text" id="editPhone" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label>Ghi chú cho Agent / Lý do chỉnh sửa:</label>
+        <textarea id="editComment" class="form-control" rows="2" placeholder="Ghi chú..."></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+        <button class="btn btn-secondary" onclick="closeEditModal()">Hủy</button>
+        <button class="btn btn-success" onclick="submitEditReview()">Lưu & Cập nhật State</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">Thao tác thành công!</div>
+
+  <script>
+    let currentSessionId = 'session-test-' + Date.now();
+    document.getElementById('sessionIdInput').value = currentSessionId;
+
+    // Copy Session ID helper
+    function copySessionId() {
+      const sessionId = document.getElementById('sessionIdInput').value.trim();
+      if (!sessionId) {
+        showToast('Vui lòng chọn hoặc nhập Session ID!', true);
+        return;
+      }
+      navigator.clipboard.writeText(sessionId);
+      showToast(`📋 Đã copy Session ID: ${sessionId}`);
+    }
+
+    // Switch chat to Session ID selected from Admin card
+    function loadSessionFromAdmin(sessionId) {
+      document.getElementById('sessionIdInput').value = sessionId;
+      resumeSession();
+    }
+
+    // Toast Notification helper
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.style.background = isError ? 'var(--accent-danger)' : 'var(--accent-primary)';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // --- ADMIN ZONE FUNCTIONS ---
+    async function fetchPendingHITL() {
+      const adminKey = document.getElementById('adminKey').value;
+      const adminContent = document.getElementById('adminContent');
+      const pendingBadge = document.getElementById('pendingBadge');
+
+      try {
+        const res = await fetch('/hitl/pending', {
+          headers: { 'X-Admin-Key': adminKey }
+        });
+
+        if (!res.ok) {
+          adminContent.innerHTML = `<div style="color: var(--accent-danger); font-size: 13px; padding: 20px;">Lỗi tải Admin Queue (${res.status}): Kiếm tra X-Admin-Key.</div>`;
+          return;
+        }
+
+        const data = await res.json();
+        pendingBadge.innerText = data.length;
+
+        if (data.length === 0) {
+          adminContent.innerHTML = `
+            <div style="text-align: center; padding: 50px 20px; color: var(--text-dim); font-size: 13px;">
+              ✨ Không có đơn hàng nào đang chờ duyệt.<br/>
+              Hãy thử đặt hàng ở khung chat bên phải để tạo Yêu cầu Duyệt HITL.
+            </div>`;
+          return;
+        }
+
+        adminContent.innerHTML = data.map(item => {
+          const stateValues = item.state ? item.state.state_values : {};
+          const orderInfo = stateValues.order_info || {};
+          const version = item.state && item.state.hitl_metadata ? item.state.hitl_metadata.version : 1;
+          const itemsList = orderInfo.items || [];
+          const firstItem = itemsList[0] || {};
+          const productName = firstItem.product_name || firstItem.name || firstItem.sku || orderInfo.name || orderInfo.product_name || orderInfo.sku || 'N/A';
+          const qty = firstItem.quantity || orderInfo.quantity || 1;
+          const price = firstItem.unit_price || orderInfo.approved_price || orderInfo.price || firstItem.price || 0;
+          const totalPrice = orderInfo.total_price || (qty * price);
+
+          const isCurrentSession = item.session_id === currentSessionId;
+
+          return `
+            <div class="hitl-card ${isCurrentSession ? 'active-selected' : ''}">
+              <div class="hitl-card-header">
+                <span class="hitl-reason">${item.pause_reason || 'HITL_REVIEW'}</span>
+                <span class="hitl-time">${new Date(item.paused_at).toLocaleTimeString('vi-VN')}</span>
+              </div>
+              <div class="hitl-session" style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-family: monospace;"><strong>Session:</strong> <code style="color: #a5b4fc;">${item.session_id}</code></span>
+                <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="loadSessionFromAdmin('${item.session_id}')" title="Mở lịch sử chat của đơn này">
+                  💬 Switch Chat
+                </button>
+              </div>
+
+
+              <div class="order-details-box">
+                <div class="order-field">
+                  <span class="order-label">Sản phẩm:</span>
+                  <span class="order-val">${productName}</span>
+                </div>
+                <div class="order-field">
+                  <span class="order-label">Số lượng:</span>
+                  <span class="order-val">${qty}</span>
+                </div>
+                <div class="order-field">
+                  <span class="order-label">Tổng tiền:</span>
+                  <span class="order-val" style="color: #34d399;">${totalPrice > 0 ? totalPrice.toLocaleString('vi-VN') + ' đ' : 'Chưa tính'}</span>
+                </div>
+                ${orderInfo.customer_name ? `
+                <div class="order-field">
+                  <span class="order-label">Khách hàng:</span>
+                  <span class="order-val">${orderInfo.customer_name} (${orderInfo.phone || ''})</span>
+                </div>` : ''}
+              </div>
+
+              <div class="action-group">
+                <button class="btn btn-success" style="flex:1;" onclick="approveOrder('${item.pause_id}', '${item.session_id}', ${version})">
+                  ✓ Approve
+                </button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="openEditModal('${item.pause_id}', '${item.session_id}', ${version}, ${JSON.stringify(orderInfo).replace(/"/g, '&quot;')})">
+                  ✏️ Edit
+                </button>
+                <button class="btn btn-danger" style="flex:1;" onclick="rejectOrder('${item.pause_id}', '${item.session_id}', ${version})">
+                  ✕ Reject
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (err) {
+        adminContent.innerHTML = `<div style="color: var(--accent-danger); font-size: 13px; padding: 20px;">Lỗi kết nối Admin Queue: ${err.message}</div>`;
+      }
+    }
+
+    // Approve HITL Review Action
+    async function approveOrder(pauseId, sessionId, version) {
+      const adminKey = document.getElementById('adminKey').value;
+      const idempotencyKey = 'approve-' + Date.now();
+
+      try {
+        const res = await fetch('/hitl/review', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Key': adminKey,
+            'X-Idempotency-Key': idempotencyKey
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            pause_id: pauseId,
+            action: 'approve',
+            expected_version: version,
+            admin_user_id: 'admin-ui'
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          showToast(`Lỗi approve: ${JSON.stringify(errData.detail)}`, true);
+          return;
+        }
+
+        showToast('✅ Đã APPROVE đơn hàng thành công!');
+        fetchPendingHITL();
+        loadSessionFromAdmin(sessionId);
+      } catch (err) {
+        showToast(`Lỗi Approve: ${err.message}`, true);
+      }
+    }
+
+    // Reject HITL Review Action
+    async function rejectOrder(pauseId, sessionId, version) {
+      const reason = prompt('Nhập lý do từ chối đơn hàng:', 'Khách hàng không nghe máy / Đơn không hợp lệ');
+      if (!reason) return;
+
+      const adminKey = document.getElementById('adminKey').value;
+      const idempotencyKey = 'reject-' + Date.now();
+
+      try {
+        const res = await fetch('/hitl/review', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Key': adminKey,
+            'X-Idempotency-Key': idempotencyKey
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            pause_id: pauseId,
+            action: 'reject',
+            expected_version: version,
+            admin_user_id: 'admin-ui',
+            reason_or_comment: reason
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          showToast(`Lỗi reject: ${JSON.stringify(errData.detail)}`, true);
+          return;
+        }
+
+        showToast('❌ Đã REJECT đơn hàng.');
+        fetchPendingHITL();
+        loadSessionFromAdmin(sessionId);
+      } catch (err) {
+        showToast(`Lỗi Reject: ${err.message}`, true);
+      }
+    }
+
+    // Edit Order Modal
+    function openEditModal(pauseId, sessionId, version, orderInfo) {
+      document.getElementById('editPauseId').value = pauseId;
+      document.getElementById('editSessionId').value = sessionId;
+      document.getElementById('editVersion').value = version;
+
+      const items = orderInfo.items || [];
+      const firstItem = items[0] || {};
+
+      document.getElementById('editProductName').value = firstItem.product_name || orderInfo.product_name || '';
+      document.getElementById('editQuantity').value = firstItem.quantity || orderInfo.quantity || 1;
+      document.getElementById('editUnitPrice').value = firstItem.unit_price || orderInfo.unit_price || 0;
+      document.getElementById('editAddress').value = orderInfo.address || '';
+      document.getElementById('editPhone').value = orderInfo.phone || '';
+      document.getElementById('editComment').value = 'Điều chỉnh đơn hàng theo yêu cầu Admin';
+
+      document.getElementById('editModal').classList.add('show');
+    }
+
+    function closeEditModal() {
+      document.getElementById('editModal').classList.remove('show');
+    }
+
+    async function submitEditReview() {
+      const pauseId = document.getElementById('editPauseId').value;
+      const sessionId = document.getElementById('editSessionId').value;
+      const version = parseInt(document.getElementById('editVersion').value, 10);
+
+      const productName = document.getElementById('editProductName').value;
+      const quantity = parseInt(document.getElementById('editQuantity').value, 10);
+      const unitPrice = parseFloat(document.getElementById('editUnitPrice').value);
+      const address = document.getElementById('editAddress').value;
+      const phone = document.getElementById('editPhone').value;
+      const comment = document.getElementById('editComment').value;
+
+      const stateEdits = {
+        order_info: {
+          items: [{ product_name: productName, quantity: quantity, unit_price: unitPrice }],
+          total_price: quantity * unitPrice,
+          address: address,
+          phone: phone
+        }
+      };
+
+      const adminKey = document.getElementById('adminKey').value;
+      const idempotencyKey = 'edit-' + Date.now();
+
+      try {
+        const res = await fetch('/hitl/review', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Key': adminKey,
+            'X-Idempotency-Key': idempotencyKey
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            pause_id: pauseId,
+            action: 'request_edit',
+            expected_version: version,
+            admin_user_id: 'admin-ui',
+            state_edits: stateEdits,
+            reason_or_comment: comment
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          showToast(`Lỗi Request Edit: ${JSON.stringify(errData.detail)}`, true);
+          return;
+        }
+
+        showToast('✏️ Đã chỉnh sửa & gửi cập nhật state!');
+        closeEditModal();
+        fetchPendingHITL();
+        loadSessionFromAdmin(sessionId);
+      } catch (err) {
+        showToast(`Lỗi Edit: ${err.message}`, true);
+      }
+    }
+
+
+    // --- CHAT ZONE FUNCTIONS ---
+    function startNewSession() {
+      currentSessionId = 'session-test-' + Date.now();
+      document.getElementById('sessionIdInput').value = currentSessionId;
+      document.getElementById('chatMessages').innerHTML = `
+        <div class="msg-row ai">
+          <div class="msg-bubble">
+            🆕 Đã khởi tạo phiên chat mới (ID: <code>${currentSessionId}</code>). Bạn có thể gửi câu hỏi ngay bây giờ.
+          </div>
+        </div>`;
+      showToast('Đã bắt đầu Session mới');
+    }
+
+    async function resumeSession() {
+      const sessionId = document.getElementById('sessionIdInput').value.trim();
+      if (!sessionId) {
+        showToast('Vui lòng nhập Session ID', true);
+        return;
+      }
+      currentSessionId = sessionId;
+
+      try {
+        const res = await fetch(`/agent/session/${encodeURIComponent(sessionId)}/history`);
+        if (!res.ok) {
+          showToast(`Không thể tải lịch sử session (${res.status})`, true);
+          return;
+        }
+        const data = await res.json();
+        const chatContainer = document.getElementById('chatMessages');
+
+        if (!data.messages || data.messages.length === 0) {
+          chatContainer.innerHTML = `
+            <div class="msg-row ai">
+              <div class="msg-bubble">
+                ℹ️ Phiên chat <code>${sessionId}</code> chưa có tin nhắn cũ. Bạn có thể bắt đầu nhắn tin.
+              </div>
+            </div>`;
+        } else {
+          chatContainer.innerHTML = data.messages.map(m => `
+            <div class="msg-row ${m.role === 'user' ? 'user' : 'ai'}">
+              <div class="msg-bubble">${escapeHtml(m.content)}</div>
+            </div>
+          `).join('');
+        }
+
+        if (data.hitl_paused) {
+          chatContainer.innerHTML += `
+            <div class="msg-row ai">
+              <div class="msg-bubble" style="border-color: var(--accent-warning); background: rgba(245, 158, 11, 0.1);">
+                ⚠️ <strong>HITL Paused:</strong> Phiên này đang tạm dừng chờ Admin duyệt đơn hàng. Vui lòng kiểm tra cột Admin bên trái.
+              </div>
+            </div>`;
+        }
+
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        showToast(`Đã resume session: ${sessionId}`);
+        fetchPendingHITL();
+      } catch (err) {
+        showToast(`Lỗi resume session: ${err.message}`, true);
+      }
+    }
+
+    function sendPreset(text) {
+      document.getElementById('chatInput').value = text;
+      sendQuery();
+    }
+
+    async function sendQuery() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const customerId = document.getElementById('customerIdInput').value.trim() || 'customer-test-1';
+      const sessionId = document.getElementById('sessionIdInput').value.trim() || currentSessionId;
+      currentSessionId = sessionId;
+
+      input.value = '';
+      const chatContainer = document.getElementById('chatMessages');
+
+      // Append User message
+      chatContainer.innerHTML += `
+        <div class="msg-row user">
+          <div class="msg-bubble">${escapeHtml(text)}</div>
+        </div>`;
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      // Temporary Thinking bubble
+      const thinkingId = 'thinking-' + Date.now();
+      chatContainer.innerHTML += `
+        <div class="msg-row ai" id="${thinkingId}">
+          <div class="msg-bubble" style="color: var(--text-dim);">
+            ⏳ Agent đang xử lý...
+          </div>
+        </div>`;
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      try {
+        const res = await fetch('/agent/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            session_id: sessionId,
+            customer_id: customerId
+          })
+        });
+
+        document.getElementById(thinkingId)?.remove();
+
+        if (!res.ok) {
+          const errData = await res.json();
+          chatContainer.innerHTML += `
+            <div class="msg-row ai">
+              <div class="msg-bubble" style="border-color: var(--accent-danger); color: var(--accent-danger);">
+                ❌ Lỗi (${res.status}): ${JSON.stringify(errData.detail)}
+              </div>
+            </div>`;
+          return;
+        }
+
+        const data = await res.json();
+
+        // Render AI Answer
+        let metaHtml = '';
+        if (data.model_trace) {
+          metaHtml += `<span class="meta-tag">Model: ${data.model_trace.selected_model}</span>`;
+        }
+        if (data.intent) {
+          metaHtml += `<span class="meta-tag">Intent: ${data.intent.primary_intent}</span>`;
+        }
+        if (data.elapsed_ms) {
+          metaHtml += `<span class="meta-tag">${Math.round(data.elapsed_ms)}ms</span>`;
+        }
+        if (data.hitl_paused) {
+          metaHtml += `<span class="meta-tag hitl-alert">⚠️ HITL Paused</span>`;
+        }
+
+        chatContainer.innerHTML += `
+          <div class="msg-row ai">
+            <div class="msg-bubble">
+              ${escapeHtml(data.answer)}
+              <div class="ai-meta">${metaHtml}</div>
+            </div>
+          </div>`;
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        // Auto refresh admin panel if paused
+        if (data.hitl_paused) {
+          showToast('⚠️ Đơn hàng đã chuyển qua Admin Zone chờ duyệt!');
+          fetchPendingHITL();
+        }
+
+      } catch (err) {
+        document.getElementById(thinkingId)?.remove();
+        chatContainer.innerHTML += `
+          <div class="msg-row ai">
+            <div class="msg-bubble" style="border-color: var(--accent-danger); color: var(--accent-danger);">
+              ❌ Lỗi kết nối: ${err.message}
+            </div>
+          </div>`;
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+    }
+
+    // Initial Load
+    fetchPendingHITL();
+    setInterval(fetchPendingHITL, 5000); // Auto-poll every 5s
+  </script>
+</body>
+</html>
