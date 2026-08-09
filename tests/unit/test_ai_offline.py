@@ -99,14 +99,14 @@ async def test_ai_gateway_fallback_logic(monkeypatch):
     monkeypatch.setattr("services.ai.ai_router.acompletion", mock_acompletion)
 
     response = await AIGateway.complete(
-        messages=[{"role": "user", "content": "test"}], model="economy-chat"
+        messages=[{"role": "user", "content": "test"}], model="premium-chat"
     )
 
     assert response is not None
     assert response.choices[0].message.content == "fallback answer"
     assert mock_acompletion.await_count == 2
-    assert mock_acompletion.await_args_list[0].kwargs["model"] == "economy-chat"
-    assert mock_acompletion.await_args_list[1].kwargs["model"] == "premium-chat"
+    assert mock_acompletion.await_args_list[0].kwargs["model"] == "premium-chat"
+    assert mock_acompletion.await_args_list[1].kwargs["model"] == "economy-chat"
 
 
 @pytest.mark.asyncio
@@ -120,6 +120,6 @@ async def test_ai_gateway_non_economy_failure_propagates(monkeypatch):
 
     with pytest.raises(ConnectionError):
         await AIGateway.complete(
-            messages=[{"role": "user", "content": "test"}], model="premium-chat"
+            messages=[{"role": "user", "content": "test"}], model="economy-chat"
         )
     assert mock_acompletion.await_count == 1

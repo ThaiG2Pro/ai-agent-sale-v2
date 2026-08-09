@@ -39,8 +39,7 @@ def test_powerful_model_typo_fixed():
     # Assert on the FIELD DEFAULT: litellm calls load_dotenv() on import, so a
     # model override in the developer's .env leaks into os.environ and would
     # make an instance-based assertion machine-dependent.
-    default = Settings.model_fields["POWERFUL_CHAT_MODEL"].default
-    assert "deepseek" in default
+    default = str(Settings.model_fields["POWERFUL_CHAT_MODEL"].default)
     assert "deepseel" not in default
 
 

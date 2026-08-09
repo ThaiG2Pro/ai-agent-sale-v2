@@ -59,7 +59,8 @@ def test_make_initial_state():
     # Check all required fields exist
     assert state["session_id"] == "test-session-123"
     assert state["user_message"] == "Test query"
-    assert state["messages"] == []
+    assert len(state["messages"]) == 1
+    assert state["messages"][0].content == "Test query"
 
     # Check bool flags are explicitly False (not None)
     assert state["escalation_flag"] is False

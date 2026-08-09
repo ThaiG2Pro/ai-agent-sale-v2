@@ -56,7 +56,7 @@ async def test_successful_order_confirms_and_flushes():
     assert cmd.goto == "answer_node"
     assert cmd.update["order_info"]["status"] == "confirmed"
     assert "Widget" in cmd.update["response"]
-    assert "Quantity: 2" in cmd.update["response"]
+    assert "Số lượng: 2" in cmd.update["response"]
     # stock UPDATE + order INSERT, then explicit flush (single transaction)
     assert db.execute.await_count == 2
     db.flush.assert_awaited_once()
