@@ -91,7 +91,7 @@ async def test_pending_info_llm_failure_keeps_confirmation():
         )
 
     assert cmd.goto == "answer_node"
-    assert "successfully placed" in cmd.update["response"]
+    assert "Đặt hàng thành công" in cmd.update["response"]
     assert cmd.update["order_info"]["status"] == "confirmed"
 
 
