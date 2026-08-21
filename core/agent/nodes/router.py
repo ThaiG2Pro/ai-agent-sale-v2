@@ -14,10 +14,153 @@ import logging
 
 from langgraph.types import Command
 
+from core.agent.intent_transitions import (
+    HESITATION_FLIP_SOURCES,
+    apply_transition,
+    is_hesitation,
+    normalize_priority,
+)
 from core.agent.state import AgentState, IntentClassification, IntentEnum
+from core.config import settings
 from services.ai import AIGateway
 
 logger = logging.getLogger(__name__)
+
+# v3-0 P1 (T03): cap history context at the last 3 exchanges (6 messages) —
+# small models over-anchor on long history (keep N<=3, current message LAST).
+_HISTORY_MAX_MESSAGES = 6
+_HISTORY_MAX_CHARS = 200
+
+# H6 (T06): ORDER_PLACEMENT primary with an advisory secondary — queue the
+# advisory part so order_execution answers it alongside the confirmation
+# (reuses the SC5 pending_info_questions machinery).
+_ADVISORY_SECONDARIES = frozenset(
+    {IntentEnum.INFO_QUERY, IntentEnum.PRICING, IntentEnum.COMPARISON, IntentEnum.AVAILABILITY}
+)
+
+
+def _format_history(messages: list, current_message: str) -> str:
+    """Last N prior turns as a compact context block (T03 option 1).
+
+    Excludes the trailing copy of the current message; truncates each line.
+    """
+    prior = list(messages or [])
+    if prior and getattr(prior[-1], "content", None) == current_message:
+        prior = prior[:-1]
+    lines = []
+    for msg in prior[-_HISTORY_MAX_MESSAGES:]:
+        content = str(getattr(msg, "content", "") or "").strip()
+        if not content:
+            continue
+        role = "Customer" if msg.__class__.__name__ == "HumanMessage" else "Agent"
+        if len(content) > _HISTORY_MAX_CHARS:
+            content = content[:_HISTORY_MAX_CHARS] + "…"
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
+# ── v3-0 P4 (T11 4.2/4.3): zero-LLM classification fast paths ───────────────
+
+# 4.2 SMALLTALK fast-path — conservative gate: FULL match against this set,
+# <=4 words, and no product/price/order token anywhere in the message.
+_SMALLTALK_FULL_MATCHES = frozenset(
+    {
+        "hi",
+        "hello",
+        "chào",
+        "chào shop",
+        "chào bạn",
+        "xin chào",
+        "xin chào shop",
+        "hi shop",
+        "hello shop",
+        "alo",
+        "cảm ơn",
+        "cảm ơn shop",
+        "cám ơn",
+        "thanks",
+        "thank you",
+        "ok",
+        "oke",
+        "oke shop",
+        "tạm biệt",
+        "bye",
+    }
+)
+# Any of these tokens anywhere ⇒ NOT smalltalk / NOT whitelist-safe.
+_BUSINESS_TOKENS = (
+    "giá",
+    "mua",
+    "đặt",
+    "hủy",
+    "order",
+    "sản phẩm",
+    "hàng",
+    "tiền",
+    "triệu",
+    "khiếu nại",
+    "bảo hành",
+    "giảm",
+    "ship",
+    "giao",
+)
+
+
+def _smalltalk_fastpath(user_msg: str) -> bool:
+    msg = user_msg.strip().lower()
+    if not msg or len(msg.split()) > 4:
+        return False
+    if any(tok in msg for tok in _BUSINESS_TOKENS):
+        return False
+    return msg in _SMALLTALK_FULL_MATCHES
+
+
+# 4.3 keyword pre-classify whitelist — INFO_QUERY/PRICING/AVAILABILITY only
+# (never escalation-worthy or order intents; those must keep the LLM path so
+# HITL-pause/priority routing is never bypassed).
+_WHITELIST_BLOCKERS = (
+    "mua",
+    "đặt",
+    "hủy",
+    "order",
+    "khiếu nại",
+    "bực",
+    "tệ",
+    "lỗi",
+    "hoàn tiền",
+    "giảm giá",
+    "bớt",
+    "trả giá",
+    "deal",
+    "thôi",
+    "khoan",
+)
+_WHITELIST_PATTERNS: tuple[tuple[str, IntentEnum], ...] = (
+    ("giá bao nhiêu", IntentEnum.PRICING),
+    ("bao nhiêu tiền", IntentEnum.PRICING),
+    ("giá của", IntentEnum.PRICING),
+    ("báo giá", IntentEnum.PRICING),
+    ("còn hàng", IntentEnum.AVAILABILITY),
+    ("hết hàng chưa", IntentEnum.AVAILABILITY),
+    ("có sẵn", IntentEnum.AVAILABILITY),
+    ("khi nào có hàng", IntentEnum.AVAILABILITY),
+    ("shop có những", IntentEnum.INFO_QUERY),
+    ("bán những gì", IntentEnum.INFO_QUERY),
+    ("có sản phẩm gì", IntentEnum.INFO_QUERY),
+    ("thông số", IntentEnum.INFO_QUERY),
+    ("cấu hình", IntentEnum.INFO_QUERY),
+)
+
+
+def _whitelist_classify(user_msg: str) -> IntentEnum | None:
+    msg = user_msg.strip().lower()
+    if not msg or any(tok in msg for tok in _WHITELIST_BLOCKERS):
+        return None
+    for pattern, intent in _WHITELIST_PATTERNS:
+        if pattern in msg:
+            return intent
+    return None
+
 
 # Safe fallback when the LLM returns malformed/incomplete JSON: INFO_QUERY
 # routes to retrieval_node, whose confidence guards decline gracefully.
@@ -35,7 +178,11 @@ async def router_node(state: AgentState) -> Command:
     Uses economy-chat model (not light-chat due to Ollama G1 constraint).
     Returns Command with goto and state updates.
     """
-    user_msg_lower = (state.get("user_message") or "").lower()
+    user_msg = state.get("user_message") or ""
+    user_msg_lower = user_msg.lower()
+    v3_enabled = settings.INTENT_TRACKING_V3_ENABLED
+    previous_intent = state.get("intent") if v3_enabled else None
+
     cancel_keywords = [
         "hủy đơn",
         "không mua nữa",
@@ -52,6 +199,59 @@ async def router_node(state: AgentState) -> Command:
                 "intent": IntentEnum.CANCEL.value,
                 "secondary_intents": [],
                 "intent_confidence": 1.0,
+                "intent_shift": previous_intent not in (None, IntentEnum.CANCEL.value),
+                "intent_disagreement_count": 0,
+            },
+        )
+
+    # v3-0 P1 (T03 rec 2, F5): hesitation/defer signal while an order-ish
+    # intent is in flight → deterministic flip to CANCEL, no LLM call.
+    if v3_enabled and previous_intent in HESITATION_FLIP_SOURCES and is_hesitation(user_msg):
+        logger.info(
+            "router_node hesitation flip: previous_intent=%s msg=%r",
+            previous_intent,
+            user_msg[:60],
+        )
+        return Command(
+            goto="cancellation_node",
+            update={
+                "intent": IntentEnum.CANCEL.value,
+                "secondary_intents": [],
+                "intent_confidence": 0.9,
+                "intent_shift": True,
+                "intent_disagreement_count": 0,
+            },
+        )
+
+    # v3-0 P4 (T11 4.2): in-graph SMALLTALK fast-path — saves both the router
+    # LLM call and the answer LLM call (template branch in answer_node).
+    # Checkpoint still records messages + intent (combo 1.1 stays fed).
+    if settings.SMALLTALK_FASTPATH_ENABLED and _smalltalk_fastpath(user_msg):
+        return Command(
+            goto="answer_node",
+            update={
+                "intent": IntentEnum.SMALLTALK.value,
+                "secondary_intents": [],
+                "intent_confidence": 1.0,
+                "intent_shift": previous_intent not in (None, IntentEnum.SMALLTALK.value),
+                "intent_disagreement_count": 0,
+                "smalltalk_fastpath": True,
+            },
+        )
+
+    # v3-0 P4 (T11 4.3): keyword pre-classify whitelist — INFO_QUERY/PRICING/
+    # AVAILABILITY skip the router LLM. IN-GRAPH by design (a pre-router
+    # bypass was rejected: it would skip HITL-pause routing); the semantic
+    # cache stays in retrieval_node and is invalidated on price/stock updates.
+    if settings.PRECLASSIFY_WHITELIST_ENABLED and (wl_intent := _whitelist_classify(user_msg)):
+        return Command(
+            goto="retrieval_node",
+            update={
+                "intent": wl_intent.value,
+                "secondary_intents": [],
+                "intent_confidence": 0.85,
+                "intent_shift": previous_intent not in (None, wl_intent.value),
+                "intent_disagreement_count": 0,
             },
         )
 
@@ -86,13 +286,34 @@ async def router_node(state: AgentState) -> Command:
         "Set primary_intent to the best matching intent. "
         "Set confidence 0.0-1.0. Keep reasoning concise."
     )
+
+    # v3-0 P1 (T03 option 1): history-aware classification — same single call,
+    # last 3 exchanges + previous intent as context, current message LAST.
+    classify_input = user_msg
+    if v3_enabled:
+        context_parts = []
+        if previous_intent:
+            context_parts.append(f"Previous turn intent: {previous_intent}")
+        history_block = _format_history(state.get("messages") or [], user_msg)
+        if history_block:
+            context_parts.append(f"Recent conversation (context only):\n{history_block}")
+        if context_parts:
+            system_prompt += (
+                "\nClassify ONLY the LAST customer message; the conversation "
+                "history is context, not the thing to classify. "
+                "Set intent_shift=true if the last message changes intent "
+                "vs the previous turn intent."
+            )
+            classify_input = (
+                "\n\n".join(context_parts) + f"\n\nClassify the LAST customer message:\n{user_msg}"
+            )
     try:
         try:
             result = await AIGateway.complete(
                 model="economy-chat",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": state["user_message"]},
+                    {"role": "user", "content": classify_input},
                 ],
                 response_format=IntentClassification,
             )
@@ -102,7 +323,7 @@ async def router_node(state: AgentState) -> Command:
                 model="economy-chat",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": state["user_message"]},
+                    {"role": "user", "content": classify_input},
                 ],
                 response_format={"type": "json_object"},
             )
@@ -130,6 +351,9 @@ async def router_node(state: AgentState) -> Command:
             secondary_intents=valid_secondaries,
             confidence=float(data.get("confidence", 0.9)),
             reasoning=str(data.get("reasoning", "")),
+            intent_shift=bool(
+                data.get("intent_shift", previous_intent not in (None, primary_enum.value))
+            ),
         )
     except Exception as e:
         logger.warning(
@@ -137,16 +361,39 @@ async def router_node(state: AgentState) -> Command:
             e,
         )
         classification = _FALLBACK_CLASSIFICATION
+
+    disagreement_count = int(state.get("intent_disagreement_count") or 0)
+    if v3_enabled:
+        # 1.2 (T06, H6): hard priority CANCEL > COMPLAINT > NEGOTIATION > ORDER > INFO.
+        classification = normalize_priority(classification)
+        # 1.1 (T03): sticky-intent transition table + confidence hysteresis.
+        classification, disagreement_count = apply_transition(
+            previous_intent, classification, disagreement_count
+        )
+
     # FR-007: escalate if ANY intent (primary OR secondary) is COMPLAINT/NEGOTIATION
     next_node = _get_next_node(classification)
-    return Command(
-        goto=next_node,
-        update={
-            "intent": classification.primary_intent.value,
-            "secondary_intents": [i.value for i in classification.secondary_intents],
-            "intent_confidence": classification.confidence,
-        },
-    )
+    update: dict = {
+        "intent": classification.primary_intent.value,
+        "secondary_intents": [i.value for i in classification.secondary_intents],
+        "intent_confidence": classification.confidence,
+        "intent_shift": classification.intent_shift,
+        "intent_disagreement_count": disagreement_count,
+    }
+
+    # H6 (T06): mixed info+order in one message — handle the highest-priority
+    # branch (ORDER) and queue the advisory part so order_execution answers it
+    # with the confirmation (SC5 machinery). secondary_intents stay in state
+    # for the next turn (make_initial_state no longer wipes them).
+    if (
+        v3_enabled
+        and classification.primary_intent == IntentEnum.ORDER_PLACEMENT
+        and _ADVISORY_SECONDARIES & set(classification.secondary_intents)
+        and not state.get("pending_info_questions")
+    ):
+        update["pending_info_questions"] = user_msg
+
+    return Command(goto=next_node, update=update)
 
 
 def _get_next_node(classification: IntentClassification) -> str:

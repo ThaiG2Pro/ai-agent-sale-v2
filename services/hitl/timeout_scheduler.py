@@ -59,7 +59,75 @@ async def run_timeout_scheduler(
         except Exception as e:
             logger.exception(f"Error in timeout scheduler: {e}")
 
+        # v3-0 P3 (T12 3.5): admin alerts ride the same loop — no new job.
+        if settings.RESILIENCE_V3_ENABLED:
+            try:
+                async with session_factory() as db:
+                    await _process_admin_alerts(db)
+            except Exception:
+                logger.exception("Error in admin alert pass")
+
         await asyncio.sleep(poll_interval_seconds)
+
+
+async def _process_admin_alerts(db: AsyncSession) -> None:
+    """T12 (3.5): 3 alert kinds → Telegram admin chat (closes gap O28).
+
+    1. support_queue depth > ALERT_QUEUE_DEPTH
+    2. oldest pending case waiting > HITL_WAIT_ALERT_MINUTES
+    3. degraded turns since the previous tick
+    Alerts are best-effort and deduplicated per condition transition by the
+    _alert_state latch — a condition alerts once when it becomes true and
+    re-arms when it clears.
+    """
+    from sqlalchemy import func
+
+    from models.schema import SupportQueue
+    from services import resilience
+    from services.hitl.admin_notify import notify_admin_alert
+
+    now = datetime.now(UTC)
+
+    depth = (
+        await db.execute(
+            select(func.count()).select_from(SupportQueue).where(SupportQueue.status == "pending")
+        )
+    ).scalar_one()
+    if depth > settings.ALERT_QUEUE_DEPTH:
+        if not _alert_state.get("queue_depth"):
+            _alert_state["queue_depth"] = True
+            await notify_admin_alert(
+                f"📈 Queue hỗ trợ đang có <b>{depth}</b> case chờ "
+                f"(ngưỡng {settings.ALERT_QUEUE_DEPTH})."
+            )
+    else:
+        _alert_state["queue_depth"] = False
+
+    oldest = (
+        await db.execute(
+            select(func.min(SupportQueue.created_at)).where(SupportQueue.status == "pending")
+        )
+    ).scalar_one_or_none()
+    waited_min = (now - oldest).total_seconds() / 60 if oldest else 0
+    if oldest and waited_min > settings.HITL_WAIT_ALERT_MINUTES:
+        if not _alert_state.get("wait_too_long"):
+            _alert_state["wait_too_long"] = True
+            await notify_admin_alert(
+                f"⏰ Có khách đã chờ <b>{waited_min:.0f} phút</b> trong queue "
+                f"(ngưỡng {settings.HITL_WAIT_ALERT_MINUTES} phút) — cần xử lý gấp."
+            )
+    else:
+        _alert_state["wait_too_long"] = False
+
+    degraded = resilience.drain_degraded_since_alert()
+    if degraded:
+        await notify_admin_alert(
+            f"🛠 Có <b>{degraded}</b> lượt degraded (fallback/holding) kể từ lần kiểm tra trước."
+        )
+
+
+# Alert latches: condition → already-alerted flag (in-process, demo scale).
+_alert_state: dict[str, bool] = {}
 
 
 async def _process_timeouts(db: AsyncSession) -> None:

@@ -98,8 +98,13 @@ async def test_confidence_node_layer2_threshold(mock_config):
     assert result["declined"] is False
     assert result["needs_clarification"] is True
 
-    # Clarify budget spent → Layer 2 declines as pre-V2-3
+    # v3-0 P2 (T06): quota is CLARIFY_MAX_ROUNDS (2) — round 2 still clarifies
     state["clarify_count"] = 1
+    result = await confidence_node(state, mock_config)
+    assert result["needs_clarification"] is True
+
+    # Clarify budget spent (no citations → no handoff) → Layer 2 declines
+    state["clarify_count"] = 2
     result = await confidence_node(state, mock_config)
     assert result["declined"] is True
     assert result["needs_clarification"] is False
@@ -181,7 +186,7 @@ async def test_confidence_node_layer2_guard_fires(mock_config):
     state["similarity_score"] = 0.55
     state["rerank_score"] = None
     state["declined"] = False
-    state["clarify_count"] = 1  # clarify budget spent → pre-V2-3 decline path
+    state["clarify_count"] = 2  # v3-0 P2 quota (CLARIFY_MAX_ROUNDS) spent → decline path
 
     result = await confidence_node(state, mock_config)
 

@@ -75,8 +75,18 @@ def test_make_initial_state():
     assert state["similarity_score"] == 0.0
     assert state["confidence_score"] == 0.0
 
-    # Check optional fields
-    assert state["intent"] is None
+    # Check optional fields.
+    # v3-0 P1 (T03): intent / secondary_intents are checkpointer channels that
+    # survive across turns — omitted from initial state when the intent
+    # tracking flag is on (same pattern as the clarify fields).
+    from core.config import settings
+
+    if settings.INTENT_TRACKING_V3_ENABLED:
+        assert "intent" not in state
+        assert "secondary_intents" not in state
+    else:
+        assert state["intent"] is None
+        assert state["secondary_intents"] == []
     assert state["rerank_score"] is None
     assert state["model_used"] is None
     assert state["response"] is None

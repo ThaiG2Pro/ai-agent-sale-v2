@@ -39,64 +39,107 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
         logger.error(f"Missing order_info for session {session_id}")
         return Command(goto="answer_node", update={"error": "Missing order information"})
 
-    product_id = order_info["product_id"]
+    from services.draft_orders import items_total, normalize_items
+
+    # v3-0 P2 (T05): confirm reads items[] — multi-item aware (O14 root fix).
+    items = normalize_items(order_info)
     quantity = int(order_info.get("quantity", 1))
     customer_id = state.get("customer_id", "anonymous")  # fallback if missing
 
     try:
         # T038: Atomic transaction
-        # 1. Decrement stock with guard (prevents negative stock)
-        # We rely on the DB session provided in config.
-        # It's better to use a single transaction.
-
-        # We use a WHERE clause to ensure stock >= quantity (Race condition guard)
-        stock_stmt = (
-            update(Product)
-            .where(Product.id == product_id, Product.stock_quantity >= quantity)
-            .values(stock_quantity=Product.stock_quantity - quantity)
-        )
-        stock_result_wrapper = await wrap_tool_with_timeout(
-            db.execute(stock_stmt),
-            tool_name="order_processing",
-        )
-        if not stock_result_wrapper.success:
-            return Command(
-                goto="answer_node",
-                update={"error": stock_result_wrapper.error or "Order processing timed out"},
+        # 1. Decrement stock per item with guard (prevents negative stock).
+        # WHERE stock >= qty is the race-condition guard; on a mid-list
+        # failure the already-decremented items are compensated back so the
+        # session holds no partial decrement.
+        decremented: list[tuple[str, int]] = []
+        for item in items:
+            item_pid = item.get("product_id")
+            item_qty = int(item.get("quantity") or 1)
+            stock_stmt = (
+                update(Product)
+                .where(Product.id == item_pid, Product.stock_quantity >= item_qty)
+                .values(stock_quantity=Product.stock_quantity - item_qty)
             )
-        stock_result = stock_result_wrapper.data
-
-        if stock_result.rowcount == 0:
-            # Stock was insufficient or product missing
-            logger.warning(f"Stock exhaustion or race for product {product_id}")
-            return Command(
-                goto="customer_support_node",
-                update={"hitl_rejection_reason": "out_of_stock_last_minute"},
+            stock_result_wrapper = await wrap_tool_with_timeout(
+                db.execute(stock_stmt),
+                tool_name="order_processing",
             )
+            if not stock_result_wrapper.success:
+                return Command(
+                    goto="answer_node",
+                    update={"error": stock_result_wrapper.error or "Order processing timed out"},
+                )
+            if stock_result_wrapper.data.rowcount == 0:
+                # Stock was insufficient or product missing — compensate.
+                logger.warning(f"Stock exhaustion or race for product {item_pid}")
+                for done_pid, done_qty in decremented:
+                    await db.execute(
+                        update(Product)
+                        .where(Product.id == done_pid)
+                        .values(stock_quantity=Product.stock_quantity + done_qty)
+                    )
+                return Command(
+                    goto="customer_support_node",
+                    update={"hitl_rejection_reason": "out_of_stock_last_minute"},
+                )
+            decremented.append((item_pid, item_qty))
 
-        # 2. Insert order record with unique Order ID (e.g. ORD-8F3A2109)
+        # 2. Record the confirmed order. v3-0 P2 (T05): when the pause created
+        # a draft row, CONFIRM transitions that row (status → confirmed) instead
+        # of inserting a parallel record; an expired draft (TTL 24h) is never
+        # confirmed — the agent re-quotes instead.
         import uuid
 
-        order_uuid = uuid.uuid4()
-        order_code = f"ORD-{str(order_uuid)[:8].upper()}"
-        order_info = {**order_info, "order_id": order_code, "status": "confirmed"}
+        from core.config import settings as _settings
+        from services.draft_orders import confirm_draft
 
-        order_stmt = insert(Order).values(
-            id=order_uuid,
-            session_id=session_id,
-            customer_id=customer_id,
-            order_info=order_info,
-            status="confirmed",
-        )
-        order_insert_wrapper = await wrap_tool_with_timeout(
-            db.execute(order_stmt),
-            tool_name="order_processing",
-        )
-        if not order_insert_wrapper.success:
-            return Command(
-                goto="answer_node",
-                update={"error": order_insert_wrapper.error or "Order processing timed out"},
+        draft_id = order_info.get("draft_order_id") if _settings.ORDER_HITL_V3_ENABLED else None
+
+        order_uuid = uuid.UUID(str(draft_id)) if draft_id else uuid.uuid4()
+        order_code = f"ORD-{str(order_uuid)[:8].upper()}"
+        order_info = {**order_info, "items": items, "order_id": order_code, "status": "confirmed"}
+
+        if draft_id:
+            confirmed = await confirm_draft(db, draft_id, order_info)
+            if not confirmed:
+                # Draft expired or superseded meanwhile — compensate stock and
+                # re-quote instead of confirming stale terms (T05 rule 3).
+                for done_pid, done_qty in decremented:
+                    await db.execute(
+                        update(Product)
+                        .where(Product.id == done_pid)
+                        .values(stock_quantity=Product.stock_quantity + done_qty)
+                    )
+                logger.warning("Draft %s expired/inactive at confirm time", draft_id)
+                return Command(
+                    goto="answer_node",
+                    update={
+                        "response": (
+                            "Dạ, báo giá cũ của đơn này đã hết hiệu lực (quá 24 giờ). "
+                            "Em xin phép báo giá lại theo giá hiện tại — anh/chị xác nhận "
+                            "lại giúp em trước khi lên đơn nhé ạ!"
+                        ),
+                        "order_info": {**order_info, "status": "expired"},
+                    },
+                )
+        else:
+            order_stmt = insert(Order).values(
+                id=order_uuid,
+                session_id=session_id,
+                customer_id=customer_id,
+                order_info=order_info,
+                status="confirmed",
             )
+            order_insert_wrapper = await wrap_tool_with_timeout(
+                db.execute(order_stmt),
+                tool_name="order_processing",
+            )
+            if not order_insert_wrapper.success:
+                return Command(
+                    goto="answer_node",
+                    update={"error": order_insert_wrapper.error or "Order processing timed out"},
+                )
 
         # Flush to DB (the graph caller or checkpointer might handle commit,
         # but for business data we should be explicit if we are not sharing tx)
@@ -111,20 +154,48 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
                 update={"error": flush_wrapper.error or "Order processing timed out"},
             )
 
+        # v3-0 P4 (T11 4.3 mandatory condition): stock just changed — cached
+        # availability/pricing answers are now stale. Best-effort: an
+        # invalidation failure never blocks the order.
+        if _settings.PRECLASSIFY_WHITELIST_ENABLED:
+            try:
+                from services.semantic_cache import invalidate_cache
+
+                await invalidate_cache(db)
+            except Exception:
+                logger.warning("semantic cache invalidation after stock change failed")
+
         # 3. Compose confirmation message (SC5: append pending INFO answers if any)
-        total_price = (
-            float(order_info.get("approved_price", order_info.get("price", 0))) * quantity
-        )
+        total_price = items_total(order_info)
         price_str = f"{total_price:,.0f} đ".replace(",", ".") if total_price > 0 else ""
         price_suffix = f" (Tổng tiền: {price_str})" if price_str else ""
 
+        if len(items) > 1:
+            # v3-0 P2 (O14): multi-item order — list every line item.
+            lines = "\n".join(
+                f"• {i.get('product_name') or i.get('sku') or 'sản phẩm'} x "
+                f"{int(i.get('quantity') or 1)}"
+                for i in items
+            )
+            order_desc = f"Đơn hàng gồm:\n{lines}\n{price_suffix.strip()} "
+        else:
+            order_desc = (
+                f"Đơn hàng **{order_info.get('name', 'sản phẩm')}** "
+                f"(Số lượng: {quantity}){price_suffix} "
+            )
+
         confirmation_msg = (
             f"🎉 **Đặt hàng thành công!**\n"
-            f"Đơn hàng **{order_info.get('name', 'sản phẩm')}** (Số lượng: {quantity}){price_suffix} "
+            f"{order_desc}"
             f"đã được hệ thống xác nhận thành công.\n"
             f"Mã đơn hàng: `{order_code}`.\n"
             f"Cảm ơn quý khách đã ủng hộ shop!"
         )
+
+        # v3-0 P2 (O27/2.7): the admin's approve note reaches the customer.
+        admin_note = state.get("hitl_admin_reason")
+        if admin_note:
+            confirmation_msg += f"\n\n💬 Ghi chú từ shop: {admin_note}"
 
         # SC5-fix: if customer asked INFO questions while waiting, answer them now.
         pending_questions = state.get("pending_info_questions")
@@ -166,6 +237,7 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
                 "response": confirmation_msg,
                 "order_info": {**order_info, "status": "confirmed"},
                 "pending_info_questions": None,
+                "hitl_admin_reason": None,
             },
         )
 

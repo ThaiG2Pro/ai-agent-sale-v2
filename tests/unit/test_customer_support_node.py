@@ -73,7 +73,9 @@ async def test_support_falls_back_when_llm_fails(state, mock_config):
 
 
 @pytest.mark.asyncio
-async def test_support_updates_hitl_metadata_when_paused(state, mock_config, mock_db):
+async def test_support_updates_hitl_metadata_when_paused(state, mock_config, mock_db, monkeypatch):
+    # Kill-switch off → no handoff-package queries; the original two executes only.
+    monkeypatch.setattr("core.config.settings.ORDER_HITL_V3_ENABLED", False)
     state["hitl_pause_id"] = "pause-1"
     with patch(
         "services.ai.AIGateway.complete",

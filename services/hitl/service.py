@@ -438,8 +438,17 @@ class HITLService:
             admin_user_id=payload.admin_user_id,
             reason_or_comment=payload.reason_or_comment,
         )
+        queue_response = None
         try:
-            await graph.ainvoke(Command(resume=resume_payload.model_dump()), config=config)
+            result_state = await graph.ainvoke(
+                Command(resume=resume_payload.model_dump()), config=config
+            )
+            # v3-0 P2 (O27): the resumed graph composes the customer-facing
+            # rejection message (includes the admin reason) — surface it so
+            # callers (Telegram callback flow) can relay it to the customer.
+            queue_response = (
+                result_state.get("response") if isinstance(result_state, dict) else None
+            )
         except GraphInterrupt:
             # Defensive: GraphInterrupt shouldn't escape on reject path, but handle gracefully.
             logger.warning(f"GraphInterrupt on reject for session {payload.session_id} — ignoring")
@@ -450,7 +459,11 @@ class HITLService:
             .where(HITLMetadata.pause_id == payload.pause_id)
             .values(status="rejected", admin_id=payload.admin_user_id)
         )
-        return {"status": "rejected", "action_id": str(new_action.action_id)}
+        return {
+            "status": "rejected",
+            "action_id": str(new_action.action_id),
+            "queue_response": queue_response,
+        }
 
     @staticmethod
     async def process_request_edit(

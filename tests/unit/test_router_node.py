@@ -142,8 +142,13 @@ def _make_llm_response(content: str):
         "",  # empty
     ],
 )
-async def test_router_node_malformed_llm_output_falls_back(bad_content):
-    """Malformed/incomplete JSON from LLM → fallback INFO_QUERY → retrieval_node."""
+async def test_router_node_malformed_llm_output_falls_back(bad_content, monkeypatch):
+    """Malformed/incomplete JSON from LLM → fallback INFO_QUERY → retrieval_node.
+
+    Whitelist off: "Giá bao nhiêu?" would take the v3-0 P4 (4.3) zero-LLM
+    fast path — this test targets the LLM-fallback branch specifically.
+    """
+    monkeypatch.setattr("core.config.settings.PRECLASSIFY_WHITELIST_ENABLED", False)
     initial_state = make_initial_state("Giá bao nhiêu?", "test-session-bad", "cust_001")
 
     with patch(
@@ -160,8 +165,12 @@ async def test_router_node_malformed_llm_output_falls_back(bad_content):
 
 
 @pytest.mark.asyncio
-async def test_router_node_llm_exception_falls_back():
-    """LLM call raising entirely → fallback INFO_QUERY, no crash."""
+async def test_router_node_llm_exception_falls_back(monkeypatch):
+    """LLM call raising entirely → fallback INFO_QUERY, no crash.
+
+    Whitelist off — see note on the malformed-output test above.
+    """
+    monkeypatch.setattr("core.config.settings.PRECLASSIFY_WHITELIST_ENABLED", False)
     initial_state = make_initial_state("Giá bao nhiêu?", "test-session-err", "cust_001")
 
     with patch(

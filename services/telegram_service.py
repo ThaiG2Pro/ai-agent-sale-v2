@@ -189,6 +189,72 @@ async def send_telegram_message(
     return False
 
 
+async def send_telegram_html(
+    chat_id: int,
+    html_text: str,
+    reply_markup: dict[str, Any] | None = None,
+    force_reply_placeholder: str | None = None,
+) -> bool:
+    """Send an HTML-formatted message (v3-0 P2 T13 admin handoff UX).
+
+    force_reply_placeholder: when set, attaches a ForceReply markup so the
+    admin's next message replies directly to this one (2-step reason input
+    for Counter/Từ chối).
+    """
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "text": html_text,
+        "parse_mode": "HTML",
+    }
+    if force_reply_placeholder is not None:
+        payload["reply_markup"] = {
+            "force_reply": True,
+            "input_field_placeholder": force_reply_placeholder[:64],
+        }
+    elif reply_markup:
+        payload["reply_markup"] = reply_markup
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            if response.status_code == 400:
+                # HTML parse error — degrade to plain text rather than drop.
+                payload.pop("parse_mode", None)
+                response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return True
+    except Exception as e:
+        logger.error(
+            "Telegram HTML send error",
+            extra={"chat_id": chat_id, "error": str(e)},
+        )
+        return False
+
+
+async def answer_callback_query(callback_query_id: str, text: str | None = None) -> bool:
+    """Acknowledge an inline-button tap so Telegram stops the loading spinner.
+
+    v3-0 P2 (T13): used by the HITL admin review buttons. Best-effort — a
+    failure here only leaves the spinner visible, never blocks the review.
+    """
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/answerCallbackQuery"
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text[:200]
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return True
+    except Exception as e:
+        logger.warning(
+            "Telegram answerCallbackQuery error",
+            extra={"callback_query_id": callback_query_id, "error": str(e)},
+        )
+        return False
+
+
 def create_retry_keyboard(tool_name: str, context: str | None = None) -> dict[str, Any]:
     """Create Telegram inline keyboard with retry action."""
     callback_data = f"retry:{tool_name}"

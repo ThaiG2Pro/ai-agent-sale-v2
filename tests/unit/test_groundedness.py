@@ -259,9 +259,15 @@ def _escalated_state() -> dict:
 
 
 @pytest.mark.asyncio
-async def test_cascade_intent_escalation_starts_on_economy():
+async def test_cascade_intent_escalation_starts_on_economy(monkeypatch):
     """COMPLAINT with cascade on: first generation call uses economy-chat, and a
-    grounded answer never touches premium."""
+    grounded answer never touches premium.
+
+    Kill-switch regression: RESILIENCE_V3_ENABLED=False keeps the pre-P3
+    single-call path this test always asserted (the P3 ladder calls
+    AIGateway via services.ai, not the answer-module reference patched here).
+    """
+    monkeypatch.setattr("core.config.settings.RESILIENCE_V3_ENABLED", False)
     state = _escalated_state()
     with (
         patch(
@@ -377,9 +383,13 @@ async def test_cascade_not_applied_to_low_confidence_escalation():
 
 
 @pytest.mark.asyncio
-async def test_cascade_economy_failure_falls_forward_to_premium():
+async def test_cascade_economy_failure_falls_forward_to_premium(monkeypatch):
     """Cascade first pass (economy) blows up → reserved premium target is used,
-    escalation_failure stays False (this is an upgrade, not a degradation)."""
+    escalation_failure stays False (this is an upgrade, not a degradation).
+
+    Kill-switch regression: pre-P3 path (see note on the sibling test above).
+    """
+    monkeypatch.setattr("core.config.settings.RESILIENCE_V3_ENABLED", False)
     state = _escalated_state()
     calls = {"n": 0}
 

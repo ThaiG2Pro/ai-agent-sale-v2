@@ -60,6 +60,18 @@ def _extract_attributes_from_state(
             attrs["model_used"] = str(model_used)
         if (declined := state.get("declined")) is not None:
             attrs["declined"] = bool(declined)
+        # v3-0 P3 (T12 3.6): 80/20 log = span attributes on the existing
+        # Phoenix trace — risk_signals (the four 2.3 signals) and outcome.
+        if risk_signals := state.get("risk_signals"):
+            attrs["risk_signals"] = ",".join(str(s) for s in risk_signals)
+        if state.get("degraded"):
+            attrs["outcome"] = "queued"
+        elif state.get("declined"):
+            attrs["outcome"] = "declined"
+        elif state.get("hitl_triggered") or state.get("hitl_rejection_reason"):
+            attrs["outcome"] = "handoff"
+        elif state.get("response"):
+            attrs["outcome"] = "self_handled"
 
     if SpanAttributes.SESSION_ID not in attrs:
         config = kwargs.get("config") or (
@@ -164,7 +176,14 @@ GRAPH_NODES = set(_NODE_FUNCS)
 
 # Week 5: Graph schema version for checkpoint compatibility (FR-018)
 # 006: WP-V2-3 adds clarify_node + clarify state channels
-GRAPH_SCHEMA_VERSION = "006"
+# 007: v3-0 P1 (T03) adds intent_shift + intent_disagreement_count channels;
+#      intent/secondary_intents become cross-turn channels (no longer wiped)
+# 008: v3-0 P2 (T05/T06/T07/T13) adds risk_signals + negotiation_note +
+#      complaint_turns + hitl_admin_reason channels; confidence_node gains a
+#      clarify-exhausted → customer_support_node handoff edge
+# 009: v3-0 P3/P4 (T09/T11/T08) adds turn_started_at + degraded +
+#      smalltalk_fastpath channels; router gains zero-LLM fast paths
+GRAPH_SCHEMA_VERSION = "009"
 
 # Article X: max 5 turns per conversation. One turn traverses at most ~4 graph
 # super-steps (router → retrieval → memory → confidence → escalation/hitl → answer),
@@ -248,6 +267,9 @@ def build_graph(checkpointer=None):
             "hitl_guard_node": "hitl_guard_node",
             "answer_node": "answer_node",
             "clarify_node": "clarify_node",
+            # v3-0 P2 (T06/T07): in-catalog ambiguity that exhausted the
+            # clarify quota hands off to a human instead of declining.
+            "customer_support_node": "customer_support_node",
         },
     )
 

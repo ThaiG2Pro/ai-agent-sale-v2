@@ -125,8 +125,14 @@ async def test_two_turn_clarify_flow(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_merged_turn_still_borderline_declines(monkeypatch):
-    """Anti-loop: merged turn 2 still borderline → decline, no second question."""
+    """Anti-loop: merged turn 2 still borderline → decline, no second question.
+
+    Kill-switch regression: with ORDER_HITL_V3_ENABLED=False the clarify quota
+    reverts to the pre-P2 single round and no handoff fires — the exact
+    pre-v3-0 behavior this test always asserted.
+    """
     monkeypatch.setattr("core.config.settings.GROUNDEDNESS_CHECK_ENABLED", False)
+    monkeypatch.setattr("core.config.settings.ORDER_HITL_V3_ENABLED", False)
 
     graph = build_graph(checkpointer=MemorySaver())
     config = make_agent_config("session-clarify-loop2", db=AsyncMock())

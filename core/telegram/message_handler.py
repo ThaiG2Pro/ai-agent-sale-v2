@@ -128,6 +128,27 @@ async def process_telegram_message(
                 await send_telegram_message(chat_id, pause_info["message"])
                 return
 
+            # v3-0 P3 (T09 3.3): backpressure — cap concurrent LLM turns
+            # in-process. On overflow the message goes to queued_messages and
+            # the customer gets the holding message instead of a hung turn.
+            from core.config import settings as _settings
+
+            if _settings.RESILIENCE_V3_ENABLED:
+                from services import resilience
+
+                sem = resilience.turn_semaphore()
+                if sem.locked():
+                    from models.schema import QueuedMessage
+
+                    db.add(QueuedMessage(session_id=session_id, message_text=text))
+                    await db.commit()
+                    resilience.record_degraded_turn()
+                    await send_telegram_message(chat_id, resilience.holding_message())
+                    return
+                await sem.acquire()
+            else:
+                sem = None
+
             active_graph = graph if graph is not None else build_graph()
             config = make_agent_config(session_id, db=db)
             initial_state = make_initial_state(
@@ -140,8 +161,12 @@ async def process_telegram_message(
             # up in Phoenix's Sessions view like API turns do.
             from openinference.instrumentation import using_attributes
 
-            with using_attributes(session_id=session_id, user_id=customer_id):
-                final_state = await active_graph.ainvoke(initial_state, config=config)
+            try:
+                with using_attributes(session_id=session_id, user_id=customer_id):
+                    final_state = await active_graph.ainvoke(initial_state, config=config)
+            finally:
+                if sem is not None:
+                    sem.release()
 
             # Detect HITL pause: aget_state().next is non-empty when interrupt() fired.
             snapshot = await active_graph.aget_state(config)

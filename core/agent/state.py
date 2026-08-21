@@ -7,6 +7,7 @@ What it does: Provides typed state, enums, and I/O contracts used by all nodes.
 from __future__ import annotations
 
 import operator
+import time
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated
@@ -55,6 +56,9 @@ class HITLReasonEnum(StrEnum):
     COST_LIMIT = "cost_limit"
     REFUND_APPROVAL = "refund_approval"
     STALE_PRICE = "stale_data_price_change"
+    # v3-0 P2 (T06): NEGOTIATION draft at original price awaiting the human's
+    # price decision — the agent never counter-offers.
+    PRICE_NEGOTIATION = "price_negotiation"
 
 
 class EscalationReasonEnum(StrEnum):
@@ -108,6 +112,9 @@ class IntentClassification(BaseModel):
     secondary_intents: list[IntentEnum] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str
+    # v3-0 P1 (T03): classifier reports the LAST message changed intent vs the
+    # previous turn. Default False keeps pre-v3-0 payloads/callers valid.
+    intent_shift: bool = False
 
     def has_escalation_intent(self) -> bool:
         """True if ANY intent (primary or secondary) is COMPLAINT or NEGOTIATION."""
@@ -173,6 +180,12 @@ class AgentState(TypedDict):
     intent: str | None
     secondary_intents: list[str]
     intent_confidence: float
+    # v3-0 P1 (T03): per-turn flag — router detected an intent change vs the
+    # previous turn. intent_disagreement_count is cross-turn (persisted by the
+    # checkpointer, omitted from make_initial_state): consecutive suppressed
+    # disagreements for the sticky-intent escape hatch.
+    intent_shift: bool
+    intent_disagreement_count: int
     retrieved_chunks: list[dict]
     citations: Annotated[list, operator.add]
     similarity_score: float
@@ -213,6 +226,27 @@ class AgentState(TypedDict):
     awaiting_clarification: bool  # cross-turn: a clarifying question is pending
     clarify_original_query: str | None  # cross-turn: query that triggered the clarify
     clarify_count: int  # cross-turn: clarifies spent on the current original query (max 1)
+    # v3-0 P2 (T07): which of the 4 "20%" signals fired this turn — feeds the
+    # structured escalate reason in the handoff package. Values:
+    # risk_score | intent_negotiation | intent_complaint | clarify_loop | degraded
+    risk_signals: list[str]
+    # v3-0 P2 (T06): COMPLAINT fact-collection turns spent (cross-turn,
+    # omitted from make_initial_state); handoff is mandatory at the quota.
+    complaint_turns: int
+    # v3-0 P2 (T06): structured note for the human on a NEGOTIATION draft,
+    # e.g. "khách xin giảm còn 27.900.000 VND" (per-turn).
+    negotiation_note: str | None
+    # v3-0 P2 (O27): the admin's approve note — appended to the order
+    # confirmation so the reason always reaches the customer.
+    hitl_admin_reason: str | None
+    # v3-0 P3 (T09): per-turn resilience fields. turn_started_at is a
+    # time.monotonic() stamp for the ~30s turn budget; degraded marks a turn
+    # answered below the top ladder rung (or by holding+queue).
+    turn_started_at: float | None
+    degraded: bool
+    # v3-0 P4 (T11 4.2): per-turn — the router's conservative keyword gate
+    # matched, so answer_node serves the template (no LLM calls this turn).
+    smalltalk_fastpath: bool
 
 
 class NodeStreamEvent(BaseModel):
@@ -246,13 +280,14 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
 
     from langchain_core.messages import HumanMessage
 
-    return {
+    from core.config import settings
+
+    state: AgentState = {
         "session_id": session_id,
         "user_message": user_message,
         "messages": [HumanMessage(content=user_message)],
-        "intent": None,
-        "secondary_intents": [],
         "intent_confidence": 0.0,
+        "intent_shift": False,
         "retrieved_chunks": [],
         "citations": [],
         "similarity_score": 0.0,
@@ -284,6 +319,16 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
         "memory_retrieval_scores": [],
         "thread_summary_exists": False,
         "sales_intent_skipped": False,
+        # v3-0 P2: per-turn signal fields reset every invoke. complaint_turns
+        # is cross-turn (checkpointer channel) → deliberately omitted, same
+        # pattern as the clarify fields below.
+        "risk_signals": [],
+        "negotiation_note": None,
+        # v3-0 P3 (T09): per-turn — turn budget anchor + degraded flag.
+        "turn_started_at": time.monotonic(),
+        "degraded": False,
+        # v3-0 P4 (T11 4.2): per-turn SMALLTALK fast-path marker.
+        "smalltalk_fastpath": False,
         # WP-V2-3: needs_clarification is per-turn → reset every invoke.
         # awaiting_clarification / clarify_original_query / clarify_count are
         # deliberately NOT set here: input keys overwrite checkpointer channels,
@@ -291,3 +336,13 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
         # Nodes read them with state.get(...) defaults (missing on turn 1).
         "needs_clarification": False,
     }
+    # v3-0 P1 (T03): intent / secondary_intents must survive across turns so
+    # the router can read previous_intent from the checkpointed state — same
+    # omit-the-key pattern as the clarify fields above. Kill switch OFF
+    # restores the pre-v3-0 wipe-every-invoke behavior exactly.
+    # (intent_disagreement_count is always omitted — it defaults to 0 via
+    # state.get() and is only written by the router under the flag.)
+    if not settings.INTENT_TRACKING_V3_ENABLED:
+        state["intent"] = None
+        state["secondary_intents"] = []
+    return state

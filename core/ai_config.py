@@ -93,6 +93,15 @@ def _litellm_params(model_str: str, **extra: Any) -> dict[str, Any]:
 
     params: dict[str, Any] = {"model": model_str, **extra}
 
+    # v3-0 P3 (T09 timeout budget): per-call cap — local models get a longer
+    # leash (25s) than cloud (15s); a hung call must never hang the turn.
+    if settings.RESILIENCE_V3_ENABLED:
+        is_local = model_str.startswith(("ollama/", "ollama_chat/", "hosted_vllm/"))
+        params.setdefault(
+            "timeout",
+            settings.LLM_TIMEOUT_LOCAL_S if is_local else settings.LLM_TIMEOUT_CLOUD_S,
+        )
+
     if model_str.startswith("hosted_vllm/"):
         target = model_str.removeprefix("hosted_vllm/")
         params["model"] = target
@@ -161,10 +170,37 @@ LITELLM_CONFIG = {
             "model_info": {"id": "premium-chat-model"},
             "litellm_params": _litellm_params(settings.PREMIUM_MODEL, stream=False),
         },
+        # ── v3-0 P3 (T09): middle rung of the fallback ladder (Groq 8b).
+        # Without a GROQ key _litellm_params degrades this to CHAT_MODEL, so
+        # the alias always resolves to something callable.
+        {
+            "model_name": "fallback-chat-8b",
+            "model_info": {"id": "fallback-chat-8b-model"},
+            "litellm_params": _litellm_params("groq/llama-3.1-8b-instant", stream=False),
+        },
     ],
     "routing_strategy": "simple-shuffle",
-    "cooldown_time": 0,
+    # v3-0 P3 (T09): free-tier 429s persist for hours — cool the deployment
+    # down instead of hammering it (pre-P3 value was 0 = no cooldown).
+    "cooldown_time": 60 if settings.RESILIENCE_V3_ENABLED else 0,
 }
+
+# v3-0 P3 (T09): per-exception retry policy — transient network/timeout gets
+# ONE retry; 429 and auth errors get ZERO (429 → cooldown + jump rung).
+if settings.RESILIENCE_V3_ENABLED:
+    try:
+        from litellm.router import RetryPolicy
+
+        LITELLM_CONFIG["retry_policy"] = RetryPolicy(
+            TimeoutErrorRetries=1,
+            RateLimitErrorRetries=0,
+            AuthenticationErrorRetries=0,
+            BadRequestErrorRetries=0,
+            InternalServerErrorRetries=1,
+        )
+        LITELLM_CONFIG["num_retries"] = 0
+    except Exception:  # pragma: no cover — older litellm without RetryPolicy
+        LITELLM_CONFIG["num_retries"] = 0
 
 if not settings.EMBED_MODEL.startswith("local/"):
     LITELLM_CONFIG["model_list"].append(

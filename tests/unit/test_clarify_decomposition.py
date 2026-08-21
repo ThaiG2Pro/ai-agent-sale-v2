@@ -78,8 +78,9 @@ class TestClarifyGate:
 
     @pytest.mark.asyncio
     async def test_second_clarify_declines(self):
-        """Anti-loop: merged retry still borderline → decline, no second question."""
-        state = _state(similarity_score=0.60, declined=False, clarify_count=1)
+        """Anti-loop: quota (v3-0 P2: CLARIFY_MAX_ROUNDS=2) spent and still
+        borderline with no citations → decline, no further question."""
+        state = _state(similarity_score=0.60, declined=False, clarify_count=2)
         result = await confidence_node(state, _mock_config())
         assert result["needs_clarification"] is False
         assert result["declined"] is True

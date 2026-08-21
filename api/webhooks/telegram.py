@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
 from api.dependencies import get_agent_graph, verify_telegram_secret
+from api.webhooks import hitl_callbacks
 from core.agent.tools import execute_inventory_lookup
 from core.telegram import security as telegram_security
 from core.telegram.message_handler import process_telegram_message
@@ -76,6 +77,22 @@ async def telegram_webhook(
     callback_data = update.callback_query.data if update.callback_query else None
     if callback_data and callback_data.startswith("retry:"):
         await _handle_retry_callback(update, chat_id)
+        return {"ok": True}
+
+    # v3-0 P2 (T13): admin review buttons + force-reply reasons. Handled
+    # BEFORE the agent flow so admin messages never invoke the sales agent.
+    if callback_data and callback_data.startswith("hitl:"):
+        if await hitl_callbacks.handle_hitl_callback(update, db, graph):
+            return {"ok": True}
+    if chat_id is not None and chat_id == hitl_callbacks.admin_chat_id():
+        if await hitl_callbacks.handle_admin_reason_reply(update, db, graph):
+            return {"ok": True}
+        # Guard: plain admin-chat chatter is not customer traffic — ignore it
+        # instead of running the sales agent on it.
+        logger.info(
+            "Ignoring non-review message from admin chat",
+            extra={"update_id": update_id, "chat_id": chat_id},
+        )
         return {"ok": True}
 
     if chat_id is None:

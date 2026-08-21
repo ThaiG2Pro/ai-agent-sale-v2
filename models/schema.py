@@ -397,6 +397,10 @@ class HITLMetadata(Base):
     status: Mapped[str] = mapped_column(String(20), default="paused", nullable=False)
     admin_id: Mapped[str | None] = mapped_column(String(100))
     escalation_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    # v3-0 P2 (T07/T13): 4-part handoff package (summary+reason, draft
+    # snapshot, intent log, suggested actions) built at pause time — the
+    # Telegram admin message and the "Xem intent log" callback read this.
+    handoff_package: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
 class ReviewAction(Base):
@@ -485,7 +489,15 @@ class InterruptedSession(Base):
 
 
 class Order(Base):
-    """Why this exists: Business entity for confirmed orders (Week 4)."""
+    """Why this exists: Business entity for orders — drafts AND confirmed (Week 4, v3-0 P2).
+
+    v3-0 P2 (T05): a draft is a row in THIS table, not a separate table.
+    Lifecycle: status ∈ {draft, pending_review, confirmed, cancelled,
+    superseded, expired}. The agent never edits a draft — it creates a new
+    one and flips the replaced draft to "superseded" in the same transaction
+    (supersedes_id keeps the change-of-mind chain auditable). Expiry
+    (DRAFT_ORDER_TTL_HOURS) is checked lazily on read; rows are never deleted.
+    """
 
     __tablename__ = "orders"
     __table_args__: ClassVar[dict[str, Any]] = {"schema": SCHEMA}
@@ -495,6 +507,28 @@ class Order(Base):
     customer_id: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     order_info: Mapped[dict] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    supersedes_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.orders.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
     )
+
+
+class LLMTokenBudget(Base):
+    """Why this exists: v3-0 P3 (T09) app-side token-budget gate — Groq's free
+    tier caps ~100K TPD on the 70b model but exposes no daily counter, so the
+    app keeps one row per (day UTC, model) and proactively degrades the
+    fallback ladder at TOKEN_BUDGET_DEGRADE_RATIO of the cap.
+    """
+
+    __tablename__ = "llm_token_budget"
+    __table_args__: ClassVar[tuple[Any, dict[str, Any]]] = (
+        UniqueConstraint("day", "model", name="uq_llm_token_budget_day_model"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid7)
+    day: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD (UTC)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    tokens: Mapped[int] = mapped_column(default=0, nullable=False)

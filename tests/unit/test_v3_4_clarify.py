@@ -117,12 +117,13 @@ async def test_confidence_node_v3_4_kill_switch_disabled(mock_config, monkeypatc
 
 @pytest.mark.asyncio
 async def test_confidence_node_v3_4_anti_loop_clarify_count(mock_config):
-    """When clarify_count >= 1, budget is spent so second pass does NOT clarify."""
+    """When clarify_count >= quota (v3-0 P2: CLARIFY_MAX_ROUNDS=2), budget is
+    spent so the next pass does NOT clarify."""
     state = make_initial_state("Điện thoại Samsung ấy", "session-v3-4-5", "cust_001")
     state["intent"] = "INFO_QUERY"
     state["similarity_score"] = 0.60
     state["similarity_gap"] = 0.01
-    state["clarify_count"] = 1  # already clarified once
+    state["clarify_count"] = 2  # quota spent (no citations → no handoff either)
 
     result = await confidence_node(state, mock_config)
 

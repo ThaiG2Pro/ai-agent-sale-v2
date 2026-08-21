@@ -102,6 +102,70 @@ _PRICE_EXTRACT = re.compile(
 )
 
 
+# F2 guard (v3-0 P1): the ONLY labels the LLM branch may emit. Small models
+# (qwen3-1.7b) have emitted out-of-enum labels like FOLLOW_UP for change-of-mind
+# messages ("Tôi đổi ý rồi, lấy Xiaomi đi"), which silently fell through and
+# confirmed the OLD order. Out-of-enum labels are re-checked against the keyword
+# patterns; unresolvable ones force a human re-review instead of a confirm.
+_ALLOWED_QUEUE_INTENTS = frozenset({"CONFIRM", "CANCEL", "MODIFY_ORDER", "NEGOTIATION", "OTHER"})
+
+
+def _postvalidate_llm_batch(
+    batch: QueuedMessageBatch,
+    rows: list,
+) -> tuple[QueuedMessageBatch, bool]:
+    """F2 guard: sanitize the LLM batch and re-derive routing flags.
+
+    Returns (sanitized batch, force_review). force_review=True means at least
+    one message carried an out-of-enum label the keyword patterns could not
+    resolve — the caller must re-pause for human review rather than let the
+    turn fall through to an implicit CONFIRM.
+    """
+    text_by_id = {str(r.message_id): r.message_text for r in rows}
+    force_review = False
+    has_cancel = False
+    has_modify = False
+    has_qty_change = batch.has_qty_change
+    has_product_change = batch.has_product_change
+
+    for msg in batch.messages:
+        intent = (msg.intent or "").strip().upper()
+        if intent not in _ALLOWED_QUEUE_INTENTS:
+            text = text_by_id.get(str(msg.message_id), msg.text or "")
+            if _CANCEL_PATTERNS.search(text):
+                intent = "CANCEL"
+            elif _ADD_ON_PATTERNS.search(text):
+                intent = "CONFIRM"
+            elif _MODIFY_PATTERNS.search(text) or _QTY_CHANGE_PATTERNS.search(text):
+                intent = "MODIFY_ORDER"
+            elif _INFO_QUERY_PATTERNS.search(text):
+                intent = "OTHER"
+            else:
+                intent = "OTHER"
+                force_review = True
+            logger.warning(
+                "F2 guard: out-of-enum LLM label %r remapped to %s for %r",
+                msg.intent,
+                intent,
+                text[:60],
+            )
+            msg.intent = intent
+        if intent == "CANCEL":
+            has_cancel = True
+        elif intent == "MODIFY_ORDER":
+            has_modify = True
+
+    # Re-derive routing flags from per-message intents — small models set the
+    # top-level has_* booleans inconsistently with their own message labels.
+    batch.has_cancel = batch.has_cancel or has_cancel
+    batch.has_modify = batch.has_modify or has_modify
+    batch.has_qty_change = has_qty_change
+    batch.has_product_change = has_product_change or has_modify
+    if batch.has_cancel or batch.has_modify:
+        batch.has_confirm = False
+    return batch, force_review
+
+
 def _keyword_classify_batch(
     session_id: str,
     rows: list,
@@ -401,6 +465,7 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
     # Handles Vietnamese change-of-mind ("đổi ý rồi, lấy X đi") and cancel phrases.
     # Returns None when ambiguous → falls through to LLM.
     batch_result = _keyword_classify_batch(session_id, queued_rows)
+    force_review = False
 
     if batch_result is None:
         # Layer 2: LLM classification with explicit few-shot examples.
@@ -438,10 +503,22 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
                 batch_result = QueuedMessageBatch.model_validate_json(content)
             else:
                 batch_result = QueuedMessageBatch.model_validate(content)
+            if settings.INTENT_TRACKING_V3_ENABLED:
+                batch_result, force_review = _postvalidate_llm_batch(batch_result, queued_rows)
 
         except Exception as e:
             logger.error(f"Batch classification failed for {session_id}: {e}")
-            batch_result = QueuedMessageBatch(session_id=session_id, messages=[], has_confirm=True)
+            if settings.INTENT_TRACKING_V3_ENABLED:
+                # F2 guard: an out-of-enum LLM label (e.g. FOLLOW_UP for
+                # "Tôi đổi ý rồi, lấy Xiaomi đi") raises ValidationError and
+                # used to land here as an implicit CONFIRM of the OLD order.
+                # Uncertainty during a paused order goes back to the human.
+                batch_result = QueuedMessageBatch(session_id=session_id, messages=[])
+                force_review = True
+            else:
+                batch_result = QueuedMessageBatch(
+                    session_id=session_id, messages=[], has_confirm=True
+                )
 
     # --- T032-T034: Routing ---
     # Mark messages as processed in DB (atomic UPDATE)
@@ -550,6 +627,24 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
                 modify_order_info.get("quantity"),
             )
 
+        return Command(goto="hitl_guard_node", update=update_payload)
+
+    # F2 guard (v3-0 P1): unclassifiable message(s) while the order was under
+    # review → re-pause for human review with order_info UNCHANGED (no RAG
+    # product swap), instead of falling through to an implicit CONFIRM.
+    if force_review:
+        update_payload.update(
+            {
+                "hitl_escalation_count": state.get("hitl_escalation_count", 0) + 1,
+                "hitl_triggered": False,
+                "hitl_pause_id": None,
+                "hitl_approved": False,
+            }
+        )
+        logger.warning(
+            "F2 guard: forcing human re-review for %s (unclassifiable queued message)",
+            session_id,
+        )
         return Command(goto="hitl_guard_node", update=update_payload)
 
     # SC5-fix: INFO_QUERY fallthrough — questions about product specs/policy.

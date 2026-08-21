@@ -154,3 +154,16 @@ async def admin_costs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Cost report failed",
         ) from exc
+
+
+@costs_router.get("/metrics")
+async def admin_metrics(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """v3-0 P2 (T07/2.3): 80/20 delegation metrics — deflection rate per
+    session (target ≥ 0.80) + support-queue depth + paused HITL count.
+    Read-only aggregates over existing tables; no new infra.
+    """
+    from services.metrics import get_agent_metrics
+
+    return await get_agent_metrics(db)

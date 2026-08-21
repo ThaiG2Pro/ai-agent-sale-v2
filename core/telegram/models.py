@@ -37,6 +37,11 @@ class TelegramMessage(BaseModel):
     chat: TelegramChat = Field(..., description="Conversation the message belongs to")
     date: int = Field(..., description="Date the message was sent in Unix time")
     text: str | None = Field(None, description="Text content of the message")
+    # v3-0 P2 (T13): force-reply reason capture — the admin's reason message
+    # arrives as a reply to the bot's "#case:<pause_id>:<action>" prompt.
+    reply_to_message: TelegramMessage | None = Field(
+        None, description="For replies, the original message"
+    )
 
 
 class TelegramCallbackQuery(BaseModel):

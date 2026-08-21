@@ -104,11 +104,20 @@ class TestRiskMatrix:
     def test_safety_invariant_unknown_value_never_tier1(self):
         assert _resolve_risk_tier("ORDER_PLACEMENT", None, 0.05) == 2
 
-    def test_small_order_low_risk_is_tier2(self):
+    def test_small_order_low_risk_is_tier1(self):
+        # v3-0 P2 (T07): value < HITL_TIER1_MAX_ORDER_VALUE + low risk → Tier 1
+        # (further conditions — unique product/phone/address/stock — are
+        # checked by _tier1_eligibility in the node, not here).
+        assert _resolve_risk_tier("ORDER_PLACEMENT", 200_000.0, 0.1) == 1
+
+    def test_small_order_kill_switch_restores_tier2(self, monkeypatch):
+        monkeypatch.setattr("core.config.settings.ORDER_HITL_V3_ENABLED", False)
         assert _resolve_risk_tier("ORDER_PLACEMENT", 200_000.0, 0.1) == 2
 
-    def test_order_placement_pauses_at_tier2(self):
-        assert _resolve_risk_tier("ORDER_PLACEMENT", 10_000_000.0, 0.9) == 2
+    def test_order_placement_high_value_high_risk_is_tier3(self):
+        # Safety invariant: at/above the Tier-1 value cap an order is >= Tier 2;
+        # a 0.9 composite risk lands it at Tier 3 (straight to support).
+        assert _resolve_risk_tier("ORDER_PLACEMENT", 10_000_000.0, 0.9) == 3
 
 
 class TestHistoryFactor:
@@ -199,7 +208,8 @@ class TestHitlGuardTiers:
     @pytest.mark.asyncio
     async def test_tier3_goes_straight_to_support(self):
         """Tier 3: worst-case risk (low confidence, big order, new customer)
-        skips the interrupt and routes to the support queue."""
+        skips the interrupt entirely and routes to the support queue
+        (v3-0 P2/T07: human review happens in the queue, not via pause)."""
         db = _make_db([])  # unknown customer → history 1.0
         state = _order_state(price=50_000_000.0, confidence=0.1)
         # risk = 0.4*0.9 + 0.4*1.0 + 0.2*1.0 = 0.96 ≥ 0.75 → Tier 3
@@ -214,8 +224,10 @@ class TestHitlGuardTiers:
         ) as mock_interrupt:
             result = await hitl_guard_node(state, _config(db))
 
-        mock_interrupt.assert_called_once()
+        mock_interrupt.assert_not_called()
         assert result.goto == "customer_support_node"
+        assert result.update["hitl_rejection_reason"] == "high_risk_tier3"
+        assert "risk_score" in result.update["risk_signals"]
 
     @pytest.mark.asyncio
     async def test_non_order_high_confidence_passes_through(self):

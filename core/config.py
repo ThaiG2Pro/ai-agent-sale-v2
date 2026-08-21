@@ -124,6 +124,99 @@ class Settings(BaseSettings):
     CLARIFY_ENABLED: bool = True
     # WP-V3-4: similarity gap threshold for clarify node eligibility
     CLARIFY_SIMILARITY_GAP_MAX: float = Field(default=0.05, ge=0.0, le=1.0)
+    # v3-0 P1 (T03/T06/T08): multi-turn intent tracking combo. Router reads the
+    # last 3 turns + previous_intent from checkpointed state, applies a pure-
+    # Python transition table (sticky intent, hysteresis <0.5, strange jumps
+    # need >=0.7), make_initial_state stops wiping intent/secondary_intents,
+    # hesitation keywords ("thôi", "khoan đã"...) flag a probable 180° flip,
+    # multi-intent priority CANCEL > COMPLAINT > NEGOTIATION > ORDER > INFO,
+    # ambiguous ORDER_PLACEMENT clarifies instead of auto-selecting the top
+    # citation, and queue_consumer post-validates LLM batch labels (F2 guard).
+    # False = kill switch (stateless per-turn router, intent wiped every
+    # invoke — exact pre-v3-0 behavior).
+    INTENT_TRACKING_V3_ENABLED: bool = True
+    # v3-0 P2 (T05/T06/T07/T13): order/HITL axis. Draft orders live in the
+    # orders table (status lifecycle draft → pending_review → confirmed /
+    # cancelled / superseded / expired, supersedes_id chain); Tier 1 orders
+    # auto-proceed when ALL conditions hold (value < TIER1_MAX, unique product,
+    # phone+address present, stock sufficient); NEGOTIATION creates a draft at
+    # the ORIGINAL price + structured note and pauses for the human to decide
+    # the price (agent never counter-offers); COMPLAINT collects 3 facts in
+    # <=2 turns then always hands off; in-catalog ambiguity clarifies twice
+    # then hands off, out-of-catalog declines politely without handoff;
+    # HITL pauses build a 4-part handoff package and notify the Telegram
+    # admin chat with inline review buttons; admin reject/counter reasons are
+    # ALWAYS pushed to the customer (O27). False = kill switch: every order
+    # pauses at Tier 2, no draft rows, no admin Telegram notify — exact
+    # pre-v3-0-P2 behavior.
+    ORDER_HITL_V3_ENABLED: bool = True
+    # VND. Tier 1 auto-proceed ceiling (T07: default 10 triệu). Orders at or
+    # above this value — or with unknown value — never auto-proceed.
+    HITL_TIER1_MAX_ORDER_VALUE: float = Field(default=10_000_000.0, gt=0.0)
+    # T05: soft cap on active drafts per customer (creating one more
+    # supersedes the oldest active draft) and draft TTL (lazy expiry on read).
+    DRAFT_ORDER_CAP_PER_CUSTOMER: int = Field(default=3, ge=1, le=20)
+    DRAFT_ORDER_TTL_HOURS: int = Field(default=24, ge=1)
+    # T06/T07: clarify quota for in-catalog ambiguity before handing off to a
+    # human (out-of-catalog queries decline instead — they never hand off).
+    CLARIFY_MAX_ROUNDS: int = Field(default=2, ge=1, le=5)
+    # T06: complaint fact-collection turn quota before the mandatory handoff.
+    COMPLAINT_MAX_COLLECT_TURNS: int = Field(default=2, ge=1, le=5)
+    # T13/T12: minutes promised in the customer-facing holding message
+    # ("phản hồi trong ~X phút") — matches the wait-too-long alert threshold.
+    HITL_WAIT_ALERT_MINUTES: int = Field(default=10, ge=1)
+    # T13: Telegram chat that receives the handoff package + review buttons.
+    # Empty = admin notify disabled (REST /hitl/review remains the only path).
+    TELEGRAM_ADMIN_CHAT_ID: str = ""
+
+    # ── v3-0 P3 (T09/T12): resilience + observability ──────────────────────
+    # Master kill switch for the whole P3 group: fallback ladder, timeout
+    # budget, 429 cooldown, backpressure semaphore, token-budget gate and
+    # degrade-driven holding. False = pre-P3 behavior (single manual fallback
+    # to economy-chat inside AIGateway.complete).
+    RESILIENCE_V3_ENABLED: bool = True
+    # T09 timeout budget: per-call caps (cloud vs local) and the whole-turn
+    # budget after which the customer gets a holding message.
+    LLM_TIMEOUT_CLOUD_S: float = Field(default=15.0, gt=0.0)
+    LLM_TIMEOUT_LOCAL_S: float = Field(default=25.0, gt=0.0)
+    TURN_BUDGET_S: float = Field(default=30.0, gt=0.0)
+    # T09: free-tier 429s last hours — never retry them; cool the rung down
+    # and jump to the next one immediately.
+    LLM_429_COOLDOWN_S: float = Field(default=600.0, gt=0.0)
+    # T09 backpressure: in-process cap on concurrent LLM turns. Overflow goes
+    # to queued_messages + holding instead of piling onto the providers.
+    LLM_MAX_CONCURRENT_TURNS: int = Field(default=8, ge=1, le=64)
+    # T09 token-budget gate (app-side — Groq exposes no daily counter): one
+    # Postgres row per (day UTC, model); at DEGRADE_RATIO of the daily cap the
+    # ladder proactively skips the premium rung.
+    TOKEN_BUDGET_DAILY_PREMIUM: int = Field(default=100_000, ge=0)
+    TOKEN_BUDGET_DEGRADE_RATIO: float = Field(default=0.9, gt=0.0, le=1.0)
+    # T12 alerts on the timeout_scheduler loop (Telegram admin chat):
+    # queue depth > N, oldest pending case waiting > HITL_WAIT_ALERT_MINUTES,
+    # and degraded turns since the last tick.
+    ALERT_QUEUE_DEPTH: int = Field(default=5, ge=1)
+
+    # ── v3-0 P4 (T08/T11): efficiency cuts + tool loop ──────────────────────
+    # 4.2: in-graph SMALLTALK fast-path (keyword branch in router_node +
+    # template branch in answer_node). Conservative gate: full-match, <=4
+    # words, no product/price/order token. False = router LLM classifies
+    # greetings like any other turn (pre-P4 behavior).
+    SMALLTALK_FASTPATH_ENABLED: bool = True
+    # 4.3: keyword pre-classify whitelist for INFO_QUERY/PRICING/AVAILABILITY
+    # skips the router LLM call (cache stays in-graph). Requires the semantic
+    # cache invalidation hook on price/stock updates (services/rag).
+    PRECLASSIFY_WHITELIST_ENABLED: bool = True
+    # 4.4: skip memory_retrieval_node ONLY on cache-hit or similarity >=
+    # MEMORY_SKIP_SIMILARITY; never for FOLLOW_UP or time-referenced queries.
+    MEMORY_SKIP_ENABLED: bool = True
+    MEMORY_SKIP_SIMILARITY: float = Field(default=0.85, ge=0.0, le=1.0)
+    # 4.1: tool-calling loop on the premium tier for ambiguous advisory turns
+    # only (~20%), guardrails G1-G8 (read-only tools, <=2 hops, <=3 cloud
+    # calls/turn, Pydantic-validated args + 1 retry, 429 -> local single-shot).
+    # This is the FIRST feature the degrade ladder turns off (3.1).
+    TOOL_LOOP_ENABLED: bool = True
+    TOOL_LOOP_MAX_HOPS: int = Field(default=2, ge=1, le=4)
+    TOOL_LOOP_MAX_CALLS: int = Field(default=3, ge=1, le=6)
     # WP-V2-3: LLM query decomposition for declined multi-intent/comparison
     # queries in the graph retrieval node. False = regex COMPARISON split only
     # (pre-V2-3 behavior). On LLM error the regex split remains the fallback.

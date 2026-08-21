@@ -263,6 +263,10 @@ class AIGateway:
         current_span = trace.get_current_span()
         session_id = getattr(current_span, "attributes", {}).get(SpanAttributes.SESSION_ID)
 
+        # v3-0 P3 (T09): when the fallback ladder drives this call it owns the
+        # rung-to-rung fallback — the legacy in-method recursion must not fire.
+        ladder_managed = bool(kwargs.pop("_ladder", False))
+
         start_time = time.perf_counter()
 
         try:
@@ -293,8 +297,10 @@ class AIGateway:
                 err=str(e),
             )
 
-            # FR-015: Manual fallback to economy-chat (local) if model call fails
-            if model != "economy-chat":
+            # FR-015: Manual fallback to economy-chat (local) if model call fails.
+            # Skipped when the P3 ladder manages the call — it decides the next
+            # rung (429 cooldown, intent policy) instead of this blind fallback.
+            if not ladder_managed and model != "economy-chat":
                 logfire.warn("Falling back to economy-chat due to error: {err}", err=str(e))
                 return await AIGateway.complete(
                     messages=messages, model="economy-chat", stream=stream, **kwargs

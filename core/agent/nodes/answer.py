@@ -27,6 +27,10 @@ from models.schema import ModelTrace
 from services.ai import AIGateway, extract_llm_metrics
 from services.rag.constants import DECLINE_MESSAGE
 
+# v3-0 P4 (4.1): only advisory intents ride the tool loop — order/HITL keep
+# the state machine (mirrors core.agent.tool_loop.ADVISORY_INTENTS).
+_ADVISORY_TOOL_LOOP_INTENTS = frozenset({"INFO_QUERY", "PRICING", "COMPARISON", "AVAILABILITY"})
+
 # WP-V2-5: returned instead of an LLM answer when CUSTOMER_DAILY_MSG_CAP is hit.
 CUSTOMER_CAP_MESSAGE = (
     "Cảm ơn bạn đã quan tâm! Hôm nay shop đã nhận khá nhiều câu hỏi từ bạn nên "
@@ -102,6 +106,33 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             "messages": [AIMessage(content=cached_answer)],
             "response": cached_answer,
             "model_used": "cache",
+        }
+
+    # Path 1.2 — v3-0 P4 (T11 4.2): SMALLTALK fast-path template. The router's
+    # conservative keyword gate matched (full-match, <=4 words, no business
+    # token), so this turn costs ZERO LLM calls. Traced like every other path.
+    if settings.SMALLTALK_FASTPATH_ENABLED and state.get("smalltalk_fastpath"):
+        from langchain_core.messages import AIMessage
+
+        template_resp = (
+            "Xin chào! Em là trợ lý bán hàng của shop 🤗 Em có thể tư vấn sản "
+            "phẩm điện tử, báo giá và hỗ trợ đặt hàng. Anh/chị đang quan tâm "
+            "sản phẩm nào ạ?"
+        )
+        await _write_model_trace(
+            state,
+            db=db,
+            metadata_={
+                "guard_decision": "SMALLTALK_FASTPATH",
+                "escalation_flag": False,
+                "declined": False,
+                "intended_model": "template",
+            },
+        )
+        return {
+            "messages": [AIMessage(content=template_resp)],
+            "response": template_resp,
+            "model_used": "template",
         }
 
     # Path 1.5: FOLLOW_UP status inquiry (e.g. "đặt chưa?")
@@ -246,6 +277,29 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
                 )
             memory_note = f"\n[Ngữ cảnh từ các cuộc hội thoại trước]:\n{memory_context_text}"
 
+        # v3-0 P2 (T06): per-intent hard-conversation policy notes.
+        policy_note = ""
+        if settings.ORDER_HITL_V3_ENABLED:
+            _intent_now = state.get("intent")
+            if _intent_now == "NEGOTIATION":
+                policy_note = (
+                    "\n[CHÍNH SÁCH TRẢ GIÁ]: Bạn ĐƯỢC nêu các khuyến mại/quà tặng đang chạy "
+                    "có trong context sản phẩm. TUYỆT ĐỐI KHÔNG tự hứa giảm giá, KHÔNG "
+                    "counter-offer, KHÔNG thoả thuận mức giá mới — kể cả khi khách gây áp "
+                    "lực, nói chỗ khác rẻ hơn, hoặc yêu cầu nhiều lần. Mọi quyết định giảm "
+                    "giá thuộc về Quản lý shop; hãy báo bạn sẽ ghi nhận yêu cầu và chuyển "
+                    "Quản lý duyệt."
+                )
+            elif _intent_now == "COMPLAINT":
+                policy_note = (
+                    "\n[CHÍNH SÁCH KHIẾU NẠI]: Xoa dịu khách trước tiên, chân thành xin lỗi "
+                    "về trải nghiệm chưa tốt. Sau đó hỏi để thu đủ 3 thông tin: (1) đơn "
+                    "hàng/sản phẩm nào, (2) vấn đề cụ thể là gì, (3) khách mong muốn được "
+                    "xử lý thế nào. Chỉ hỏi những thông tin còn thiếu, không hỏi lại điều "
+                    "khách đã nói. KHÔNG tự hứa hoàn tiền/đổi trả/bồi thường — nhân viên "
+                    "sẽ liên hệ xử lý trực tiếp sau khi có đủ thông tin."
+                )
+
         system_prompt = (
             "Bạn là trợ lý bán hàng AI chuyên nghiệp, nhiệt tình, khéo léo và thấu hiểu khách hàng. "
             "Trả lời bằng tiếng Việt, thân thiện, rõ ràng và hữu ích. "
@@ -256,7 +310,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             "KHI KHÁCH XIN GIẢM GIÁ / MẶC CẢ: Hãy giải thích các ưu đãi/quà tặng hiện có của shop (như Tặng Củ sạc GaN 65W, Miễn phí giao hàng). Nếu khách muốn giảm thêm giá ngoài chính sách, hãy báo bạn sẽ ghi nhận để chuyển Quản lý shop (Admin) duyệt ưu đãi riêng. "
             "KHI TƯ VẤN SẢN PHẨM / GIÁ CẢ / SO SÁNH: Sau khi cung cấp thông tin, bạn LUÔN LUÔN kết thúc bằng một lời mời chào đặt hàng thân thiện hoặc câu hỏi định hướng (Sales CTA) như: 'Anh/chị có muốn shop giữ hàng và hỗ trợ đặt đơn giao tận nhà cho mình không ạ?' "
             "TUYỆT ĐỐI KHÔNG báo 'không tìm thấy thông tin' khi context có thông tin về dòng sản phẩm đó. "
-            f"Chỉ báo không tìm thấy khi context hoàn toàn không có thông tin sản phẩm liên quan.{rejection_note}{memory_note}"
+            f"Chỉ báo không tìm thấy khi context hoàn toàn không có thông tin sản phẩm liên quan.{rejection_note}{memory_note}{policy_note}"
         )
 
     if state.get("intent") == "SMALLTALK":
@@ -291,30 +345,84 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
 
     metrics: LLMUsageMetrics | None = None
     start_time = time.perf_counter()
-    try:
-        result = await AIGateway.complete(model=model, messages=messages)
-        response = result.choices[0].message.content
-        metrics = extract_llm_metrics(result, latency_ms=(time.perf_counter() - start_time) * 1000)
-    except Exception as e:
-        # T064 real fallback: premium failed at point of use → degrade to
-        # economy-chat (escalation_failure=True). Cascade inverse: the economy
-        # first pass failed → go straight to the reserved premium target.
-        alt_model = cascade_target if model == "economy-chat" else "economy-chat"
-        if alt_model:
-            try:
-                model = alt_model
-                escalation_failure = alt_model == "economy-chat"
-                result = await AIGateway.complete(model=model, messages=messages)
-                response = result.choices[0].message.content
-                metrics = extract_llm_metrics(
-                    result, latency_ms=(time.perf_counter() - start_time) * 1000
-                )
-            except Exception as e2:
-                response = f"Lỗi khi tạo phản hồi: {e2!s}"
-                model = None
+
+    # ── v3-0 P4 (T08 4.1): hybrid escalation — ambiguous advisory turns
+    # (~20%) get the bounded premium tool loop (G1-G8) instead of one fixed
+    # single-shot. (None, None) → fall through to the normal path below.
+    tool_loop_answer: str | None = None
+    if (
+        settings.TOOL_LOOP_ENABLED
+        and db is not None
+        and state.get("escalation_flag")
+        and not budget_downgrade
+        and (state.get("intent") or "") in _ADVISORY_TOOL_LOOP_INTENTS
+    ):
+        from core.agent.tool_loop import run_tool_loop
+
+        tool_loop_answer, tl_model = await run_tool_loop(
+            state["user_message"],
+            db,
+            context_note=chunk_text[:1500],
+        )
+        if tool_loop_answer:
+            response = tool_loop_answer
+            model = tl_model
+
+    # ── v3-0 P3 (T09 3.1/3.2): intent-aware fallback ladder replaces the
+    # single blind economy fallback. Risky intents (ORDER/NEGOTIATION/
+    # COMPLAINT) never accept local/cache answers — full degrade serves the
+    # holding message + support queue (degraded is a 20% signal, 2.3).
+    if tool_loop_answer:
+        pass  # 4.1 answered this turn — skip normal generation
+    elif settings.RESILIENCE_V3_ENABLED:
+        from services import resilience
+
+        turn_started = state.get("turn_started_at") or time.monotonic()
+        ladder_res = await resilience.complete_with_ladder(
+            messages=messages,
+            intent=state.get("intent"),
+            db=db,
+            deadline=turn_started + settings.TURN_BUDGET_S,
+            preferred_model=model,
+        )
+        if ladder_res.response is not None:
+            result = ladder_res.response
+            response = result.choices[0].message.content
+            metrics = extract_llm_metrics(
+                result, latency_ms=(time.perf_counter() - start_time) * 1000
+            )
+            model = ladder_res.model_used
+            if ladder_res.degraded:
+                state["risk_signals"] = [*(state.get("risk_signals") or []), "degraded"]
         else:
-            response = f"Lỗi khi tạo phản hồi: {e!s}"
-            model = None
+            return await _degraded_turn_response(state, db)
+    else:
+        try:
+            result = await AIGateway.complete(model=model, messages=messages)
+            response = result.choices[0].message.content
+            metrics = extract_llm_metrics(
+                result, latency_ms=(time.perf_counter() - start_time) * 1000
+            )
+        except Exception as e:
+            # T064 real fallback: premium failed at point of use → degrade to
+            # economy-chat (escalation_failure=True). Cascade inverse: the economy
+            # first pass failed → go straight to the reserved premium target.
+            alt_model = cascade_target if model == "economy-chat" else "economy-chat"
+            if alt_model:
+                try:
+                    model = alt_model
+                    escalation_failure = alt_model == "economy-chat"
+                    result = await AIGateway.complete(model=model, messages=messages)
+                    response = result.choices[0].message.content
+                    metrics = extract_llm_metrics(
+                        result, latency_ms=(time.perf_counter() - start_time) * 1000
+                    )
+                except Exception as e2:
+                    response = f"Lỗi khi tạo phản hồi: {e2!s}"
+                    model = None
+            else:
+                response = f"Lỗi khi tạo phản hồi: {e!s}"
+                model = None
 
     # Guard against raw JSON schema leaks (e.g. LLM returning IntentClassification JSON string)
     if response and ("primary_intent" in response or "sensitive_intent" in response):
@@ -712,3 +820,55 @@ async def _generate_followup_response(state: AgentState, db: object) -> str:
                 return f"Dạ, đơn hàng của anh/chị chưa thể hoàn tất do: {hitl_res.pause_reason or 'chưa đủ điều kiện'}. Anh/chị có cần hỗ trợ gì khác không ạ?"
 
     return "Dạ, hiện tại shop chưa tìm thấy đơn hàng nào được khởi tạo trong phiên chat này. Anh/chị có muốn đặt mua sản phẩm nào không ạ?"
+
+
+async def _degraded_turn_response(state, db) -> dict:
+    """v3-0 P3 (T09): every ladder rung failed for this turn.
+
+    Non-risky intents may fall back to the cached answer (cache-only rung);
+    risky intents — or no cache — get the holding message and land in the
+    support queue so a human picks the turn up (degraded = 20% signal, 2.3).
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from models.schema import SupportQueue
+    from services import resilience
+
+    signals = [*(state.get("risk_signals") or []), "degraded"]
+    intent = (state.get("intent") or "").upper()
+    cached = state.get("cached_answer")
+
+    if cached and intent not in resilience.RISKY_INTENTS:
+        return {
+            "response": cached,
+            "model_used": "cache",
+            "risk_signals": signals,
+            "degraded": True,
+        }
+
+    if db is not None:
+        try:
+            await db.execute(
+                pg_insert(SupportQueue)
+                .values(
+                    session_id=state["session_id"],
+                    reason="degraded"[:50],
+                    context_snapshot={
+                        "user_message": state.get("user_message"),
+                        "intent": state.get("intent"),
+                        "risk_signals": signals,
+                    },
+                    status="pending",
+                )
+                .on_conflict_do_nothing(index_elements=["session_id"])
+            )
+            await db.flush()
+        except Exception:
+            logfire.warn("degraded turn: support_queue insert failed")
+
+    return {
+        "response": resilience.holding_message(),
+        "model_used": None,
+        "risk_signals": signals,
+        "degraded": True,
+    }

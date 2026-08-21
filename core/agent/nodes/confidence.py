@@ -36,6 +36,17 @@ if TYPE_CHECKING:
 # ──────────────────────────────────────────────────────────────────────────
 
 
+def _clarify_quota() -> int:
+    """Max clarify rounds before handoff/decline (v3-0 P2/T06).
+
+    CLARIFY_MAX_ROUNDS (default 2) applies only when the P2 kill switch is on;
+    with ORDER_HITL_V3_ENABLED=False this restores the pre-P2 hard-coded 1.
+    """
+    if settings.ORDER_HITL_V3_ENABLED:
+        return int(settings.CLARIFY_MAX_ROUNDS)
+    return 1
+
+
 async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     """Compute fused confidence score and apply Layer 2 guard (T047).
 
@@ -88,23 +99,19 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     # WP-V3-4: Expand clarify loop to borderline INFO_QUERY, AVAILABILITY, COMPARISON
     # when similarity_gap is small (<= CLARIFY_SIMILARITY_GAP_MAX, default 0.05).
     # PRICING keeps old path (usually specific pricing questions).
-    # Anti-loop: clarify_count < 1. Kill switch: CLARIFY_ENABLED=False.
+    # Anti-loop: clarify_count < quota (v3-0 P2/T06: 2 rounds for in-catalog
+    # ambiguity, then handoff; pre-P2: 1 round). Kill switch: CLARIFY_ENABLED=False.
     needs_clarification = False
     borderline_clarify_intents = {"INFO_QUERY", "AVAILABILITY", "COMPARISON"}
     similarity_gap = state.get("similarity_gap", 0.0)
-    # WP-V3-4: Expand clarify loop to borderline INFO_QUERY, AVAILABILITY, COMPARISON
-    # when similarity_gap is small (<= CLARIFY_SIMILARITY_GAP_MAX, default 0.05).
-    # PRICING keeps old path (usually specific pricing questions).
-    # Anti-loop: clarify_count < 1. Kill switch: CLARIFY_ENABLED=False.
-    needs_clarification = False
-    borderline_clarify_intents = {"INFO_QUERY", "AVAILABILITY", "COMPARISON"}
-    similarity_gap = state.get("similarity_gap", 0.0)
+    clarify_count = int(state.get("clarify_count") or 0)
+    clarify_quota = _clarify_quota()
     if (
         fused < confidence_threshold
         and settings.CLARIFY_ENABLED
         and intent not in ("ORDER_PLACEMENT", "FOLLOW_UP")
         and not state.get("memory_context")
-        and int(state.get("clarify_count") or 0) < 1
+        and clarify_count < clarify_quota
     ):
         if intent in borderline_clarify_intents:
             if similarity_gap <= settings.CLARIFY_SIMILARITY_GAP_MAX:
@@ -115,6 +122,27 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
         else:
             needs_clarification = True
             is_declined = False
+
+    # v3-0 P2 (T06/T07): in-catalog ambiguity that already spent the clarify
+    # quota hands off to a human (the customer is still a lead) instead of
+    # declining. Out-of-catalog queries (Layer 1 declined / no citations)
+    # never reach here — they keep the polite decline path, no handoff.
+    if (
+        settings.ORDER_HITL_V3_ENABLED
+        and settings.CLARIFY_ENABLED
+        and not needs_clarification
+        and fused < confidence_threshold
+        and clarify_count >= clarify_quota
+        and state.get("citations")
+        and intent in borderline_clarify_intents
+    ):
+        return {
+            "confidence_score": fused,
+            "declined": False,
+            "needs_clarification": False,
+            "hitl_rejection_reason": "clarify_exhausted_still_ambiguous",
+            "risk_signals": [*(state.get("risk_signals") or []), "clarify_loop"],
+        }
 
     # FR-007: INFO_QUERY, PRICING, AVAILABILITY, COMPARISON borderline (0.45 ≤ sim < 0.70)
     # that did NOT trigger clarify must NOT be declined here.
@@ -141,6 +169,30 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     # (interrupt() checkpoints state as-received, not mid-node updates)
     if intent == "ORDER_PLACEMENT" and not state.get("order_info"):
         citations = state.get("citations", [])
+        # v3-0 P1 (T01 F4/O5): ambiguous ORDER ("đặt cái đó đi" after a vague
+        # browse) — top citations are a near-tie, so auto-selecting the first
+        # one orders the wrong product. Ask ONE clarifying question instead.
+        # Anti-loop: clarify_count < 1 (same guard as WP-V2-3).
+        if (
+            settings.INTENT_TRACKING_V3_ENABLED
+            and settings.CLARIFY_ENABLED
+            and len(citations) >= 2
+            and similarity_gap <= settings.CLARIFY_SIMILARITY_GAP_MAX
+        ):
+            if clarify_count < clarify_quota:
+                result["needs_clarification"] = True
+                result["declined"] = False
+                return result
+            if settings.ORDER_HITL_V3_ENABLED:
+                # v3-0 P2 (T06): still a near-tie after the clarify quota —
+                # hand off instead of guessing which product to order.
+                result["declined"] = False
+                result["hitl_rejection_reason"] = "clarify_exhausted_still_ambiguous"
+                result["risk_signals"] = [
+                    *(state.get("risk_signals") or []),
+                    "clarify_loop",
+                ]
+                return result
         if citations:
             db = cast("AsyncSession", config["configurable"].get("db"))
             top = citations[0]
@@ -274,6 +326,23 @@ def _route_after_confidence(state: AgentState) -> str:
     # else fall back to similarity (unit-test path where confidence_node didn't run).
     confidence_score = state.get("confidence_score") or similarity
 
+    # v3-0 P1 (F4/O5): an ambiguous ORDER_PLACEMENT clarifies BEFORE the HITL
+    # guard — confidence_node only sets this for ORDER when the top citations
+    # are a near-tie (and for borderline non-ORDER intents as in WP-V2-3).
+    if state.get("needs_clarification"):
+        return "clarify_node"
+
+    # v3-0 P2 (T06/T07): clarify quota exhausted on in-catalog ambiguity →
+    # hand off to a human instead of declining/guessing. Guarded on the
+    # per-turn risk_signals channel (reset each invoke) so a stale
+    # hitl_rejection_reason from a previous turn can never re-trigger this.
+    if (
+        settings.ORDER_HITL_V3_ENABLED
+        and state.get("hitl_rejection_reason") == "clarify_exhausted_still_ambiguous"
+        and "clarify_loop" in (state.get("risk_signals") or [])
+    ):
+        return "customer_support_node"
+
     # Always route ORDER_PLACEMENT through the HITL guard
     if intent == "ORDER_PLACEMENT":
         return "hitl_guard_node"
@@ -281,12 +350,6 @@ def _route_after_confidence(state: AgentState) -> str:
     # Always route status inquiries or greetings directly to answer_node
     if intent in ("FOLLOW_UP", "SMALLTALK"):
         return "answer_node"
-
-    # WP-V2-3: confidence_node flagged a borderline query → ask ONE clarifying
-    # question instead of declining (confidence_node never sets this for
-    # ORDER_PLACEMENT or when CLARIFY_ENABLED is off).
-    if state.get("needs_clarification"):
-        return "clarify_node"
 
     # INFO_QUERY, PRICING, AVAILABILITY, COMPARISON borderline: Layer 1 didn't fire but below
     # Layer 2 threshold → route to escalation_node (which selects premium vs economy)

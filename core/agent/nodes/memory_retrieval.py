@@ -16,6 +16,24 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# v3-0 P4 (T11 4.4): a time-referenced query needs episodic/semantic memory —
+# never skip retrieval for these tokens.
+_TIME_REFERENCE_TOKENS = (
+    "hôm qua",
+    "hôm trước",
+    "lần trước",
+    "bữa trước",
+    "tuần trước",
+    "tháng trước",
+    "đơn cũ",
+    "lúc nãy",
+    "ban nãy",
+    "yesterday",
+    "last time",
+    "last week",
+    "before",
+)
+
 
 def _empty_update() -> dict:
     """Fresh empty state delta (new lists each call — reducers may mutate)."""
@@ -63,6 +81,20 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
                 extra={"customer_id": customer_id},
             )
             return _empty_update()
+
+        # v3-0 P4 (T11 4.4): conditional skip — ONLY on cache-hit or very-high
+        # retrieval similarity (the answer is already determined; memory adds
+        # latency only). NEVER for FOLLOW_UP or time-referenced queries — this
+        # node is what rescues those from borderline confidence.
+        if settings.MEMORY_SKIP_ENABLED and primary_intent != IntentEnum.FOLLOW_UP:
+            user_msg_l = (state.get("user_message") or "").lower()
+            has_time_ref = any(tok in user_msg_l for tok in _TIME_REFERENCE_TOKENS)
+            if not has_time_ref and (
+                state.get("cached_answer")
+                or float(state.get("similarity_score") or 0.0) >= settings.MEMORY_SKIP_SIMILARITY
+            ):
+                logger.debug("memory skip (4.4): cache-hit/high-similarity turn")
+                return _empty_update()
 
         db = (config.get("configurable") or {}).get("db")
         if db is None:

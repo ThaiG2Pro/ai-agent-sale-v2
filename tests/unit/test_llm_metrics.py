@@ -145,8 +145,13 @@ async def test_answer_node_passes_real_metrics_to_trace():
 
 
 @pytest.mark.asyncio
-async def test_answer_node_premium_failure_degrades_to_economy():
-    """Premium model fails at point of use → economy-chat + escalation_failure=True."""
+async def test_answer_node_premium_failure_degrades_to_economy(monkeypatch):
+    """Premium model fails at point of use → economy-chat + escalation_failure=True.
+
+    Kill-switch regression: pre-P3 single-fallback path (the P3 ladder owns
+    fallback when RESILIENCE_V3_ENABLED and calls AIGateway via services.ai).
+    """
+    monkeypatch.setattr("core.config.settings.RESILIENCE_V3_ENABLED", False)
     state = make_initial_state("Tôi muốn khiếu nại", "t-degrade", "cust_001")
     state["intent"] = "COMPLAINT"
     state["model_used"] = "premium-chat"
@@ -176,8 +181,12 @@ async def test_answer_node_premium_failure_degrades_to_economy():
 
 
 @pytest.mark.asyncio
-async def test_answer_node_economy_failure_keeps_error_path():
-    """economy-chat itself fails → error response, model None, no infinite retry."""
+async def test_answer_node_economy_failure_keeps_error_path(monkeypatch):
+    """economy-chat itself fails → error response, model None, no infinite retry.
+
+    Kill-switch regression: pre-P3 path (see note on the sibling test above).
+    """
+    monkeypatch.setattr("core.config.settings.RESILIENCE_V3_ENABLED", False)
     state = make_initial_state("Giá?", "t-econ-fail", "cust_001")
     state["intent"] = "PRICING"
     state["model_used"] = "economy-chat"

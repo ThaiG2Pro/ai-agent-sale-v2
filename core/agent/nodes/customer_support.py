@@ -23,6 +23,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# v3-0 P2 (T06): customer-facing labels for internal reason slugs.
+_REASON_LABELS = {
+    "clarify_exhausted_still_ambiguous": (
+        "shop cần thêm thông tin để chọn đúng sản phẩm cho bạn, nhân viên sẽ hỗ trợ trực tiếp"
+    ),
+    "high_risk_tier3": "đơn hàng cần nhân viên xác nhận trước khi xử lý",
+    "max_escalation_reached": "yêu cầu cần nhân viên hỗ trợ trực tiếp",
+}
+
 
 async def customer_support_node(state: AgentState, config: RunnableConfig) -> Command:
     """Escalates session to human support (Phase 13).
@@ -33,13 +42,19 @@ async def customer_support_node(state: AgentState, config: RunnableConfig) -> Co
     db = cast("AsyncSession", config["configurable"].get("db"))
     session_id = state["session_id"]
     reason = state.get("hitl_rejection_reason", "Unable to process request")
+    # v3-0 P2 (T06): internal reason slugs must never leak verbatim into the
+    # customer-facing message — map known slugs to plain Vietnamese.
+    reason = _REASON_LABELS.get(reason, reason)
 
     # --- T040: Empathetic Message ---
     try:
         system_prompt = (
             "Bạn là trợ lý bán hàng chu đáo, chân thành và thấu hiểu. "
             "Yêu cầu của khách hàng hiện chưa thể xử lý tự động được. "
-            f"Hãy viết một phản hồi ngắn gọn, lịch sự và đồng cảm bằng tiếng Việt giải thích lý do: '{reason}'. "
+            f"Hãy viết một phản hồi ngắn gọn, lịch sự và đồng cảm bằng tiếng Việt. "
+            f"BẮT BUỘC nêu rõ lý do cụ thể cho khách (O27): '{reason}' — "
+            "không được nói chung chung kiểu 'không thể xử lý'. "
+            "Nếu phù hợp, gợi ý bước tiếp theo cho khách. "
             f"Hướng dẫn khách liên hệ bộ phận hỗ trợ khách hàng tại {settings.SUPPORT_CONTACT_LINK}."
         )
 
@@ -71,6 +86,18 @@ async def customer_support_node(state: AgentState, config: RunnableConfig) -> Co
                 {"role": m.type, "content": m.content} for m in state.get("messages", [])[-3:]
             ],
         }
+
+        # v3-0 P2 (T07): the queue entry carries the standardized 4-part
+        # handoff package instead of only a free-form snapshot. Best-effort.
+        if settings.ORDER_HITL_V3_ENABLED:
+            try:
+                from services.hitl.handoff import build_handoff_package
+
+                snapshot["handoff_package"] = await build_handoff_package(
+                    db, dict(state), pause_reason=str(reason)
+                )
+            except Exception as pkg_exc:
+                logger.warning("customer_support handoff package build failed: %s", pkg_exc)
 
         stmt = (
             insert(SupportQueue)

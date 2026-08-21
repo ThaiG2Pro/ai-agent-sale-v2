@@ -57,8 +57,9 @@ async def test_successful_order_confirms_and_flushes():
     assert cmd.update["order_info"]["status"] == "confirmed"
     assert "Widget" in cmd.update["response"]
     assert "Số lượng: 2" in cmd.update["response"]
-    # stock UPDATE + order INSERT, then explicit flush (single transaction)
-    assert db.execute.await_count == 2
+    # stock UPDATE + order INSERT + semantic-cache invalidation (v3-0 P4 4.3:
+    # stock changed → cached availability/pricing answers are stale)
+    assert db.execute.await_count == 3
     db.flush.assert_awaited_once()
 
 

@@ -98,12 +98,16 @@ def _risk_score(confidence: float, value_norm: float, history: float) -> float:
 def _resolve_risk_tier(intent: str | None, order_value: float | None, risk: float) -> int:
     """Map risk score to tier 1/2/3 and enforce the safety invariant.
 
-    SAFETY INVARIANT (non-configurable): ORDER_PLACEMENT whose value exceeds
-    HITL_HIGH_VALUE_ORDER_THRESHOLD — or whose value is unknown — is always
-    >= Tier 2. No weight/threshold tuning can auto-approve such an order.
+    SAFETY INVARIANT (non-configurable): an ORDER_PLACEMENT whose value is
+    unknown — or at/above HITL_TIER1_MAX_ORDER_VALUE (T07 default 10tr) — is
+    always >= Tier 2. No weight/threshold tuning can auto-approve such an
+    order. v3-0 P2 (T07): the pre-P2 hardcode "every ORDER pauses at Tier 2"
+    only remains under the ORDER_HITL_V3_ENABLED=False kill switch; further
+    Tier-1 conditions (unique product, phone+address, stock) are checked by
+    _tier1_eligibility in the node.
     """
-    if intent == "ORDER_PLACEMENT":
-        # All valid order placement requests pause at Tier 2 for Admin Queue review
+    if intent == "ORDER_PLACEMENT" and not settings.ORDER_HITL_V3_ENABLED:
+        # Pre-v3-0-P2 behavior: all orders pause at Tier 2 for review.
         return 2
 
     if risk >= settings.HITL_RISK_TIER3_THRESHOLD:
@@ -112,7 +116,46 @@ def _resolve_risk_tier(intent: str | None, order_value: float | None, risk: floa
         tier = 2
     else:
         tier = 1
+
+    if intent == "ORDER_PLACEMENT" and (
+        order_value is None or order_value >= settings.HITL_TIER1_MAX_ORDER_VALUE
+    ):
+        tier = max(tier, 2)
     return tier
+
+
+async def _tier1_eligibility(order_info: dict | None, db: AsyncSession | None) -> tuple[bool, str]:
+    """v3-0 P2 (T07): remaining Tier-1 auto-proceed conditions.
+
+    Value < threshold is already enforced by _resolve_risk_tier; here:
+    uniquely determined product, phone + address present, stock sufficient.
+    Any missing/unverifiable condition falls back to Tier 2 — never Tier 1.
+    """
+    if not order_info or not order_info.get("product_id"):
+        return False, "no_unique_product"
+    if not order_info.get("phone"):
+        return False, "missing_phone"
+    if not order_info.get("address"):
+        return False, "missing_address"
+    if db is None:
+        return False, "no_db_for_stock_check"
+    try:
+        from sqlalchemy import select as sa_select
+
+        from models.schema import Product
+
+        qty = int(order_info.get("quantity") or 1)
+        stock = (
+            await db.execute(
+                sa_select(Product.stock_quantity).where(Product.id == order_info["product_id"])
+            )
+        ).scalar_one_or_none()
+        if stock is None or stock < qty:
+            return False, "insufficient_stock"
+    except Exception:
+        logger.warning("Tier1 stock check failed; falling back to Tier 2", exc_info=True)
+        return False, "stock_check_error"
+    return True, "ok"
 
 
 async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
@@ -167,13 +210,33 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
             },
         )
 
+    # v3-0 P2 (T07): track which "20%" signals fired — feeds the structured
+    # escalate reason in the handoff package.
+    risk_signals: list[str] = list(state.get("risk_signals") or [])
+
+    # v3-0 P2 (T06): NEGOTIATION with a product context pauses for the human
+    # to decide the price — the draft stays at the ORIGINAL price with a
+    # structured "khách xin giảm X" note; the agent never counter-offers.
+    if settings.ORDER_HITL_V3_ENABLED and intent == "NEGOTIATION" and state.get("order_info"):
+        trigger_hitl = True
+        reason = HITLReasonEnum.PRICE_NEGOTIATION
+        if "intent_negotiation" not in risk_signals:
+            risk_signals.append("intent_negotiation")
+
     risk_tier: int | None = None
-    if settings.RISK_HITL_ENABLED:
+    if not trigger_hitl and settings.RISK_HITL_ENABLED:
         # WP-V2-4: composite risk score → 3 tiers (kill switch above).
         order_value = _order_value(state.get("order_info"))
         history = await _history_factor(state.get("customer_id"), db)
         risk = _risk_score(confidence_score, _value_norm(intent, order_value), history)
         risk_tier = _resolve_risk_tier(intent, order_value, risk)
+        if intent == "ORDER_PLACEMENT" and risk_tier == 1:
+            # v3-0 P2 (T07): Tier 1 auto-proceed is CONDITIONAL — unique
+            # product, phone + address, stock. Any miss → Tier 2.
+            eligible, why = await _tier1_eligibility(state.get("order_info"), db)
+            if not eligible:
+                risk_tier = 2
+                logger.info("Tier1 conditions not met (%s) — order pauses at Tier 2", why)
         logger.info(
             "HITL risk assessment",
             extra={
@@ -190,7 +253,10 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
             # the human support queue.
             return Command(
                 goto="customer_support_node",
-                update={"hitl_rejection_reason": "high_risk_tier3"},
+                update={
+                    "hitl_rejection_reason": "high_risk_tier3",
+                    "risk_signals": [*risk_signals, "risk_score"],
+                },
             )
         if risk_tier == 2:
             trigger_hitl = True
@@ -199,9 +265,11 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                 if intent == "ORDER_PLACEMENT"
                 else HITLReasonEnum.LOW_CONFIDENCE
             )
+            if "risk_score" not in risk_signals:
+                risk_signals.append("risk_score")
         # Tier 1: auto-proceed — no confidence/order trigger (cost guard below
         # still applies).
-    else:
+    elif not trigger_hitl:
         # Pre-V2-4 binary triggers (T025).
         if intent == "ORDER_PLACEMENT":
             trigger_hitl = True
@@ -268,12 +336,61 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
         existing_result = await db.execute(existing_stmt)
         existing_record = existing_result.scalar_one_or_none()
 
+        order_info = state.get("order_info")
+
         if existing_record:
-            # Resume mode: reuse existing pause_id, skip DB inserts
+            # Resume mode: reuse existing pause_id, skip DB inserts.
             pause_id = existing_record.pause_id
+            # v3-0 P2 (T05): the draft row was created on the fresh trigger,
+            # but its id lives outside checkpointed state (interrupt() fired
+            # before any Command update) — reattach it so order_execution
+            # confirms the draft row instead of inserting a parallel record.
+            if (
+                settings.ORDER_HITL_V3_ENABLED
+                and order_info
+                and not order_info.get("draft_order_id")
+            ):
+                try:
+                    from models.schema import Order as _Order
+
+                    latest_draft_id = (
+                        await db.execute(
+                            sa_select(_Order.id)
+                            .where(
+                                _Order.session_id == session_id,
+                                _Order.status == "pending_review",
+                            )
+                            .order_by(_Order.created_at.desc())
+                            .limit(1)
+                        )
+                    ).scalar_one_or_none()
+                    if latest_draft_id is not None:
+                        order_info = {**order_info, "draft_order_id": str(latest_draft_id)}
+                except Exception:
+                    logger.warning("draft id reattach failed on resume", exc_info=True)
         else:
             # Fresh trigger: create new records
             pause_id = uuid7()
+
+            # v3-0 P2 (T05): materialize the draft as an orders row (status
+            # pending_review). A re-pause on a changed order creates a NEW
+            # draft superseding the previous one — the agent never edits.
+            if settings.ORDER_HITL_V3_ENABLED and order_info and order_info.get("product_id"):
+                try:
+                    from services.draft_orders import create_draft
+
+                    draft = await create_draft(
+                        db,
+                        session_id=session_id,
+                        customer_id=state.get("customer_id") or "anonymous",
+                        order_info=order_info,
+                        supersedes_id=order_info.get("draft_order_id"),
+                    )
+                    order_info = dict(draft.order_info)
+                except Exception:
+                    logger.warning(
+                        "draft creation failed; pausing without draft row", exc_info=True
+                    )
 
             new_metadata = HITLMetadata(
                 pause_id=pause_id,
@@ -283,6 +400,27 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                 escalation_count=escalation_count,
                 paused_at=datetime.now(UTC),
             )
+
+            # v3-0 P2 (T07/T13): build + persist the 4-part handoff package
+            # and notify the Telegram admin chat. Best-effort — a package or
+            # notify failure never blocks the pause.
+            handoff_package = None
+            if settings.ORDER_HITL_V3_ENABLED:
+                try:
+                    from services.hitl.handoff import build_handoff_package
+
+                    pkg_state = {
+                        **state,
+                        "order_info": order_info,
+                        "risk_signals": risk_signals,
+                    }
+                    handoff_package = await build_handoff_package(
+                        db, pkg_state, pause_reason=str(reason)
+                    )
+                    new_metadata.handoff_package = handoff_package
+                except Exception:
+                    logger.warning("handoff package build failed", exc_info=True)
+
             db.add(new_metadata)
 
             # Upsert InterruptedSession
@@ -310,9 +448,15 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
             await db.flush()
             await db.commit()
 
-        # For ORDER_PLACEMENT: order_info should already be in state (set by
-        # confidence_node before this node ran). Use it if present.
-        order_info = state.get("order_info")
+            # v3-0 P2 (T13): one HTML message to the admin chat — 3 sections
+            # inline + intent log behind a callback + review buttons.
+            if handoff_package is not None:
+                try:
+                    from services.hitl.admin_notify import notify_admin_handoff
+
+                    await notify_admin_handoff(handoff_package, str(pause_id), session_id)
+                except Exception:
+                    logger.warning("admin handoff notify failed", exc_info=True)
 
         # Call interrupt() (FR-001)
         # Execution pauses here. LangGraph checkpoints state and suspends.
@@ -390,12 +534,35 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                         "hitl_triggered": False,
                         "hitl_pause_id": str(pause_id),
                         "order_info": final_order_info,
+                        # v3-0 P2 (O27): the admin's note travels to the
+                        # customer with the order confirmation.
+                        "hitl_admin_reason": payload.reason_or_comment,
                         **safe_edits,
                     },
                 )
             elif payload.action == "reject":
                 # T028: Increment escalation count and route to support
                 new_count = escalation_count + 1
+
+                # v3-0 P2 (T05): a rejected draft leaves the active set.
+                draft_id = (order_info or {}).get("draft_order_id")
+                if settings.ORDER_HITL_V3_ENABLED and draft_id:
+                    try:
+                        import uuid as _uuid
+
+                        from sqlalchemy import update as sa_update
+
+                        from models.schema import Order as _Order
+
+                        await db.execute(
+                            sa_update(_Order)
+                            .where(_Order.id == _uuid.UUID(str(draft_id)))
+                            .values(status="cancelled")
+                        )
+                        await db.commit()
+                    except Exception:
+                        logger.warning("draft cancel on reject failed", exc_info=True)
+
                 return Command(
                     goto="customer_support_node",
                     update={
@@ -424,6 +591,8 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
     update: dict = (
         {"estimated_token_cost": estimated_tokens} if estimated_tokens is not None else {}
     )
+    if risk_signals:
+        update["risk_signals"] = risk_signals
 
     # WP-V2-4 Tier 1 auto-approval: a low-risk order (small value, known
     # customer, high confidence) skips the human pause and flows down the same
