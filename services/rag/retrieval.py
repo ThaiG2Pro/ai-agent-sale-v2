@@ -59,23 +59,32 @@ async def hybrid_search_rrf(
     # ── FTS search — dynamic tsvector with unaccent & category fallback ──────────
     import re as _re
 
-    # Clean conversational prefixes for better FTS keyword extraction
+    # Clean conversational prefixes and metadata for better FTS keyword extraction
     clean_qtext = _re.sub(
-        r"^(tôi muốn mua|tôi mua|mình muốn mua|mình mua|shop có những mẫu|shop có mẫu|shop có|cho tôi|tư vấn|bán cho tôi)\s+",
+        r"^(tôi muốn mua|tôi mua|mình muốn mua|mình mua|tôi muốn đặt|tôi đặt|đặt cho tôi|đặt giúp tôi|mình muốn đặt|mình đặt|shop có những mẫu|shop có mẫu|shop có|cho tôi|tư vấn|bán cho tôi)\s+",
         "",
         query_text,
         flags=_re.IGNORECASE,
     ).strip()
+    # Strip contact info and price suffixes so plainto_tsquery gets the core product phrase
+    clean_qtext = _re.sub(
+        r"(?:sđt|số điện thoại|địa chỉ|giá).*$", "", clean_qtext, flags=_re.IGNORECASE
+    ).strip()
     if not clean_qtext:
         clean_qtext = query_text
 
+    is_case_query = bool(
+        _re.search(r"\b(ốp|ốp lưng|bao da|case|silicone)\b", query_text, _re.IGNORECASE)
+    )
     is_laptop_query = bool(_re.search(r"\b(lap|laptop|máy tính)\b", query_text, _re.IGNORECASE))
-    is_phone_query = bool(
+    is_phone_query = not is_case_query and bool(
         _re.search(r"\b(dt|đt|điện thoại|phone|iphone|samsung)\b", query_text, _re.IGNORECASE)
     )
 
     category_filter = ""
-    if is_laptop_query:
+    if is_case_query:
+        category_filter = "OR p.sku ILIKE 'CASE%'"
+    elif is_laptop_query:
         category_filter = "OR p.sku ILIKE 'LAPTOP%'"
     elif is_phone_query:
         category_filter = "OR p.sku ILIKE 'PHONE%'"

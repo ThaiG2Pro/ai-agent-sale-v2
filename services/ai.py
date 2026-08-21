@@ -204,20 +204,19 @@ def _resolve_local_embed_id(embed_model: str) -> str:
 
 
 async def _embed_local(texts: list[str]) -> list[list[float]]:
-    """Embed via fastembed in a worker thread (CPU-bound, keeps the loop free)."""
-    import asyncio
+    """Embed via local Ollama bge-m3 (fast, 0-download, CPU/RAM optimized)."""
+    import litellm
 
     from core.config import settings
 
-    global _local_embedder
     start_time = time.perf_counter()
-    model_id = _resolve_local_embed_id(settings.EMBED_MODEL)
-    if _local_embedder is None:
-        from fastembed import TextEmbedding
+    resp = await litellm.aembedding(
+        model="ollama/bge-m3",
+        input=texts,
+        api_base=settings.OLLAMA_EMBED_BASE_URL,
+    )
+    vectors = [item["embedding"] for item in resp.data]
 
-        _local_embedder = await asyncio.to_thread(TextEmbedding, model_name=model_id)
-    embedder = _local_embedder
-    vectors = await asyncio.to_thread(lambda: [v.tolist() for v in embedder.embed(texts)])
     for vec in vectors:
         if len(vec) != settings.EMBED_DIMENSION:
             raise ValueError(
@@ -225,8 +224,7 @@ async def _embed_local(texts: list[str]) -> list[list[float]]:
                 f"{len(vec)} (expected {settings.EMBED_DIMENSION})"
             )
     logfire.info(
-        "AI Embedding finished: {model} (local), Latency: {latency:.4f}s",
-        model=model_id,
+        "AI Embedding finished: bge-m3 (local), Latency: {latency:.4f}s",
         latency=time.perf_counter() - start_time,
     )
     return vectors

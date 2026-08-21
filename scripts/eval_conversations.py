@@ -61,8 +61,7 @@ PHONE = "0988111222"
 ADDRESS = "123 Nguyễn Trãi, Thanh Xuân, Hà Nội"
 PRICE_RE = re.compile(r"\d[\d.,]{4,}\s*(?:đ|vnd|₫|d\b)", re.IGNORECASE)
 
-# Catalog anchors (scripts/product-catalog.json) — keep in sync if catalog changes.
-P_CASE = ("Ốp lưng Silicone cho điện thoại", 199_000)  # Tier-1 small order
+P_CASE = ("Ốp lưng Silicone cho điện thoại (universal)", 199_000)  # Tier-1 small order
 P_MOUSE = ("Logitech MX Master 3S Wireless Mouse", 2_990_000)  # Tier-2
 P_KEYBOARD = ("Keychron K3 Pro Mechanical Keyboard RGB", 3_290_000)
 P_SONY = ("Sony WH-1000XM5 Wireless Headphones", 8_490_000)

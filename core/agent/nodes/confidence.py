@@ -226,7 +226,22 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
                 )
             else:
                 # Extract dynamic quantity from user message (e.g. "2 chiếc", "3 sp")
+                import re as _re
+
                 qty = _extract_quantity_from_text(user_msg)
+                phone_match = _re.search(
+                    r"(?:sđt|số điện thoại|phone|tel|đt)?\s*(0[35789][0-9]{8})\b",
+                    user_msg,
+                    _re.IGNORECASE,
+                )
+                phone = phone_match.group(1) if phone_match else None
+                addr_match = _re.search(
+                    r"(?:địa chỉ|đc|ở|tại)\s*[:\s]\s*([^,\n]+(?:,[^,\n]+)*)",
+                    user_msg,
+                    _re.IGNORECASE,
+                )
+                address = addr_match.group(1).strip() if addr_match else None
+
                 result["order_info"] = {
                     "product_id": str(product_id),
                     "sku": sku,
@@ -237,6 +252,8 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
                     "approved_price": price,
                     "total_price": price * qty,
                     "quantity": qty,
+                    "phone": phone,
+                    "address": address,
                     "status": "pending",
                     "items": [
                         {
