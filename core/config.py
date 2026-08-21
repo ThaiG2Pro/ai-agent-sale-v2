@@ -176,9 +176,10 @@ class Settings(BaseSettings):
     # to economy-chat inside AIGateway.complete).
     RESILIENCE_V3_ENABLED: bool = True
     # T09 timeout budget: per-call caps (cloud vs local) and the whole-turn
-    # budget after which the customer gets a holding message.
+    # v3-0 P3 (T09): per-call timeout budget. Local models get 90s (CPU inference under load),
+    # cloud models get 15s (network hop only).
+    LLM_TIMEOUT_LOCAL_S: float = Field(default=90.0, gt=0.0)
     LLM_TIMEOUT_CLOUD_S: float = Field(default=15.0, gt=0.0)
-    LLM_TIMEOUT_LOCAL_S: float = Field(default=25.0, gt=0.0)
     TURN_BUDGET_S: float = Field(default=30.0, gt=0.0)
     # T09: free-tier 429s last hours — never retry them; cool the rung down
     # and jump to the next one immediately.

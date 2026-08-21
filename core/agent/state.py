@@ -247,6 +247,8 @@ class AgentState(TypedDict):
     # v3-0 P4 (T11 4.2): per-turn — the router's conservative keyword gate
     # matched, so answer_node serves the template (no LLM calls this turn).
     smalltalk_fastpath: bool
+    # Variant or price mismatch explanation (e.g., requested 256GB when catalog has 512GB, or budget mismatch)
+    variant_mismatch_msg: str | None
 
 
 class NodeStreamEvent(BaseModel):
@@ -308,6 +310,7 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
         "hitl_approved": False,
         "hitl_freshness_valid": False,
         "estimated_token_cost": 0,
+        "variant_mismatch_msg": None,
         "order_info": None,
         "pending_info_questions": None,
         "cached_answer": None,

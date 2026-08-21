@@ -55,11 +55,14 @@ async def get_l1_cache(db: AsyncSession, query: str) -> dict | None:
     """
     import logfire
 
+    from services.rag.constants import get_compatible_embed_models
+
+    compatible_models = get_compatible_embed_models(settings.EMBED_MODEL)
     query_hash = generate_query_hash(query)
     stmt = (
         select(SemanticCache.response, SemanticCache.citations)
         .where(SemanticCache.query_hash == query_hash)
-        .where(SemanticCache.model_name == settings.EMBED_MODEL)
+        .where(SemanticCache.model_name.in_(compatible_models))
         .where(_ttl_filter())
     )
     result = await db.execute(stmt)
@@ -86,6 +89,9 @@ async def get_l2_cache(
     """
     import logfire
 
+    from services.rag.constants import get_compatible_embed_models
+
+    compatible_models = get_compatible_embed_models(settings.EMBED_MODEL)
     # Using cosine similarity (1 - distance)
     # pgvector <=> operator is cosine distance
     cos_dist = SemanticCache.embedding.cosine_distance(query_embedding)
@@ -93,7 +99,7 @@ async def get_l2_cache(
     stmt = (
         select(SemanticCache.response, SemanticCache.citations, similarity_col)
         .where(similarity_col > threshold)
-        .where(SemanticCache.model_name == settings.EMBED_MODEL)
+        .where(SemanticCache.model_name.in_(compatible_models))
         .where(_ttl_filter())
         .order_by(text("similarity DESC"))
         .limit(1)

@@ -621,6 +621,15 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
         )
         if modify_order_info:
             update_payload["order_info"] = modify_order_info
+            new_pname = (
+                modify_order_info.get("name") or modify_order_info.get("sku") or "sản phẩm mới"
+            )
+            modify_ack = (
+                f"Dạ shop đã ghi nhận bạn đổi ý sang **{new_pname}**. "
+                f"Yêu cầu đặt hàng mới đang được chuyển cho nhân viên xác nhận ngay ạ!"
+            )
+            update_payload["response"] = modify_ack
+            update_payload["messages"] = [*messages, AIMessage(content=modify_ack)]
             logger.info(
                 "SC08/SC3: MODIFY resolved: sku=%s qty=%s",
                 modify_order_info.get("sku"),
@@ -646,6 +655,42 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
             session_id,
         )
         return Command(goto="hitl_guard_node", update=update_payload)
+
+    # ADD-ON check: if customer added an extra item alongside original order
+    addon_rows = [r for r in queued_rows if _ADD_ON_PATTERNS.search(r.message_text)]
+    if addon_rows and not batch_result.has_modify and not batch_result.has_cancel:
+        addon_info = await _resolve_new_product_from_modify(addon_rows, db, state)
+        if addon_info and addon_info.get("product_id"):
+            current_order = dict(state.get("order_info") or {})
+            existing_items = list(current_order.get("items") or [])
+            if not existing_items and current_order.get("product_id"):
+                existing_items.append(
+                    {
+                        "product_id": current_order["product_id"],
+                        "product_name": current_order.get("name"),
+                        "sku": current_order.get("sku"),
+                        "quantity": current_order.get("quantity", 1),
+                        "unit_price": current_order.get("price", 0),
+                    }
+                )
+            addon_qty = _extract_quantity(addon_rows) or 1
+            existing_items.append(
+                {
+                    "product_id": addon_info["product_id"],
+                    "product_name": addon_info.get("name"),
+                    "sku": addon_info.get("sku"),
+                    "quantity": addon_qty,
+                    "unit_price": addon_info.get("price", 0),
+                }
+            )
+            current_order["items"] = existing_items
+            current_order["quantity"] = sum(int(i.get("quantity", 1)) for i in existing_items)
+            update_payload["order_info"] = current_order
+            logger.info(
+                "queue_consumer: ADD-ON resolved: added %s x%s to items",
+                addon_info.get("name"),
+                addon_qty,
+            )
 
     # SC5-fix: INFO_QUERY fallthrough — questions about product specs/policy.
     # Collect all question texts and store for answer_node to append to the order confirmation.

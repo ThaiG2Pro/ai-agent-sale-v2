@@ -59,3 +59,27 @@ ANSWER_SYSTEM_PROMPT = (
     "If the context does not fully answer the question, say so honestly.\n"
     "Do NOT cut your answer short — give a complete, helpful response."
 )
+
+
+def get_compatible_embed_models(model_name: str) -> list[str]:
+    """Returns all aliases sharing the same underlying vector embedding space.
+
+    Allows seamless switching of EMBED_MODEL in .env (e.g. ollama/bge-m3 <-> local/bge-m3)
+    without breaking database vector search or requiring re-embedding.
+    """
+    norm = (model_name or "").lower().strip()
+    if "bge-m3" in norm or "multilingual-e5-large" in norm:
+        return [
+            "ollama/bge-m3",
+            "local/bge-m3",
+            "bge-m3",
+            "hosted_vllm/bge-m3",
+            "intfloat/multilingual-e5-large",
+        ]
+    if "bge-small" in norm:
+        return ["ollama/bge-small", "local/bge-small", "bge-small", "BAAI/bge-small-en-v1.5"]
+    if "text-embedding-3-small" in norm:
+        return ["openai/text-embedding-3-small", "text-embedding-3-small"]
+    if "text-embedding-3-large" in norm:
+        return ["openai/text-embedding-3-large", "text-embedding-3-large"]
+    return [model_name]

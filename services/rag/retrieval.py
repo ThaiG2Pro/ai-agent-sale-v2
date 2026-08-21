@@ -31,6 +31,9 @@ async def hybrid_search_rrf(
     fetch_k = top_k * 2  # Over-fetch to have merge headroom
 
     # ── Vector search ─────────────────────────────────────────────────────────
+    from services.rag.constants import get_compatible_embed_models
+
+    compatible_embed_models = get_compatible_embed_models(settings.EMBED_MODEL)
     cos_dist = TextEmbedding.embedding.cosine_distance(query_vector)
     vector_sim = (1 - cos_dist).label("vector_score")
     vector_stmt = (
@@ -45,7 +48,7 @@ async def hybrid_search_rrf(
             vector_sim,
         )
         .join(TextEmbedding, Product.id == TextEmbedding.source_id)
-        .where(TextEmbedding.model_name == settings.EMBED_MODEL)
+        .where(TextEmbedding.model_name.in_(compatible_embed_models))
         .order_by(cos_dist)
         .limit(fetch_k)
     )
@@ -60,12 +63,17 @@ async def hybrid_search_rrf(
     import re as _re
 
     # Clean conversational prefixes and metadata for better FTS keyword extraction
-    clean_qtext = _re.sub(
-        r"^(tôi muốn mua|tôi mua|mình muốn mua|mình mua|tôi muốn đặt|tôi đặt|đặt cho tôi|đặt giúp tôi|mình muốn đặt|mình đặt|shop có những mẫu|shop có mẫu|shop có|cho tôi|tư vấn|bán cho tôi)\s+",
-        "",
-        query_text,
-        flags=_re.IGNORECASE,
-    ).strip()
+    clean_qtext = query_text
+    while True:
+        prev = clean_qtext
+        clean_qtext = _re.sub(
+            r"^(?:(?:hôm qua|hôm nay|vừa nãy|trước đó)?\s*shop nhắn(?: tôi)?\s*|trúng khuyến mãi\s*|được mua\s*|có chương trình\s*|tôi muốn mua|tôi mua|mình muốn mua|mình mua|tôi muốn đặt|tôi đặt|đặt cho tôi|đặt giúp tôi|mình muốn đặt|mình đặt|shop có những mẫu|shop có mẫu|shop có|cho tôi|tư vấn|bán cho tôi)\s*",
+            "",
+            clean_qtext,
+            flags=_re.IGNORECASE,
+        ).strip()
+        if clean_qtext == prev:
+            break
     # Strip contact info and price suffixes so plainto_tsquery gets the core product phrase
     clean_qtext = _re.sub(
         r"(?:sđt|số điện thoại|địa chỉ|giá).*$", "", clean_qtext, flags=_re.IGNORECASE

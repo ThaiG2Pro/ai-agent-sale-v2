@@ -326,11 +326,6 @@ class AIGateway:
         if isinstance(input_text, str):
             input_text = [input_text]
 
-        from core.config import settings as _settings
-
-        if _settings.EMBED_MODEL.startswith("local/"):
-            return await _embed_local(input_text)
-
         try:
             logfire.info("AI Embedding started: {model}", model=model)
 

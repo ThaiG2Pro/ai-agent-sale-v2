@@ -183,8 +183,11 @@ async def post_agent_query(
             for task in snapshot.tasks or []:
                 for intr in getattr(task, "interrupts", None) or []:
                     iv = getattr(intr, "value", None)
-                    if isinstance(iv, dict) and "pause_id" in iv:
-                        pause_id = iv["pause_id"]
+                    if isinstance(iv, dict):
+                        if "pause_id" in iv:
+                            pause_id = iv["pause_id"]
+                        if "response" in iv and not final_state.get("response"):
+                            final_state["response"] = iv["response"]
                         break
                 if pause_id:
                     break
@@ -197,7 +200,8 @@ async def post_agent_query(
 
         if is_hitl_paused:
             answer = (
-                "Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên. "
+                final_state.get("response")
+                or "Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên. "
                 "Chúng tôi sẽ phản hồi sớm nhất có thể. Cảm ơn bạn đã kiên nhẫn!"
             )
         else:

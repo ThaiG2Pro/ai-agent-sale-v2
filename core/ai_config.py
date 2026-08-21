@@ -121,13 +121,10 @@ def _litellm_params(model_str: str, **extra: Any) -> dict[str, Any]:
         params["api_base"] = settings.LLAMA_SERVER_BASE_URL
         params["custom_llm_provider"] = "hosted_vllm"
         params.setdefault("api_key", "sk-no-key-required")
-    elif model_str.startswith("ollama/") or model_str.startswith("ollama_chat/"):
-        real_model = model_str.split("/", 1)[1] if "/" in model_str else model_str
+    elif model_str.startswith("local/"):
+        real_model = model_str.removeprefix("local/")
         params["model"] = f"ollama/{real_model}"
-        if "bge" in real_model or "embed" in real_model:
-            params["api_base"] = settings.OLLAMA_EMBED_BASE_URL
-        else:
-            params["api_base"] = settings.OLLAMA_BASE_URL
+        params["api_base"] = settings.OLLAMA_EMBED_BASE_URL
         params["num_ctx"] = settings.OLLAMA_NUM_CTX
 
     return params
@@ -178,6 +175,12 @@ LITELLM_CONFIG = {
             "model_info": {"id": "fallback-chat-8b-model"},
             "litellm_params": _litellm_params("groq/llama-3.1-8b-instant", stream=False),
         },
+        # ── Universal Embedding Tier: dynamically configured via EMBED_MODEL ───────
+        {
+            "model_name": "economy-embedding",
+            "model_info": {"id": "economy-embedding-model"},
+            "litellm_params": _litellm_params(settings.EMBED_MODEL),
+        },
     ],
     "routing_strategy": "simple-shuffle",
     # v3-0 P3 (T09): free-tier 429s persist for hours — cool the deployment
@@ -201,12 +204,3 @@ if settings.RESILIENCE_V3_ENABLED:
         LITELLM_CONFIG["num_retries"] = 0
     except Exception:  # pragma: no cover — older litellm without RetryPolicy
         LITELLM_CONFIG["num_retries"] = 0
-
-if not settings.EMBED_MODEL.startswith("local/"):
-    LITELLM_CONFIG["model_list"].append(
-        {
-            "model_name": "economy-embedding",
-            "model_info": {"id": "economy-embedding-model"},
-            "litellm_params": _litellm_params(settings.EMBED_MODEL),
-        }
-    )

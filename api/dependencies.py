@@ -118,19 +118,10 @@ async def check_paused_session(
         ]
         msg_lower = message.lower()
         if any(kw in msg_lower for kw in cancel_keywords):
-            hitl_meta.status = "rejected"
-            hitl_meta.pause_reason = "cancelled_by_customer"
-            from sqlalchemy import update
-
-            from models.schema import Order
-
-            await db.execute(
-                update(Order).where(Order.session_id == session_id).values(status="cancelled")
-            )
-            await db.commit()
+            await HITLService.enqueue_message(session_id, message, db)
             return {
                 "queued": True,
-                "message": "Dạ, đơn hàng đang chờ duyệt của anh/chị đã được hủy thành công theo yêu cầu ạ. Cảm ơn anh/chị đã nhắn cho shop!",
+                "message": "Dạ, yêu cầu hủy đơn hàng của anh/chị đã được ghi nhận. Shop sẽ xử lý hủy đơn ngay ạ.",
             }
 
         # Check if customer wants to update shipping address or phone number

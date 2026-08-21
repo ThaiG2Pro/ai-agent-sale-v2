@@ -223,6 +223,33 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
         if "intent_negotiation" not in risk_signals:
             risk_signals.append("intent_negotiation")
 
+    # Validation gate: Missing contact info (phone or address) must be requested from customer,
+    # never passed to human review without fulfillment info (Closes Case 04).
+    if intent == "ORDER_PLACEMENT" and state.get("order_info"):
+        order_info = state["order_info"]
+        has_phone = bool(order_info.get("phone"))
+        has_address = bool(order_info.get("address"))
+        if not has_phone or not has_address:
+            missing_items = []
+            if not has_phone:
+                missing_items.append("số điện thoại")
+            if not has_address:
+                missing_items.append("địa chỉ nhận hàng")
+            missing_str = " và ".join(missing_items)
+            p_name = order_info.get("name") or order_info.get("product_name") or "sản phẩm"
+            req_msg = (
+                f"Dạ em đã ghi nhận bạn muốn đặt mua **{p_name}**. "
+                f"Bạn vui lòng cung cấp thêm **{missing_str}** để shop hỗ trợ tạo đơn giao tận nơi cho bạn nhé! 😊"
+            )
+            return Command(
+                goto="answer_node",
+                update={
+                    "response": req_msg,
+                    "hitl_paused": False,
+                    "hitl_triggered": False,
+                },
+            )
+
     risk_tier: int | None = None
     if not trigger_hitl and settings.RISK_HITL_ENABLED:
         # WP-V2-4: composite risk score → 3 tiers (kill switch above).
@@ -458,6 +485,29 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                 except Exception:
                     logger.warning("admin handoff notify failed", exc_info=True)
 
+        user_msg = ""
+        for m in reversed(state.get("messages", [])):
+            if getattr(m, "type", None) == "human" or getattr(m, "role", None) == "user":
+                user_msg = getattr(m, "content", "")
+                break
+
+        import re as _re
+
+        is_avail_query = bool(
+            _re.search(r"còn\s*(?:hàng|không|k\b|ko\b)|sẵn\s*hàng", user_msg, _re.IGNORECASE)
+        )
+        if is_avail_query and order_info:
+            p_name = order_info.get("name") or order_info.get("product_name") or "sản phẩm"
+            holding_msg = (
+                f"Dạ sản phẩm **{p_name}** hiện còn hàng sẵn tại shop ạ! "
+                f"Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên, shop sẽ phản hồi sớm nhất có thể. Cảm ơn bạn đã kiên nhẫn! 🙏"
+            )
+        else:
+            holding_msg = (
+                "Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên. "
+                "Chúng tôi sẽ phản hồi sớm nhất có thể. Cảm ơn bạn đã kiên nhẫn!"
+            )
+
         # Call interrupt() (FR-001)
         # Execution pauses here. LangGraph checkpoints state and suspends.
         # ainvoke() returns the state snapshot at this point.
@@ -467,10 +517,12 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                 "pause_id": str(pause_id),
                 "reason": reason,
                 "session_id": session_id,
+                "response": holding_msg,
                 "state_snapshot": {
                     "intent": intent,
                     "order_info": order_info,
                     "confidence_score": confidence_score,
+                    "response": holding_msg,
                 },
             }
         )

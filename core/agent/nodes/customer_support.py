@@ -68,7 +68,9 @@ async def customer_support_node(state: AgentState, config: RunnableConfig) -> Co
             ],
             temperature=0.3,
         )
-        empathetic_message = response.choices[0].message.content
+        empathetic_message = response.choices[0].message.content or ""
+        if reason and reason not in empathetic_message:
+            empathetic_message = f"{empathetic_message}\n\n(Lý do: {reason})"
     except Exception as e:
         logger.error(f"Failed to compose empathetic message for {session_id}: {e}")
         empathetic_message = (
