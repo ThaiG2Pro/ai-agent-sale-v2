@@ -207,8 +207,14 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
     # WP-V2-3: clarify-reply turn — merge the customer's reply into the stored
     # original query and clear the pending flag. clarify_count stays at 1 so a
     # still-borderline merged query declines instead of clarifying again.
+    # If the user started a fresh ORDER_PLACEMENT or shifted intent, reset clarify state.
     clarify_updates: dict = {}
-    if state.get("awaiting_clarification") and state.get("clarify_original_query"):
+    is_new_order_or_shift = intent == "ORDER_PLACEMENT" or state.get("intent_shift", False)
+    if (
+        not is_new_order_or_shift
+        and state.get("awaiting_clarification")
+        and state.get("clarify_original_query")
+    ):
         orig_q = state["clarify_original_query"]
         user_reply_clean = raw_query.strip().lower()
         affirmation_words = {
@@ -236,9 +242,13 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
             raw_query = f"{orig_q} {raw_query}"
         clarify_updates = {"awaiting_clarification": False, "clarify_original_query": None}
         logger.info("Clarify merge → %r", raw_query)
-    elif int(state.get("clarify_count") or 0):
-        # Fresh query (no pending clarify) → the 1-clarify budget resets
-        clarify_updates = {"clarify_count": 0}
+    elif state.get("awaiting_clarification") or int(state.get("clarify_count") or 0):
+        # Fresh query (no pending clarify) or new order → the 1-clarify budget resets
+        clarify_updates = {
+            "awaiting_clarification": False,
+            "clarify_original_query": None,
+            "clarify_count": 0,
+        }
 
     # SC09: expand pronoun queries with previous citation context
     query = _expand_pronoun_query(raw_query, state)

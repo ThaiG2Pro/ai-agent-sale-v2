@@ -18,6 +18,7 @@ from sqlalchemy import select, update
 
 from core.config import settings
 from models.schema import QueuedMessage
+from services.ai import AIGateway
 from services.hitl.schemas import QueuedMessageBatch, QueueIntentResult
 
 if TYPE_CHECKING:
@@ -506,19 +507,47 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
             if settings.INTENT_TRACKING_V3_ENABLED:
                 batch_result, force_review = _postvalidate_llm_batch(batch_result, queued_rows)
 
-        except Exception as e:
-            logger.error(f"Batch classification failed for {session_id}: {e}")
-            if settings.INTENT_TRACKING_V3_ENABLED:
-                # F2 guard: an out-of-enum LLM label (e.g. FOLLOW_UP for
-                # "Tôi đổi ý rồi, lấy Xiaomi đi") raises ValidationError and
-                # used to land here as an implicit CONFIRM of the OLD order.
-                # Uncertainty during a paused order goes back to the human.
-                batch_result = QueuedMessageBatch(session_id=session_id, messages=[])
-                force_review = True
-            else:
-                batch_result = QueuedMessageBatch(
-                    session_id=session_id, messages=[], has_confirm=True
+        except Exception as initial_err:
+            try:
+                response = await AIGateway.complete(
+                    model=settings.LIGHT_CHAT_MODEL,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "Classify the collective intent of customer messages sent "
+                                "while their order was under admin review.\n\n"
+                                "OUTPUT JSON format:\n"
+                                f'{{"session_id": "{session_id}", "messages": [], "has_confirm": false, "has_cancel": false, "has_modify": false, "has_info": false}}\n\n'
+                                "Rules:\n"
+                                "- MODIFY_ORDER: customer wants to REPLACE product/quantity\n"
+                                "- CANCEL: customer wants to cancel\n"
+                                "- CONFIRM: customer confirms existing order OR wants to ADD an item\n"
+                                "- OTHER: unrelated info query"
+                            ),
+                        },
+                        {"role": "user", "content": batch_text},
+                    ],
+                    response_format={"type": "json_object"},
                 )
+                content = response.choices[0].message.content
+                if isinstance(content, str):
+                    batch_result = QueuedMessageBatch.model_validate_json(content)
+                else:
+                    batch_result = QueuedMessageBatch.model_validate(content)
+                if settings.INTENT_TRACKING_V3_ENABLED:
+                    batch_result, force_review = _postvalidate_llm_batch(batch_result, queued_rows)
+            except Exception as e:
+                logger.error(
+                    f"Batch classification failed for {session_id}: {e} (initial: {initial_err})"
+                )
+                if settings.INTENT_TRACKING_V3_ENABLED:
+                    batch_result = QueuedMessageBatch(session_id=session_id, messages=[])
+                    force_review = True
+                else:
+                    batch_result = QueuedMessageBatch(
+                        session_id=session_id, messages=[], has_confirm=True
+                    )
 
     # --- T032-T034: Routing ---
     # Mark messages as processed in DB (atomic UPDATE)

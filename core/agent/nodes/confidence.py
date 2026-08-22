@@ -70,6 +70,7 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     similarity = state.get("similarity_score", 0.0)
     rerank = state.get("rerank_score", None)
     already_declined = state.get("declined", False)
+    user_msg = state.get("user_message", "")
 
     # Path 1: Layer 1 fast-path — already declined from retrieval
     if already_declined:
@@ -173,11 +174,21 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
         # browse) — top citations are a near-tie, so auto-selecting the first
         # one orders the wrong product. Ask ONE clarifying question instead.
         # Anti-loop: clarify_count < 1 (same guard as WP-V2-3).
+        top_name = (
+            citations[0].name if hasattr(citations[0], "name") else citations[0].get("name", "")
+        ).lower()
+        user_named_top_product = any(
+            part in user_msg.lower()
+            for part in top_name.split()
+            if len(part) >= 4
+            and part not in ("laptop", "phone", "tai", "nghe", "chuột", "bàn", "phím", "wireless")
+        )
         if (
             settings.INTENT_TRACKING_V3_ENABLED
             and settings.CLARIFY_ENABLED
             and len(citations) >= 2
             and similarity_gap <= settings.CLARIFY_SIMILARITY_GAP_MAX
+            and not user_named_top_product
         ):
             if clarify_count < clarify_quota:
                 result["needs_clarification"] = True

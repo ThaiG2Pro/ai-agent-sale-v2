@@ -223,6 +223,40 @@ async def router_node(state: AgentState) -> Command:
             },
         )
 
+    import re as _re
+
+    # Explicit negotiation detection (e.g. "Giảm còn 2 triệu thì tôi lấy...", "bớt cho tôi...")
+    if _re.search(
+        r"(?:giảm|bớt|chiết khấu|fix|deal)\s*(?:còn|cho)?\s*\d+|giá\s*\d+.*(?:thì lấy|thì mua|được không)",
+        user_msg_lower,
+    ):
+        return Command(
+            goto="hitl_guard_node",
+            update={
+                "intent": IntentEnum.NEGOTIATION.value,
+                "secondary_intents": [],
+                "intent_confidence": 0.95,
+                "intent_shift": previous_intent not in (None, IntentEnum.NEGOTIATION.value),
+                "intent_disagreement_count": 0,
+            },
+        )
+
+    # Explicit order placement detection (e.g. "Tôi muốn đặt 1 cái tai nghe...", "Đặt cho tôi 1 con...")
+    if _re.search(
+        r"^(?:tôi muốn đặt|tôi đặt|đặt cho tôi|đặt giúp tôi|mình muốn đặt|mình đặt|mua cho tôi|tôi muốn mua|mình muốn mua)\s+\d+",
+        user_msg_lower,
+    ):
+        return Command(
+            goto="retrieval_node",
+            update={
+                "intent": IntentEnum.ORDER_PLACEMENT.value,
+                "secondary_intents": [],
+                "intent_confidence": 0.98,
+                "intent_shift": previous_intent not in (None, IntentEnum.ORDER_PLACEMENT.value),
+                "intent_disagreement_count": 0,
+            },
+        )
+
     # v3-0 P4 (T11 4.2): in-graph SMALLTALK fast-path — saves both the router
     # LLM call and the answer LLM call (template branch in answer_node).
     # Checkpoint still records messages + intent (combo 1.1 stays fed).
@@ -333,7 +367,18 @@ async def router_node(state: AgentState) -> Command:
         import json
 
         data = json.loads(raw_content)
-        primary = data.get("primary_intent") or data.get("intent") or "INFO_QUERY"
+        primary = str(data.get("primary_intent") or data.get("intent") or "INFO_QUERY").upper()
+        if primary in ("REQUEST_DISCOUNT", "DISCOUNT", "BARGAIN", "PRICE_NEGOTIATION"):
+            primary = "NEGOTIATION"
+        elif primary in ("BUY", "ORDER", "PURCHASE", "ORDER_CONFIRMATION"):
+            primary = "ORDER_PLACEMENT"
+        elif primary in ("GREETING", "CHITCHAT", "HELLO"):
+            primary = "SMALLTALK"
+        elif primary in ("INQUIRE_PRICE", "CHECK_PRICE"):
+            primary = "PRICING"
+        elif primary in ("INQUIRE_STOCK", "CHECK_STOCK"):
+            primary = "AVAILABILITY"
+
         try:
             primary_enum = IntentEnum(primary)
         except ValueError:

@@ -1,0 +1,26 @@
+{
+  "run_id": "20260822-052822",
+  "base_url": "http://localhost:8000",
+  "passed": 11,
+  "total": 14,
+  "deflection_run_local": 0.5,
+  "metrics_before": {
+    "deflection_rate": 0.23684210526315788,
+    "deflection_target": 0.8,
+    "total_sessions": 114,
+    "handoff_sessions": 87,
+    "support_queue_depth": 39,
+    "hitl_paused_count": 3,
+    "degraded_turns": 0
+  },
+  "metrics_after": {
+    "deflection_rate": 0.2231404958677686,
+    "deflection_target": 0.8,
+    "total_sessions": 121,
+    "handoff_sessions": 94,
+    "support_queue_depth": 41,
+    "hitl_paused_count": 4,
+    "degraded_turns": 0
+  },
+  "aborted": false
+}

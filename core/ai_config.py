@@ -93,6 +93,15 @@ def _litellm_params(model_str: str, **extra: Any) -> dict[str, Any]:
 
     params: dict[str, Any] = {"model": model_str, **extra}
 
+    # Bind provider API key explicitly from settings
+    if "/" in model_str:
+        prefix = model_str.split("/", 1)[0].lower()
+        if prefix in PROVIDER_KEY_MAP:
+            key_attr = PROVIDER_KEY_MAP[prefix]
+            key_val = getattr(settings, key_attr, None) or os.environ.get(key_attr)
+            if key_val and key_val not in ("", "sk-no-key-required"):
+                params["api_key"] = key_val
+
     # v3-0 P3 (T09 timeout budget): per-call cap — local models get a longer
     # leash (25s) than cloud (15s); a hung call must never hang the turn.
     if settings.RESILIENCE_V3_ENABLED:

@@ -153,6 +153,7 @@ class EvalClient:
             raise RuntimeError(f"/agent/query HTTP {resp.status_code}: {resp.text[:200]}")
         data = resp.json()
         result.transcript.append({"role": "assistant", "content": data.get("answer", "")})
+        await asyncio.sleep(2.0)
         return data
 
     async def hitl_state(self, sess: str) -> dict:
