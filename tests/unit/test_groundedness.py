@@ -56,14 +56,13 @@ def _accepted_state(**over) -> dict:
 @pytest.mark.asyncio
 async def test_check_groundedness_parses_router_verdict():
     payload = _llm_result('{"answerable": true, "supported": false, "unsupported_claims": ["x"]}')
-    with patch("services.rag.groundedness.ai_router") as router:
-        router.acompletion = AsyncMock(return_value=payload)
+    with patch("services.ai.AIGateway.complete", new=AsyncMock(return_value=payload)) as complete:
         verdict = await check_groundedness("q", "a", "ctx")
     assert verdict.answerable is True
     assert verdict.supported is False
     assert verdict.unsupported_claims == ["x"]
     # economy tier, structured output, deterministic
-    kwargs = router.acompletion.call_args.kwargs
+    kwargs = complete.call_args.kwargs
     assert kwargs["model"] == "economy-chat"
     assert kwargs["response_format"] is GroundednessVerdict
     assert kwargs["temperature"] == 0
@@ -71,18 +70,16 @@ async def test_check_groundedness_parses_router_verdict():
 
 @pytest.mark.asyncio
 async def test_check_groundedness_fails_open_on_llm_error():
-    with patch("services.rag.groundedness.ai_router") as router:
-        router.acompletion = AsyncMock(side_effect=RuntimeError("boom"))
+    with patch("services.ai.AIGateway.complete", new=AsyncMock(side_effect=RuntimeError("boom"))):
         verdict = await check_groundedness("q", "a", "ctx")
     assert verdict.answerable is True and verdict.supported is True
 
 
 @pytest.mark.asyncio
 async def test_check_groundedness_empty_answer_short_circuits():
-    with patch("services.rag.groundedness.ai_router") as router:
-        router.acompletion = AsyncMock()
+    with patch("services.ai.AIGateway.complete", new=AsyncMock()) as complete:
         verdict = await check_groundedness("q", "   ", "ctx")
-    router.acompletion.assert_not_called()
+    complete.assert_not_called()
     assert verdict.supported is True
 
 

@@ -77,15 +77,14 @@ async def _decompose_query(query: str) -> list[str] | None:
         "Respond ONLY with valid JSON matching the schema."
     )
     try:
-        result = await AIGateway.complete(
-            model="economy-chat",
+        decomposed = await AIGateway.complete_structured(
+            DecomposedQuery,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query},
             ],
-            response_format=DecomposedQuery,
+            model="economy-chat",
         )
-        decomposed = DecomposedQuery.model_validate_json(result.choices[0].message.content)
     except Exception as e:
         logger.warning("Query decomposition LLM call failed for %r: %s", query, e)
         return None
@@ -207,9 +206,12 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
     # WP-V2-3: clarify-reply turn — merge the customer's reply into the stored
     # original query and clear the pending flag. clarify_count stays at 1 so a
     # still-borderline merged query declines instead of clarifying again.
-    # If the user started a fresh ORDER_PLACEMENT or shifted intent, reset clarify state.
+    # If the user started a fresh ORDER_PLACEMENT, reset clarify state instead
+    # of merging. Actionable intent shifts (CANCEL/COMPLAINT/NEGOTIATION/...)
+    # are already reset by router_node's Context Reset Invariant before this
+    # node runs; info-intent "shifts" are terse clarify replies and MUST merge.
     clarify_updates: dict = {}
-    is_new_order_or_shift = intent == "ORDER_PLACEMENT" or state.get("intent_shift", False)
+    is_new_order_or_shift = intent == "ORDER_PLACEMENT"
     if (
         not is_new_order_or_shift
         and state.get("awaiting_clarification")

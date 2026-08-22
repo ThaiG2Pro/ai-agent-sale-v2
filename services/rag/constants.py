@@ -69,17 +69,25 @@ def get_compatible_embed_models(model_name: str) -> list[str]:
     """
     norm = (model_name or "").lower().strip()
     if "bge-m3" in norm or "multilingual-e5-large" in norm:
-        return [
+        aliases = [
             "ollama/bge-m3",
             "local/bge-m3",
             "bge-m3",
             "hosted_vllm/bge-m3",
             "intfloat/multilingual-e5-large",
+            "local/multilingual-e5-large",
         ]
-    if "bge-small" in norm:
-        return ["ollama/bge-small", "local/bge-small", "bge-small", "BAAI/bge-small-en-v1.5"]
-    if "text-embedding-3-small" in norm:
-        return ["openai/text-embedding-3-small", "text-embedding-3-small"]
-    if "text-embedding-3-large" in norm:
-        return ["openai/text-embedding-3-large", "text-embedding-3-large"]
-    return [model_name]
+    elif "bge-small" in norm:
+        aliases = ["ollama/bge-small", "local/bge-small", "bge-small", "BAAI/bge-small-en-v1.5"]
+    elif "text-embedding-3-small" in norm:
+        aliases = ["openai/text-embedding-3-small", "text-embedding-3-small"]
+    elif "text-embedding-3-large" in norm:
+        aliases = ["openai/text-embedding-3-large", "text-embedding-3-large"]
+    else:
+        aliases = []
+    # The configured name itself must always match — cache/embedding rows are
+    # written with model_name=EMBED_MODEL verbatim, so a lookup list that
+    # excludes it silently misses every row (root cause of the TTL test reds).
+    if model_name and model_name not in aliases:
+        aliases.append(model_name)
+    return aliases

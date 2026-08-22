@@ -60,18 +60,16 @@ async def extract_keywords_structured(
     ]
 
     try:
-        from services.ai import ai_router
+        from services.ai import AIGateway
 
-        response = await ai_router.acompletion(
+        extracted = await AIGateway.complete_structured(
+            KeywordExtraction,
+            messages,
             model="light-chat",  # qwen3:0.6b — cheap extraction task
-            messages=messages,
-            response_format=KeywordExtraction,
             temperature=0,  # Consistency
             timeout=45,  # Hard cap — prevents 900s+ hangs on Ollama
         )
         latency = time.perf_counter() - start_time
-        content = response.choices[0].message.content
-        extracted = KeywordExtraction.model_validate_json(content)
         logfire.info(
             "Keywords extracted: count={c}, latency={l:.3f}s",
             c=len(extracted.keywords),
@@ -126,17 +124,15 @@ async def enrich_metadata_async(
     ]
 
     try:
-        from services.ai import ai_router
+        from services.ai import AIGateway
 
-        response = await ai_router.acompletion(
+        enriched = await AIGateway.complete_structured(
+            ProductMetadata,
+            messages,
             model="economy-chat",
-            messages=messages,
-            response_format=ProductMetadata,
             temperature=0,  # Consistency
         )
         latency = time.perf_counter() - start_time
-        content = response.choices[0].message.content
-        enriched = ProductMetadata.model_validate_json(content)
         logfire.info(
             "Metadata enriched: specs_count={sc}, keywords={kc}, category={cat}, latency={l:.3f}s",
             sc=len(enriched.technical_specs),

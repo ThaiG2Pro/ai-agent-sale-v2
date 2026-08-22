@@ -16,7 +16,7 @@ import time
 import logfire
 from pydantic import BaseModel, Field
 
-from services.ai import ai_router
+from services.ai import AIGateway
 
 # Regeneration prompt appended on a groundedness failure — tightens the answer
 # to context-only claims. Kept here (not constants.py) because it is owned by
@@ -86,13 +86,12 @@ async def check_groundedness(query: str, answer: str, context: str) -> Groundedn
         },
     ]
     try:
-        response = await ai_router.acompletion(
+        verdict = await AIGateway.complete_structured(
+            GroundednessVerdict,
+            messages,
             model="economy-chat",
-            messages=messages,
-            response_format=GroundednessVerdict,
             temperature=0,
         )
-        verdict = GroundednessVerdict.model_validate_json(response.choices[0].message.content)
         logfire.info(
             "groundedness verdict: answerable={a} supported={s} claims={n} ({t:.2f}s)",
             a=verdict.answerable,

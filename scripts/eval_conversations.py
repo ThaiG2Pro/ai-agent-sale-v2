@@ -602,6 +602,23 @@ async def main() -> int:
         print(f"❌ Cannot reach {base}: {e}")
         return 2
 
+    # Preflight: top inventory back up (2026-22-8 report §2C) — repeated runs
+    # place real orders and drain stock to 0, making later cases fail with
+    # genuine out-of-stock declines. Best-effort: older deployments 404 here.
+    try:
+        restock = await client.http.post(
+            f"{base}/admin/rag/restock",
+            headers=client.admin,
+            json={"min_stock": 50},
+            timeout=15.0,
+        )
+        if restock.status_code == 200:
+            print(f"📦 Restock: {restock.json()}")
+        else:
+            print(f"⚠ Restock skipped (HTTP {restock.status_code}) — stock may be depleted.")
+    except Exception as e:
+        print(f"⚠ Restock skipped ({e}) — stock may be depleted.")
+
     metrics_before = await client.metrics()
     results: list[CaseResult] = []
     aborted = False

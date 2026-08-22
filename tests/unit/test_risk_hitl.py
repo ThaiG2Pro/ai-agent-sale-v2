@@ -57,6 +57,11 @@ def _order_state(price: float, confidence: float = 0.9, customer_id: str = "cust
             "approved_price": price,
             "quantity": 1,
             "status": "pending",
+            # Contact gate (Case 04): missing phone/address short-circuits to
+            # answer_node before any tier logic — provide both so the tier
+            # behavior under test is actually reached.
+            "phone": "0988111222",
+            "address": "123 Nguyễn Trãi, Hà Nội",
         },
     }
 

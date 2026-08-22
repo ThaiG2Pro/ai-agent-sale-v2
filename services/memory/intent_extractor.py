@@ -73,9 +73,9 @@ class SalesIntentExtractor:
         try:
             from services.ai import AIGateway
 
-            # LiteLLM call via AIGateway with response_format for structured output (Article XII)
-            response = await AIGateway.complete(
-                model="light-chat",
+            # Universal JSON extractor (2026-22-8 report §4.1) — dict on every
+            # provider; enum coercion below stays app-side.
+            parsed = await AIGateway.complete_json(
                 messages=[
                     {
                         "role": "system",
@@ -89,46 +89,29 @@ class SalesIntentExtractor:
                     },
                     {"role": "user", "content": conversation_text},
                 ],
-                response_format=SalesIntentExtraction,  # Pydantic validation
+                model="light-chat",
+                schema=SalesIntentExtraction,
                 temperature=0.2,  # Low temperature for factual extraction (not creative)
                 timeout=10,
             )
 
-            # Parse structured response
-            if hasattr(response, "choices") and len(response.choices) > 0:
-                content = response.choices[0].message.content
-                if isinstance(content, dict):
-                    parsed = dict(content)
-                else:
-                    # Fallback: Parse JSON string if needed
-                    import json
+            # SalesIntentExtraction is strict=True, so it rejects a plain
+            # JSON string for the urgency_level enum field — coerce it
+            # explicitly here (raw LiteLLM/JSON output is always a str).
+            raw_urgency = parsed.get("urgency_level")
+            if raw_urgency is not None and not isinstance(raw_urgency, UrgencyLevel):
+                try:
+                    parsed["urgency_level"] = UrgencyLevel(raw_urgency)
+                except ValueError:
+                    parsed["urgency_level"] = UrgencyLevel.UNKNOWN
 
-                    parsed = json.loads(content)
+            extraction = SalesIntentExtraction(**parsed)
 
-                # SalesIntentExtraction is strict=True, so it rejects a plain
-                # JSON string for the urgency_level enum field — coerce it
-                # explicitly here (raw LiteLLM/JSON output is always a str).
-                raw_urgency = parsed.get("urgency_level")
-                if raw_urgency is not None and not isinstance(raw_urgency, UrgencyLevel):
-                    try:
-                        parsed["urgency_level"] = UrgencyLevel(raw_urgency)
-                    except ValueError:
-                        parsed["urgency_level"] = UrgencyLevel.UNKNOWN
-
-                extraction = SalesIntentExtraction(**parsed)
-
-                logger.debug(
-                    "Intent extraction successful",
-                    extra={"urgency": extraction.urgency_level.value},
-                )
-                return extraction
-
-            # Response format not recognized
-            logger.warning(
-                "Unexpected LiteLLM response format",
-                extra={"response_type": type(response)},
+            logger.debug(
+                "Intent extraction successful",
+                extra={"urgency": extraction.urgency_level.value},
             )
-            return SalesIntentExtraction()
+            return extraction
 
         except Exception as e:
             # Graceful failure: log and return defaults (Article VII)

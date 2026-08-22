@@ -81,10 +81,10 @@ async def test_queue_consumer_cancel_override(initial_state, mock_config, mock_d
         ],
     )
 
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = batch_result
-
-    with patch("litellm.acompletion", return_value=mock_response):
+    with patch(
+        "core.agent.nodes.queue_consumer.AIGateway.complete_structured",
+        new=AsyncMock(return_value=batch_result),
+    ):
         result = await queue_consumer_node(initial_state, mock_config)
 
         assert result.goto == "cancellation_node"

@@ -172,6 +172,40 @@ _FALLBACK_CLASSIFICATION = IntentClassification(
 )
 
 
+# Intents that abandon a pending clarification when they arrive as a shift.
+# Info-flavored intents are excluded on purpose: a terse clarify reply
+# ("Dell XPS 15") routinely classifies as a different info intent than the
+# original question, and treating that as a shift would drop the merge.
+_CONTEXT_RESET_INTENTS = frozenset(
+    {
+        IntentEnum.ORDER_PLACEMENT.value,
+        IntentEnum.CANCEL.value,
+        IntentEnum.COMPLAINT.value,
+        IntentEnum.NEGOTIATION.value,
+        IntentEnum.SMALLTALK.value,
+    }
+)
+
+
+def _with_context_reset(update: dict) -> dict:
+    """Context Reset Invariant (2026-22-8 report §4.2).
+
+    A shift to an actionable intent releases any pending clarification
+    context in the SAME Command that records the shift — otherwise
+    retrieval_node merges the stale `clarify_original_query` into the new
+    topic's query (the report's "stale clarification loop": turn-2 topic
+    change re-triggers turn-1's clarifying question). Applied to every
+    router Command so no path can carry the old context forward.
+    """
+    if update.get("intent_shift") and update.get("intent") in _CONTEXT_RESET_INTENTS:
+        update.update(
+            awaiting_clarification=False,
+            clarify_original_query=None,
+            clarify_count=0,
+        )
+    return update
+
+
 async def router_node(state: AgentState) -> Command:
     """Classify user intent and route to next node (T044).
 
@@ -195,13 +229,15 @@ async def router_node(state: AgentState) -> Command:
     if any(kw in user_msg_lower for kw in cancel_keywords):
         return Command(
             goto="cancellation_node",
-            update={
-                "intent": IntentEnum.CANCEL.value,
-                "secondary_intents": [],
-                "intent_confidence": 1.0,
-                "intent_shift": previous_intent not in (None, IntentEnum.CANCEL.value),
-                "intent_disagreement_count": 0,
-            },
+            update=_with_context_reset(
+                {
+                    "intent": IntentEnum.CANCEL.value,
+                    "secondary_intents": [],
+                    "intent_confidence": 1.0,
+                    "intent_shift": previous_intent not in (None, IntentEnum.CANCEL.value),
+                    "intent_disagreement_count": 0,
+                }
+            ),
         )
 
     # v3-0 P1 (T03 rec 2, F5): hesitation/defer signal while an order-ish
@@ -214,48 +250,22 @@ async def router_node(state: AgentState) -> Command:
         )
         return Command(
             goto="cancellation_node",
-            update={
-                "intent": IntentEnum.CANCEL.value,
-                "secondary_intents": [],
-                "intent_confidence": 0.9,
-                "intent_shift": True,
-                "intent_disagreement_count": 0,
-            },
+            update=_with_context_reset(
+                {
+                    "intent": IntentEnum.CANCEL.value,
+                    "secondary_intents": [],
+                    "intent_confidence": 0.9,
+                    "intent_shift": True,
+                    "intent_disagreement_count": 0,
+                }
+            ),
         )
 
-    import re as _re
-
-    # Explicit negotiation detection (e.g. "Giảm còn 2 triệu thì tôi lấy...", "bớt cho tôi...")
-    if _re.search(
-        r"(?:giảm|bớt|chiết khấu|fix|deal)\s*(?:còn|cho)?\s*\d+|giá\s*\d+.*(?:thì lấy|thì mua|được không)",
-        user_msg_lower,
-    ):
-        return Command(
-            goto="hitl_guard_node",
-            update={
-                "intent": IntentEnum.NEGOTIATION.value,
-                "secondary_intents": [],
-                "intent_confidence": 0.95,
-                "intent_shift": previous_intent not in (None, IntentEnum.NEGOTIATION.value),
-                "intent_disagreement_count": 0,
-            },
-        )
-
-    # Explicit order placement detection (e.g. "Tôi muốn đặt 1 cái tai nghe...", "Đặt cho tôi 1 con...")
-    if _re.search(
-        r"^(?:tôi muốn đặt|tôi đặt|đặt cho tôi|đặt giúp tôi|mình muốn đặt|mình đặt|mua cho tôi|tôi muốn mua|mình muốn mua)\s+\d+",
-        user_msg_lower,
-    ):
-        return Command(
-            goto="retrieval_node",
-            update={
-                "intent": IntentEnum.ORDER_PLACEMENT.value,
-                "secondary_intents": [],
-                "intent_confidence": 0.98,
-                "intent_shift": previous_intent not in (None, IntentEnum.ORDER_PLACEMENT.value),
-                "intent_disagreement_count": 0,
-            },
-        )
+    # 2026-22-8 report §3/§5 giai đoạn 1: the NEGOTIATION/ORDER_PLACEMENT
+    # regex rescues added while debugging Groq parse failures are REMOVED —
+    # they were language overfitting. The LLM classification below now
+    # survives provider quirks via AIGateway.complete_json (report §4.1),
+    # so intent no longer silently collapses to INFO_QUERY on cloud models.
 
     # v3-0 P4 (T11 4.2): in-graph SMALLTALK fast-path — saves both the router
     # LLM call and the answer LLM call (template branch in answer_node).
@@ -263,14 +273,16 @@ async def router_node(state: AgentState) -> Command:
     if settings.SMALLTALK_FASTPATH_ENABLED and _smalltalk_fastpath(user_msg):
         return Command(
             goto="answer_node",
-            update={
-                "intent": IntentEnum.SMALLTALK.value,
-                "secondary_intents": [],
-                "intent_confidence": 1.0,
-                "intent_shift": previous_intent not in (None, IntentEnum.SMALLTALK.value),
-                "intent_disagreement_count": 0,
-                "smalltalk_fastpath": True,
-            },
+            update=_with_context_reset(
+                {
+                    "intent": IntentEnum.SMALLTALK.value,
+                    "secondary_intents": [],
+                    "intent_confidence": 1.0,
+                    "intent_shift": previous_intent not in (None, IntentEnum.SMALLTALK.value),
+                    "intent_disagreement_count": 0,
+                    "smalltalk_fastpath": True,
+                }
+            ),
         )
 
     # v3-0 P4 (T11 4.3): keyword pre-classify whitelist — INFO_QUERY/PRICING/
@@ -280,13 +292,15 @@ async def router_node(state: AgentState) -> Command:
     if settings.PRECLASSIFY_WHITELIST_ENABLED and (wl_intent := _whitelist_classify(user_msg)):
         return Command(
             goto="retrieval_node",
-            update={
-                "intent": wl_intent.value,
-                "secondary_intents": [],
-                "intent_confidence": 0.85,
-                "intent_shift": previous_intent not in (None, wl_intent.value),
-                "intent_disagreement_count": 0,
-            },
+            update=_with_context_reset(
+                {
+                    "intent": wl_intent.value,
+                    "secondary_intents": [],
+                    "intent_confidence": 0.85,
+                    "intent_shift": previous_intent not in (None, wl_intent.value),
+                    "intent_disagreement_count": 0,
+                }
+            ),
         )
 
     system_prompt = (
@@ -342,31 +356,18 @@ async def router_node(state: AgentState) -> Command:
                 "\n\n".join(context_parts) + f"\n\nClassify the LAST customer message:\n{user_msg}"
             )
     try:
-        try:
-            result = await AIGateway.complete(
-                model="economy-chat",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": classify_input},
-                ],
-                response_format=IntentClassification,
-            )
-            raw_content = result.choices[0].message.content
-        except Exception:
-            result = await AIGateway.complete(
-                model="economy-chat",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": classify_input},
-                ],
-                response_format={"type": "json_object"},
-            )
-            raw_content = result.choices[0].message.content
+        # Universal JSON extractor (report §4.1): native schema first, then
+        # schema-in-prompt + json_object + repair — uniform on every provider.
+        data = await AIGateway.complete_json(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": classify_input},
+            ],
+            model="economy-chat",
+            schema=IntentClassification,
+        )
 
         # Flexible parsing for primary_intent & secondary_intents
-        import json
-
-        data = json.loads(raw_content)
         primary = str(data.get("primary_intent") or data.get("intent") or "INFO_QUERY").upper()
         if primary in ("REQUEST_DISCOUNT", "DISCOUNT", "BARGAIN", "PRICE_NEGOTIATION"):
             primary = "NEGOTIATION"
@@ -438,7 +439,7 @@ async def router_node(state: AgentState) -> Command:
     ):
         update["pending_info_questions"] = user_msg
 
-    return Command(goto=next_node, update=update)
+    return Command(goto=next_node, update=_with_context_reset(update))
 
 
 def _get_next_node(classification: IntentClassification) -> str:

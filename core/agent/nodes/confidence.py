@@ -168,8 +168,8 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     # For ORDER_PLACEMENT: extract order_info from the top citation so it lands
     # in the LangGraph checkpoint BEFORE hitl_guard_node calls interrupt().
     # (interrupt() checkpoints state as-received, not mid-node updates)
-    if intent == "ORDER_PLACEMENT" and not state.get("order_info"):
-        citations = state.get("citations", [])
+    if intent == "ORDER_PLACEMENT" and not state.get("order_info") and state.get("citations"):
+        citations = state["citations"]
         # v3-0 P1 (T01 F4/O5): ambiguous ORDER ("đặt cái đó đi" after a vague
         # browse) — top citations are a near-tie, so auto-selecting the first
         # one orders the wrong product. Ask ONE clarifying question instead.

@@ -76,17 +76,15 @@ async def clarify_node(state: AgentState, config: RunnableConfig) -> dict:
             "Không trả lời câu hỏi gốc, không xin lỗi dài dòng. "
             "Respond ONLY with valid JSON matching the schema."
         )
-        result = await AIGateway.complete(
-            model="economy-chat",
+        result = await AIGateway.complete_structured(
+            ClarifyingQuestion,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
             ],
-            response_format=ClarifyingQuestion,
+            model="economy-chat",
         )
-        question = ClarifyingQuestion.model_validate_json(
-            result.choices[0].message.content
-        ).question
+        question = result.question
     except Exception as e:
         logger.warning("clarify_node LLM call failed, using static fallback: %s", e)
 

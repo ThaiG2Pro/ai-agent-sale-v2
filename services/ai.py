@@ -6,8 +6,12 @@ What it does: Provides async wrappers for LiteLLM with fallback and latency trac
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import json
+import re
 import time
+from collections import deque
 from typing import Any, Literal
 
 import logfire
@@ -18,6 +22,7 @@ from opentelemetry import trace
 from pydantic import BaseModel, Field
 
 from core.ai_config import LITELLM_CONFIG
+from core.config import settings
 
 # ── Query normalisation schema (FR-004) ───────────────────────────────────────
 
@@ -184,50 +189,108 @@ class ProductMetadata(BaseModel):
 # Initialize LiteLLM Router for advanced routing and fallbacks
 ai_router = Router(**LITELLM_CONFIG)
 
-# ── Local in-process embedding (fastembed, ONNX CPU) ────────────────────────
-# Used when EMBED_MODEL = "local/<name>". Keeps the zero-cost/offline path
-# alive without an Ollama server: Groq & friends serve chat only, so the
-# embedding leg must run somewhere free. Model files download once to the HF
-# cache; inference is CPU-only (no VRAM).
 
-_LOCAL_EMBED_ALIASES = {
-    # 1024-dim — matches the pgvector Vector(1024) column seeded by ingest.
-    "multilingual-e5-large": "intfloat/multilingual-e5-large",
-    "bge-m3": "intfloat/multilingual-e5-large",
-}
-_local_embedder: Any = None
+# ── Rate-limit aware resilience layer (2026-22-8 report §4.3) ────────────────
+# Proactive client-side RPM throttle: free-tier cloud providers (Groq: 30 RPM)
+# return persistent 429s once the ceiling is hit; the reactive cooldown in
+# ai_config.py only kicks in AFTER a 429 has already degraded a turn. With
+# LLM_RPM_LIMIT > 0 every chat completion waits its turn in a sliding window
+# so the ceiling is never reached. 0 (default, local profiles) = disabled.
 
 
-def _resolve_local_embed_id(embed_model: str) -> str:
-    name = embed_model.removeprefix("local/")
-    return _LOCAL_EMBED_ALIASES.get(name, name)
+class _RpmLimiter:
+    def __init__(self) -> None:
+        self._stamps: deque[float] = deque()
+        self._lock = asyncio.Lock()
 
-
-async def _embed_local(texts: list[str]) -> list[list[float]]:
-    """Embed via local Ollama bge-m3 (fast, 0-download, CPU/RAM optimized)."""
-    import litellm
-
-    from core.config import settings
-
-    start_time = time.perf_counter()
-    resp = await litellm.aembedding(
-        model="ollama/bge-m3",
-        input=texts,
-        api_base=settings.OLLAMA_EMBED_BASE_URL,
-    )
-    vectors = [item["embedding"] for item in resp.data]
-
-    for vec in vectors:
-        if len(vec) != settings.EMBED_DIMENSION:
-            raise ValueError(
-                f"Configuration Error: Model Mismatch — local embedding dimension "
-                f"{len(vec)} (expected {settings.EMBED_DIMENSION})"
+    async def acquire(self) -> None:
+        limit = settings.LLM_RPM_LIMIT
+        if limit <= 0:
+            return
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                while self._stamps and now - self._stamps[0] >= 60.0:
+                    self._stamps.popleft()
+                if len(self._stamps) < limit:
+                    self._stamps.append(now)
+                    return
+                wait = 60.0 - (now - self._stamps[0])
+            logfire.info(
+                "RPM throttle: waiting {wait:.1f}s (limit={limit})", wait=wait, limit=limit
             )
-    logfire.info(
-        "AI Embedding finished: bge-m3 (local), Latency: {latency:.4f}s",
-        latency=time.perf_counter() - start_time,
+            await asyncio.sleep(max(wait, 0.05))
+
+
+_rpm_limiter = _RpmLimiter()
+
+
+# ── Universal JSON extractor (2026-22-8 report §4.1) ─────────────────────────
+# Providers implement structured output differently: Ollama constrains
+# generation against the JSON schema natively, while Groq/OpenAI rewrite
+# response_format=PydanticModel into tool calling and hard-fail (400) on
+# details like Python-style `False` booleans. Every structured-output call
+# therefore goes through one uniform two-step contract:
+#   1. native response_format=<schema>  (best quality where supported)
+#   2. schema-in-prompt + response_format={"type": "json_object"} + repair
+# so a provider quirk degrades to step 2 instead of crashing the node into
+# its blind fallback (the INFO_QUERY paralysis described in the report).
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+# Python literals leaking into JSON output (`True`/`False`/`None`) — replace
+# only when not inside a double-quoted string (best-effort, no full parser).
+_PY_LITERAL_RE = re.compile(r'(?<!")\b(True|False|None)\b(?!")')
+_PY_LITERAL_MAP = {"True": "true", "False": "false", "None": "null"}
+
+
+def _repair_json_text(text: str) -> str:
+    """Best-effort cleanup of near-JSON LLM output before parsing."""
+    text = text.strip()
+    fence = _JSON_FENCE_RE.search(text)
+    if fence:
+        text = fence.group(1).strip()
+    # Trim any prose around the outermost JSON object/array.
+    start = min((i for i in (text.find("{"), text.find("[")) if i >= 0), default=-1)
+    if start > 0:
+        end = max(text.rfind("}"), text.rfind("]"))
+        if end > start:
+            text = text[start : end + 1]
+    return _PY_LITERAL_RE.sub(lambda m: _PY_LITERAL_MAP[m.group(1)], text)
+
+
+def _loads_structured(content: Any) -> dict[str, Any]:
+    """Parse LLM structured-output content (str or already-parsed dict)."""
+    if isinstance(content, dict):
+        return content
+    if not isinstance(content, str):
+        raise ValueError(f"unparseable structured content type: {type(content).__name__}")
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        data = json.loads(_repair_json_text(content))
+    if not isinstance(data, dict):
+        raise ValueError("structured output is valid JSON but not an object")
+    return data
+
+
+def _with_schema_prompt(
+    messages: list[dict[str, str]], schema: type[BaseModel] | None
+) -> list[dict[str, str]]:
+    """Append the JSON schema contract to the system message (step 2)."""
+    instruction = (
+        "\n\nRespond with a SINGLE JSON object only — no prose, no markdown fences. "
+        "Booleans MUST be JSON lowercase true/false and missing values null."
     )
-    return vectors
+    if schema is not None:
+        instruction += "\nThe object MUST match this JSON Schema:\n" + json.dumps(
+            schema.model_json_schema(), ensure_ascii=False
+        )
+    out = [dict(m) for m in messages]
+    for m in out:
+        if m.get("role") == "system":
+            m["content"] = f"{m['content']}{instruction}"
+            return out
+    return [{"role": "system", "content": instruction.strip()}, *out]
 
 
 # LiteLLM traces are captured via HTTPXClientInstrumentor (registered in core/logging.py).
@@ -273,6 +336,7 @@ class AIGateway:
             # Link LiteLLM sub-spans to the conversation session
             with using_session(session_id) if session_id else contextlib.nullcontext():
                 kwargs.setdefault("max_tokens", 512)
+                await _rpm_limiter.acquire()
                 response = await ai_router.acompletion(
                     model=model, messages=messages, stream=stream, **kwargs
                 )
@@ -304,6 +368,52 @@ class AIGateway:
                     messages=messages, model="economy-chat", stream=stream, **kwargs
                 )
             raise e
+
+    @staticmethod
+    async def complete_json(
+        messages: list[dict[str, str]],
+        model: str = "economy-chat",
+        schema: type[BaseModel] | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """Universal JSON extractor (2026-22-8 report §4.1) — always a dict.
+
+        Step 1 uses the provider's native structured output (response_format=
+        <schema>); any provider quirk (Groq tool-call validation 400s, refused
+        json_schema, near-JSON text) drops to step 2: schema injected into the
+        system prompt + response_format={"type": "json_object"} + repair parse.
+        Raises only when BOTH steps fail — callers keep their own fallbacks.
+        """
+        if schema is not None:
+            try:
+                resp = await AIGateway.complete(
+                    messages=messages, model=model, response_format=schema, **kwargs
+                )
+                return _loads_structured(resp.choices[0].message.content)
+            except Exception as exc:
+                logfire.warn(
+                    "complete_json step 1 (native schema) failed on {model}: {err}",
+                    model=model,
+                    err=str(exc),
+                )
+        resp = await AIGateway.complete(
+            messages=_with_schema_prompt(messages, schema),
+            model=model,
+            response_format={"type": "json_object"},
+            **kwargs,
+        )
+        return _loads_structured(resp.choices[0].message.content)
+
+    @staticmethod
+    async def complete_structured[T: BaseModel](
+        schema: type[T],
+        messages: list[dict[str, str]],
+        model: str = "economy-chat",
+        **kwargs,
+    ) -> T:
+        """complete_json + Pydantic validation → a schema instance."""
+        data = await AIGateway.complete_json(messages, model=model, schema=schema, **kwargs)
+        return schema.model_validate(data)
 
     @staticmethod
     async def embed(
@@ -429,16 +539,15 @@ class AIGateway:
             session_id = getattr(current_span, "attributes", {}).get(SpanAttributes.SESSION_ID)
 
             with using_session(session_id) if session_id else contextlib.nullcontext():
-                response = await ai_router.acompletion(
+                normalized = await AIGateway.complete_structured(
+                    NormalizedQuery,
+                    messages,
                     model="economy-chat",  # Same as generate_answer — no Ollama swap
-                    messages=messages,
-                    response_format=NormalizedQuery,
                     temperature=0,
                 )
             latency = time.perf_counter() - start_time
             logfire.info("normalize_query: {latency:.4f}s", latency=latency)
-            content = response.choices[0].message.content
-            return NormalizedQuery.model_validate_json(content)
+            return normalized
         except Exception as exc:
             latency = time.perf_counter() - start_time
             logfire.error(
@@ -504,16 +613,15 @@ class AIGateway:
             session_id = getattr(current_span, "attributes", {}).get(SpanAttributes.SESSION_ID)
 
             with using_session(session_id) if session_id else contextlib.nullcontext():
-                response = await ai_router.acompletion(
+                rewritten = await AIGateway.complete_structured(
+                    RewrittenQuery,
+                    messages,
                     model="economy-chat",  # light tier, hardcoded — never premium (AC-2026-010)
-                    messages=messages,
-                    response_format=RewrittenQuery,
                     temperature=0,
                 )
             latency = time.perf_counter() - start_time
             logfire.info("rewrite_query: {latency:.4f}s", latency=latency)
-            content = response.choices[0].message.content
-            return RewrittenQuery.model_validate_json(content)
+            return rewritten
         except Exception as exc:
             latency = time.perf_counter() - start_time
             logfire.error(

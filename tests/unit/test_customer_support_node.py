@@ -52,7 +52,10 @@ async def test_support_uses_llm_message_and_queues_escalation(state, mock_config
 
     assert isinstance(result, Command)
     assert result.goto == "answer_node"
-    assert result.update["response"] == "We're sorry — a human will help you."
+    # O27/Case 11: the concrete rejection reason is appended when the LLM
+    # message omits it — the customer must always see WHY.
+    assert result.update["response"].startswith("We're sorry — a human will help you.")
+    assert "suspicious request" in result.update["response"]
     assert result.update["hitl_triggered"] is False
     # SupportQueue insert executed + flushed
     mock_db.execute.assert_awaited()
@@ -98,4 +101,4 @@ async def test_support_survives_persistence_failure(state, mock_config, mock_db)
         result = await customer_support_node(state, mock_config)
 
     assert result.goto == "answer_node"
-    assert result.update["response"] == "ok"
+    assert result.update["response"].startswith("ok")

@@ -11,7 +11,6 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, cast
 
-import litellm
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 from sqlalchemy import select, update
@@ -472,8 +471,11 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
         # Layer 2: LLM classification with explicit few-shot examples.
         batch_text = "\n---\n".join([msg.content for msg in new_human_messages])
         try:
-            response = await litellm.acompletion(
-                model=settings.LIGHT_CHAT_MODEL,
+            # Universal JSON extractor (2026-22-8 report §4.1): native schema
+            # first, schema-in-prompt json_object + repair second — provider
+            # quirks no longer collapse the batch to the blind fallback.
+            batch_result = await AIGateway.complete_structured(
+                QueuedMessageBatch,
                 messages=[
                     {
                         "role": "system",
@@ -491,63 +493,26 @@ async def queue_consumer_node(state: AgentState, config: RunnableConfig) -> Comm
                             "(e.g. 'ok', 'đồng ý', 'được rồi', 'yes', "
                             "'thêm X vào đơn luôn nhé' — ADD-ON is NOT a MODIFY).\n"
                             "- OTHER: unrelated info query (e.g. 'màu gì?', 'bao giờ giao?').\n\n"
+                            f'Set session_id="{session_id}" and messages=[] in the output. '
                             "If ANY message is MODIFY_ORDER set has_modify=true. "
                             "If ANY message is CANCEL set has_cancel=true (highest priority)."
                         ),
                     },
                     {"role": "user", "content": batch_text},
                 ],
-                response_format=QueuedMessageBatch,
+                model="light-chat",
             )
-            content = response.choices[0].message.content
-            if isinstance(content, str):
-                batch_result = QueuedMessageBatch.model_validate_json(content)
-            else:
-                batch_result = QueuedMessageBatch.model_validate(content)
             if settings.INTENT_TRACKING_V3_ENABLED:
                 batch_result, force_review = _postvalidate_llm_batch(batch_result, queued_rows)
-
-        except Exception as initial_err:
-            try:
-                response = await AIGateway.complete(
-                    model=settings.LIGHT_CHAT_MODEL,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "Classify the collective intent of customer messages sent "
-                                "while their order was under admin review.\n\n"
-                                "OUTPUT JSON format:\n"
-                                f'{{"session_id": "{session_id}", "messages": [], "has_confirm": false, "has_cancel": false, "has_modify": false, "has_info": false}}\n\n'
-                                "Rules:\n"
-                                "- MODIFY_ORDER: customer wants to REPLACE product/quantity\n"
-                                "- CANCEL: customer wants to cancel\n"
-                                "- CONFIRM: customer confirms existing order OR wants to ADD an item\n"
-                                "- OTHER: unrelated info query"
-                            ),
-                        },
-                        {"role": "user", "content": batch_text},
-                    ],
-                    response_format={"type": "json_object"},
+        except Exception as e:
+            logger.error(f"Batch classification failed for {session_id}: {e}")
+            if settings.INTENT_TRACKING_V3_ENABLED:
+                batch_result = QueuedMessageBatch(session_id=session_id, messages=[])
+                force_review = True
+            else:
+                batch_result = QueuedMessageBatch(
+                    session_id=session_id, messages=[], has_confirm=True
                 )
-                content = response.choices[0].message.content
-                if isinstance(content, str):
-                    batch_result = QueuedMessageBatch.model_validate_json(content)
-                else:
-                    batch_result = QueuedMessageBatch.model_validate(content)
-                if settings.INTENT_TRACKING_V3_ENABLED:
-                    batch_result, force_review = _postvalidate_llm_batch(batch_result, queued_rows)
-            except Exception as e:
-                logger.error(
-                    f"Batch classification failed for {session_id}: {e} (initial: {initial_err})"
-                )
-                if settings.INTENT_TRACKING_V3_ENABLED:
-                    batch_result = QueuedMessageBatch(session_id=session_id, messages=[])
-                    force_review = True
-                else:
-                    batch_result = QueuedMessageBatch(
-                        session_id=session_id, messages=[], has_confirm=True
-                    )
 
     # --- T032-T034: Routing ---
     # Mark messages as processed in DB (atomic UPDATE)

@@ -187,6 +187,10 @@ class Settings(BaseSettings):
     # T09 backpressure: in-process cap on concurrent LLM turns. Overflow goes
     # to queued_messages + holding instead of piling onto the providers.
     LLM_MAX_CONCURRENT_TURNS: int = Field(default=8, ge=1, le=64)
+    # 2026-22-8 report §4.3: proactive client-side RPM throttle for free-tier
+    # cloud profiles (Groq free = 30 RPM → set 28 to leave headroom). All chat
+    # completions share one sliding window; 0 = disabled (local profiles).
+    LLM_RPM_LIMIT: int = Field(default=0, ge=0, le=10_000)
     # T09 token-budget gate (app-side — Groq exposes no daily counter): one
     # Postgres row per (day UTC, model); at DEGRADE_RATIO of the daily cap the
     # ladder proactively skips the premium rung.

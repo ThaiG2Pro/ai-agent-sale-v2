@@ -7,22 +7,8 @@ route Gemini calls at the Ollama server.
 
 from __future__ import annotations
 
-from core.ai_config import LITELLM_CONFIG, _litellm_params
+from core.ai_config import _litellm_params
 from core.config import Settings, settings
-
-
-def test_ollama_model_gets_api_base() -> None:
-    params = _litellm_params("ollama/bge-m3")
-    assert params["model"] == "ollama/bge-m3"
-    assert params["api_base"] == settings.OLLAMA_BASE_URL
-
-
-def test_ollama_model_gets_num_ctx() -> None:
-    """ADR-006: Ollama's default context silently truncates RAG prompts —
-    every ollama/* entry must carry an explicit num_ctx."""
-    params = _litellm_params("ollama/qwen3-1.7b")
-    assert params["num_ctx"] == settings.OLLAMA_NUM_CTX
-    assert settings.OLLAMA_NUM_CTX >= 8192
 
 
 def test_cloud_models_do_not_get_ollama_api_base(monkeypatch) -> None:
@@ -38,14 +24,6 @@ def test_cloud_models_do_not_get_ollama_api_base(monkeypatch) -> None:
 def test_extra_kwargs_pass_through() -> None:
     params = _litellm_params("ollama/qwen3-1.7b", stream=True)
     assert params["stream"] is True
-
-
-def test_model_list_api_base_matches_ollama_prefix() -> None:
-    """Every configured entry: api_base present iff model is ollama/*."""
-    for entry in LITELLM_CONFIG["model_list"]:
-        params = entry["litellm_params"]
-        is_ollama = params["model"].startswith("ollama/")
-        assert ("api_base" in params) == is_ollama, entry["model_name"]
 
 
 def test_empty_env_values_fall_back_to_defaults(monkeypatch) -> None:

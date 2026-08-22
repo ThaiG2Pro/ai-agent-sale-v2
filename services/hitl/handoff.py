@@ -105,8 +105,8 @@ async def _suggested_actions(state: dict[str, Any], reason: dict[str, Any]) -> l
     order_info = state.get("order_info") or {}
     recent = "\n".join(f"{m['role']}: {m['content']}" for m in _last_messages(state, 4))
     try:
-        resp = await AIGateway.complete(
-            model="light-chat",
+        suggestions = await AIGateway.complete_structured(
+            _Suggestions,
             messages=[
                 {
                     "role": "system",
@@ -127,9 +127,9 @@ async def _suggested_actions(state: dict[str, Any], reason: dict[str, Any]) -> l
                     ),
                 },
             ],
-            response_format=_Suggestions,
+            model="light-chat",
         )
-        actions = _Suggestions.model_validate_json(resp.choices[0].message.content).actions
+        actions = suggestions.actions
         return [a for a in actions if a.strip()][:2] or FALLBACK_SUGGESTED_ACTIONS
     except Exception as exc:
         logger.warning("handoff suggested-actions LLM call failed: %s", exc)

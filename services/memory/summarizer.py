@@ -118,25 +118,13 @@ Focus on:
 Conversation:
 {conversation_text}"""
 
-        result = await AIGateway.complete(
-            model=self.summary_model,
+        # Universal JSON extractor (2026-22-8 report §4.1) — uniform structured
+        # output on every provider; caller's except path handles a total miss.
+        summary_output = await AIGateway.complete_structured(
+            ConversationSummaryOutput,
             messages=[{"role": "user", "content": prompt}],
-            response_format=ConversationSummaryOutput,
+            model=self.summary_model,
         )
-
-        # Extract the summary output
-        if hasattr(result, "parsed"):
-            summary_output = result.parsed
-        else:
-            # Fallback: create from text response
-            from core.agent.state import ConversationSummaryOutput as CSO
-
-            response_text = result.choices[0].message.content
-            summary_output = CSO(
-                summary_text=response_text,
-                products_discussed=[],
-                open_questions=[],
-            )
 
         # Add metadata
         summary_output.summary_model = self.summary_model

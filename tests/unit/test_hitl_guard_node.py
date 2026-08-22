@@ -83,6 +83,10 @@ async def test_hitl_guard_triggers_on_order_placement(initial_state, mock_config
         "approved_price": 10000000.0,
         "quantity": 1,
         "status": "pending",
+        # Contact gate (Case 04) runs before the pause — both fields required
+        # for the interrupt path under test to be reached.
+        "phone": "0988111222",
+        "address": "123 Nguyễn Trãi, Hà Nội",
     }
 
     with patch(

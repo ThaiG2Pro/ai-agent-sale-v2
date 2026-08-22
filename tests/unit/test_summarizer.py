@@ -102,12 +102,12 @@ class TestConversationSummarizer:
         ]
 
         with patch("services.ai.AIGateway.complete", new_callable=AsyncMock) as mock_llm:
-            mock_response = AsyncMock()
-            mock_response.parsed = ConversationSummaryOutput(
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = ConversationSummaryOutput(
                 summary_text="Customer asked about pricing",
                 products_discussed=["Product A"],
                 open_questions=[],
-            )
+            ).model_dump_json()
             mock_llm.return_value = mock_response
 
             summarizer = ConversationSummarizer()
@@ -127,12 +127,12 @@ class TestConversationSummarizer:
         ]
 
         with patch("services.ai.AIGateway.complete", new_callable=AsyncMock) as mock_llm:
-            mock_response = AsyncMock()
-            mock_response.parsed = ConversationSummaryOutput(
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = ConversationSummaryOutput(
                 summary_text="Customer asked about air conditioner pricing",
                 products_discussed=["máy lạnh"],
                 open_questions=[],
-            )
+            ).model_dump_json()
             mock_llm.return_value = mock_response
 
             summarizer = ConversationSummarizer()
@@ -152,12 +152,12 @@ class TestConversationSummarizer:
         ]
 
         with patch("services.ai.AIGateway.complete", new_callable=AsyncMock) as mock_llm:
-            mock_response = AsyncMock()
-            mock_response.parsed = ConversationSummaryOutput(
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = ConversationSummaryOutput(
                 summary_text="Customer asked about pricing and shipping",
                 products_discussed=[],
                 open_questions=["Shipping time not resolved"],
-            )
+            ).model_dump_json()
             mock_llm.return_value = mock_response
 
             summarizer = ConversationSummarizer()

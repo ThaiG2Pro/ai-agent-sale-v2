@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import (
     AsyncSession,  # noqa: TC002 - NEEDED: for Pydantic schema resolution
 )
@@ -70,6 +70,28 @@ async def admin_ingest(request: IngestRequest, db: Annotated[AsyncSession, Depen
         metadata=request.metadata,
     )
     return {"message": "Ingested successfully", "product_id": str(product_id)}
+
+
+class RestockRequest(BaseModel):
+    min_stock: int = Field(default=50, ge=1, le=10_000)
+
+
+@router.post("/restock")
+async def admin_restock(request: RestockRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Top up every product below min_stock to exactly min_stock.
+
+    2026-22-8 report §2C: eval runs place real orders and decrement real
+    stock_quantity; repeated suites drain the catalog to 0 and later runs
+    fail with genuine out-of-stock declines. The eval runner calls this
+    (admin-gated) before each run so inventory state never skews results.
+    """
+    result = await db.execute(
+        update(Product)
+        .where(Product.stock_quantity < request.min_stock)
+        .values(stock_quantity=request.min_stock)
+    )
+    await db.commit()
+    return {"restocked": result.rowcount, "min_stock": request.min_stock}
 
 
 @router.post("/search")
