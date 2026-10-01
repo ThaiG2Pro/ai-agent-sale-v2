@@ -16,7 +16,7 @@ from api.middleware import (
     global_exception_handler,
     http_exception_handler,
 )
-from api.routes import admin, agent, health, hitl, memory, query, ui
+from api.routes import admin, agent, health, hitl, memory, query, support, ui
 from api.webhooks import telegram as telegram_webhook
 
 # ... imports ...
@@ -54,6 +54,15 @@ async def lifespan(app: FastAPI):
 
     app.state.graph = build_graph(checkpointer=checkpointer)
     logfire.info("LangGraph compiled and cached at startup.")
+
+    # Spacely support graph (docs/upgrade-plan-support-graph.md) — same
+    # checkpointer, separate graph; /support/query answers 503 when disabled.
+    app.state.support_graph = None
+    if settings.SUPPORT_GRAPH_ENABLED:
+        from core.support.graph import build_support_graph
+
+        app.state.support_graph = build_support_graph(checkpointer=checkpointer)
+        logfire.info("Support graph compiled and cached at startup.")
 
     logfire.info("Application foundation initialized successfully.")
 
@@ -229,6 +238,7 @@ app.include_router(hitl.router)
 app.include_router(memory.router, prefix="/memory", tags=["memory"])
 app.include_router(telegram_webhook.router)  # Week 6: Telegram webhook
 app.include_router(ui.router)  # Local quick test UI
+app.include_router(support.router)  # Spacely support graph (SUPPORT_GRAPH_ENABLED)
 
 
 @app.get("/")

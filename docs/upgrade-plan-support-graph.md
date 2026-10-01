@@ -1,6 +1,6 @@
 # Plan: `support_graph` — graph CSKH cho Spacely (hướng 2)
 
-Ngày: 2026-10-01. Trạng thái: bước 0–3 xong (commit), bước 4 trở đi chưa code.
+Ngày: 2026-10-01. Trạng thái: bước 0–4 xong (commit), bước 5 trở đi chưa làm.
 
 ## Mục tiêu
 

@@ -10,6 +10,11 @@ All notable changes to this project are documented in this file.
   routed to an unreachable Ollama entry.
 
 ### Added
+- Spacely support graph (`core/support/`): `support_router_node` (4 intents),
+  `support_answer_node`, `support_clarify_node` over the shared
+  `retrieval_node` → `memory_retrieval_node` → `confidence_node`; exposed at
+  `POST /support/query` behind `SUPPORT_GRAPH_ENABLED` (default off) and the
+  optional `X-Agent-Key`. The sales graph is untouched.
 - Groundwork for the Spacely support graph (docs/upgrade-plan-support-graph.md):
   `core/support/persona.py` (support prompts), optional `AGENT_API_KEY`
   (`X-Agent-Key` header) via `api.dependencies.verify_agent_key` — not yet

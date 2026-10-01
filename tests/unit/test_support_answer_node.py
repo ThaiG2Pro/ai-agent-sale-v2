@@ -234,3 +234,14 @@ async def test_clarify_node_fallback_on_llm_error():
     ):
         out = await support_clarify_node(s, _CFG)
     assert out["response"] == FALLBACK_CLARIFY_QUESTION and out["model_used"] == "clarify"
+
+
+@pytest.mark.asyncio
+async def test_complaint_ignores_confidence_decline():
+    s = _state("app lỗi mất credit", "COMPLAINT", declined=True, retrieved_chunks=[])
+    with patch(
+        "services.ai.AIGateway.complete", new=AsyncMock(return_value=_llm("Mình xin lỗi…"))
+    ) as llm:
+        out = await support_answer_node(s, _CFG)
+    llm.assert_awaited_once()
+    assert out["response"] == "Mình xin lỗi…" and out["declined"] is False

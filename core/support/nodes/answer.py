@@ -194,8 +194,9 @@ async def support_answer_node(state: AgentState, config: RunnableConfig) -> dict
         )
         return _reply(persona.smalltalk_fastpath_reply, "template")
 
-    # Path 3 — confidence guards said no.
-    if state.get("declined"):
+    # Path 3 — confidence guards said no. Never for COMPLAINT: a complaint with
+    # weak FAQ overlap still deserves the apology + human handoff (path 5).
+    if state.get("declined") and intent != "COMPLAINT":
         await _write_model_trace(
             state,
             db=db,

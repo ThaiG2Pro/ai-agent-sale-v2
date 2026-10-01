@@ -9,6 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+export SUPPORT_GRAPH_ENABLED=true
 export DB_NAME="${SPACELY_DB_NAME:-spacely_agent}"
 export SUPPORT_CONTACT_LINK="${SPACELY_SUPPORT_LINK:-https://spacely.app/faq#lien-he}"
 export EPISODIC_MEMORY_ENABLED="${EPISODIC_MEMORY_ENABLED:-true}"

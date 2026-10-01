@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # `X-Agent-Key: <value>` — the Next.js proxy route in elearning-platform
     # does. Admin endpoints keep X_ADMIN_KEY.
     AGENT_API_KEY: str | None = None
+    # Build + expose the Spacely support graph (POST /support/query). Off by
+    # default so a shop-only deployment has no extra LLM endpoint.
+    SUPPORT_GRAPH_ENABLED: bool = False
 
     # Deployment environment — gates fail-fast secret validation at startup.
     # "production" refuses to boot with default secrets; other envs only warn.
