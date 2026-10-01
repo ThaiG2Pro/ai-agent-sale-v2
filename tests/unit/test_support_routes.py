@@ -59,7 +59,13 @@ async def test_200_happy_path_maps_state(client, monkeypatch):
         "intent": "PRICING",
         "intent_confidence": 0.91,
         "model_used": "economy-chat",
-        "citations": [{"name": "Credit là gì, mua sao?", "sku": "spacely-credit-la-gi"}],
+        # accumulated across turns by the operator.add reducer: p1 is a previous turn
+        "citations": [
+            {"name": "Quên mật khẩu?", "product_id": "p1"},
+            {"name": "Credit là gì, mua sao?", "product_id": "p2"},
+            {"name": "Credit là gì, mua sao?", "product_id": "p2"},
+        ],
+        "retrieved_chunks": [{"product_id": "p2", "chunk_id": "c", "text": "…"}],
     }
     graph = AsyncMock()
     graph.ainvoke = AsyncMock(return_value=final_state)
@@ -86,3 +92,13 @@ async def test_422_on_empty_message(client):
     async with client as ac:
         r = await ac.post("/support/query", json={**_BODY, "message": ""})
     assert r.status_code == 422
+
+
+def test_turn_citations_empty_for_smalltalk_and_declined():
+    from api.routes.support import _turn_citations
+
+    base = {"citations": [{"name": "X", "product_id": "p"}], "retrieved_chunks": []}
+    assert _turn_citations({**base, "intent": "SMALLTALK"}) == []
+    assert _turn_citations({**base, "intent": "INFO_QUERY", "declined": True}) == []
+    # no retrieved_chunks info (e.g. cache hit) → fall back to the whole list, deduped
+    assert [c.name for c in _turn_citations({**base, "intent": "INFO_QUERY"})] == ["X"]

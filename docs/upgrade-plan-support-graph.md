@@ -1,6 +1,6 @@
 # Plan: `support_graph` — graph CSKH cho Spacely (hướng 2)
 
-Ngày: 2026-10-01. Trạng thái: bước 0–5 xong, bước 6 (test/eval) và 7 (elearning) chưa làm.
+Ngày: 2026-10-01. Trạng thái: bước 0–5 và 7 xong; còn bước 6 (eval set).
 
 ## Mục tiêu
 

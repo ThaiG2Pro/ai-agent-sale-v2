@@ -125,6 +125,13 @@ async def lifespan(app: FastAPI):
     app.state.background_tasks.add(warmup_task)
     warmup_task.add_done_callback(app.state.background_tasks.discard)
 
+    # Support graph: the in-process embedder (fastembed, EMBED_MODEL=local/*)
+    # takes ~30s to load on first use — longer than the Spacely proxy timeout.
+    if settings.SUPPORT_GRAPH_ENABLED and settings.EMBED_MODEL.startswith("local/"):
+        embed_task = asyncio.create_task(_warmup_embedder())
+        app.state.background_tasks.add(embed_task)
+        embed_task.add_done_callback(app.state.background_tasks.discard)
+
     yield
 
     # Shutdown logic
@@ -136,6 +143,17 @@ async def lifespan(app: FastAPI):
 
     await engine.dispose()
     logfire.info("Application shutdown complete.")
+
+
+async def _warmup_embedder() -> None:
+    """Load the local embedding model before the first support query."""
+    try:
+        from services.ai import AIGateway
+
+        await AIGateway.embed("warmup")
+        logfire.info("Embedder warmup complete: {model} ready", model=settings.EMBED_MODEL)
+    except Exception as exc:
+        logfire.warn("Embedder warmup failed (non-critical): {err}", err=str(exc))
 
 
 async def _warmup_model() -> None:

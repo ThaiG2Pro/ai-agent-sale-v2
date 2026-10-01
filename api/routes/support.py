@@ -63,6 +63,35 @@ async def get_support_graph(request: Request) -> Any:
     return graph
 
 
+def _turn_citations(final_state: dict[str, Any]) -> list[SupportCitation]:
+    """Citations used by THIS turn only.
+
+    `citations` is an operator.add channel, so the checkpoint accumulates every
+    turn's list; `retrieved_chunks` is overwritten per turn (and emptied on
+    SMALLTALK / cache paths), so its product_ids identify the current turn.
+    Declined turns cite nothing — the answer did not use the context.
+    """
+    if final_state.get("declined") or final_state.get("intent") == "SMALLTALK":
+        return []
+    turn_ids = {
+        c.get("product_id")
+        for c in (final_state.get("retrieved_chunks") or [])
+        if isinstance(c, dict)
+    }
+    out: list[SupportCitation] = []
+    seen: set[str] = set()
+    for c in final_state.get("citations") or []:
+        pid = getattr(c, "product_id", None) or (
+            c.get("product_id") if isinstance(c, dict) else None
+        )
+        name = getattr(c, "name", None) or (c.get("name") if isinstance(c, dict) else None)
+        if not name or name in seen or (turn_ids and pid not in turn_ids):
+            continue
+        seen.add(name)
+        out.append(SupportCitation(name=name))
+    return out
+
+
 @router.post("/query", response_model=SupportQueryResponse)
 async def post_support_query(
     request: SupportQueryRequest,
@@ -83,11 +112,7 @@ async def post_support_query(
         logger.exception("support query failed: session=%s", request.session_id)
         raise HTTPException(status_code=500, detail=f"Support agent failed: {exc!s}") from exc
 
-    citations = [
-        SupportCitation(name=getattr(c, "name", None) or c.get("name", ""))
-        for c in (final_state.get("citations") or [])
-        if (getattr(c, "name", None) or (isinstance(c, dict) and c.get("name")))
-    ]
+    citations = _turn_citations(final_state)
 
     # Memory bookkeeping (summaries, intent log) runs after the reply is sent.
     from services.database import AsyncSessionLocal
