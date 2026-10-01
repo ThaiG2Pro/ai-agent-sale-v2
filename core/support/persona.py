@@ -20,6 +20,8 @@ from dataclasses import dataclass
 class SupportPersona:
     id: str
     brand: str
+    # support_router_node: 4 intents only (INFO_QUERY, PRICING, COMPLAINT,
+    # SMALLTALK); anything else the LLM returns is folded into INFO_QUERY.
     router_system_prompt: str
     answer_system_prompt: str
     smalltalk_system_prompt: str
@@ -27,10 +29,7 @@ class SupportPersona:
     context_label: str
     decline_message: str
     customer_cap_message: str
-    clarify_system_prompt: str  # contains {candidate_note}
-    support_system_prompt: str  # contains {reason} and {link}
-    support_fallback_message: str  # contains {reason} and {link}
-    support_user_turn: str
+    clarify_system_prompt: str  # contains {candidate_note}; support_clarify_node
     complaint_note: str  # appended to answer_system_prompt for COMPLAINT
     holding_message: str  # every LLM rung failed
 
@@ -117,18 +116,6 @@ SPACELY_SUPPORT = SupportPersona(
         "Không trả lời câu hỏi gốc, không xin lỗi dài dòng. "
         "Respond ONLY with valid JSON matching the schema."
     ),
-    support_system_prompt=(
-        "Bạn là trợ lý hỗ trợ khách hàng của Spacely, chân thành và thấu hiểu. "
-        "Yêu cầu này cần người thật xử lý. Viết một phản hồi ngắn gọn, lịch sự bằng tiếng Việt "
-        "(xưng 'mình', gọi 'bạn'). Nêu rõ lý do: '{reason}'. "
-        "Hướng dẫn người dùng bấm 'Liên hệ hỗ trợ' trong cửa sổ chat hoặc liên hệ tại {link}. "
-        "Không hứa hẹn kết quả xử lý."
-    ),
-    support_fallback_message=(
-        "Mình rất tiếc, yêu cầu này cần người thật xem xét: {reason}. "
-        "Bạn bấm 'Liên hệ hỗ trợ' trong cửa sổ chat hoặc liên hệ tại {link} nhé 🙏"
-    ),
-    support_user_turn="Nhờ hỗ trợ giúp mình yêu cầu này.",
     complaint_note=(
         "\n[KHIẾU NẠI]: Xin lỗi ngắn gọn, không đổ lỗi. Hỏi đúng thông tin còn thiếu "
         "(email tài khoản, Space/video nào, thao tác gì, thấy lỗi gì) — không hỏi lại điều "

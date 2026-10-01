@@ -1,6 +1,6 @@
 # Plan: `support_graph` — graph CSKH cho Spacely (hướng 2)
 
-Ngày: 2026-10-01. Trạng thái: PLAN, chưa code.
+Ngày: 2026-10-01. Trạng thái: bước 0–1 xong (commit), bước 2 trở đi chưa code.
 
 ## Mục tiêu
 
@@ -29,10 +29,12 @@ Browser ──POST /api/v1/support/chat (Next.js, rate-limit, customer_id)──
 ```
 
 Dùng lại nguyên: `retrieval_node` (hybrid search + cache + decomposition),
-`memory_retrieval_node`, `confidence_node`, `clarify_node`, checkpointer,
+`memory_retrieval_node`, `confidence_node`, checkpointer,
 `make_agent_config`, `_write_model_trace`, `post_turn_tasks`, `traced_node`.
-Viết mới: `support_router_node`, `support_answer_node`, `build_support_graph`,
-route `/support/*`, prompt/persona, eval set.
+Viết mới: `support_router_node`, `support_answer_node`, `support_clarify_node`
+(logic của `clarify_node` nhưng prompt CSKH — prompt gốc nói "trợ lý bán hàng,
+sản phẩm trong catalog"; dùng lại `_candidate_names`, `ClarifyingQuestion`,
+`FALLBACK_CLARIFY_QUESTION`), `build_support_graph`, route `/support/*`, eval set.
 
 ## Bước 0 — Dọn thử nghiệm hướng 1 (30 phút)
 
@@ -58,10 +60,13 @@ Lưu ý: repo đang có sửa đổi chưa commit của chủ repo (`api/routes/
   `user_message`, `intent`, `retrieved_chunks`, `citations`,
   `similarity_score`, `similarity_gap`, `declined`, `needs_clarification`,
   `memory_context`, `clarify_*`.
-- `core/support/persona.py` (chuyển từ `core/persona.py`): chỉ còn
-  `SPACELY_SUPPORT` với: `router_system_prompt`, `answer_system_prompt`,
-  `smalltalk_system_prompt`, `smalltalk_fastpath_reply`, `decline_message`,
-  `complaint_note`, `holding_message`, `context_label = "Tài liệu Spacely"`.
+- `core/support/persona.py`: `SPACELY_SUPPORT` với `router_system_prompt`,
+  `answer_system_prompt`, `smalltalk_system_prompt`, `smalltalk_fastpath_reply`,
+  `context_label = "Tài liệu Spacely"`, `decline_message`, `customer_cap_message`,
+  `clarify_system_prompt`, `complaint_note`, `holding_message`. (Đã làm.)
+- Đã kiểm tra: mọi channel graph support cần (`smalltalk_fastpath`,
+  `cached_answer`, `memory_context`, `needs_clarification`, `clarify_*`,
+  `risk_signals`, `turn_started_at`…) đều có sẵn trong `AgentState`.
 - Intent cho support: `INFO_QUERY`, `PRICING`, `COMPLAINT`, `SMALLTALK`
   (dùng lại `IntentEnum`, không thêm giá trị mới để `intent_tracker`/memory
   không phải sửa).
@@ -109,9 +114,9 @@ premium, policy NEGOTIATION, CTA bán hàng.
   `traced_node` để Phoenix có span từng node. Edges: START→support_router;
   support_router→{retrieval_node | support_answer_node};
   retrieval_node→memory_retrieval_node→confidence_node;
-  confidence_node→{clarify_node | support_answer_node} (hàm route riêng:
+  confidence_node→{support_clarify_node | support_answer_node} (hàm route riêng:
   `needs_clarification` → clarify, còn lại → answer; **không** hitl/escalation);
-  clarify_node→support_answer_node; support_answer_node→END.
+  support_clarify_node→support_answer_node; support_answer_node→END.
 - `api/main.py` lifespan: `app.state.support_graph = build_support_graph(checkpointer)`
   (cùng checkpointer; `thread_id` khác prefix nên không đụng session shop).
 - `api/routes/support.py`: `POST /support/query` (body/response giống
