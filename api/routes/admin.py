@@ -19,6 +19,7 @@ from models.schema import Product, TextEmbedding
 from services.costs import GROUP_BY_CHOICES, cost_report
 from services.database import get_db
 from services.rag import ingest_product_text, search_products
+from services.semantic_cache import invalidate_cache
 
 router = APIRouter(prefix="/admin/rag", tags=["admin"], dependencies=[Depends(verify_admin_key)])
 
@@ -84,6 +85,9 @@ async def admin_restock(request: RestockRequest, db: Annotated[AsyncSession, Dep
     stock_quantity; repeated suites drain the catalog to 0 and later runs
     fail with genuine out-of-stock declines. The eval runner calls this
     (admin-gated) before each run so inventory state never skews results.
+
+    v3-0 P4 (T11 4.3 mandatory condition): stock changed → cached
+    availability answers are stale, so the semantic cache is invalidated.
     """
     result = await db.execute(
         update(Product)
@@ -91,7 +95,15 @@ async def admin_restock(request: RestockRequest, db: Annotated[AsyncSession, Dep
         .values(stock_quantity=request.min_stock)
     )
     await db.commit()
-    return {"restocked": result.rowcount, "min_stock": request.min_stock}
+    restocked = result.rowcount or 0
+    cache_invalidated = 0
+    if restocked:
+        cache_invalidated = await invalidate_cache(db)
+    return {
+        "restocked": restocked,
+        "min_stock": request.min_stock,
+        "cache_invalidated": cache_invalidated,
+    }
 
 
 @router.post("/search")

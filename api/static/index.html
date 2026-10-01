@@ -157,6 +157,51 @@
       background: rgba(15, 23, 42, 0.4);
     }
 
+    /* v3-0 P3 (T12 3.4): 80/20 metrics strip — data from GET /admin/metrics */
+    .metrics-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .metric-tile {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      min-width: 0;
+    }
+
+    .metric-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .metric-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-main);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-value.ok { color: var(--accent-success); }
+    .metric-value.warn { color: var(--accent-warning); }
+    .metric-value.bad { color: var(--accent-danger); }
+
+    .metric-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
     .zone-title {
       font-family: 'Outfit', sans-serif;
       font-size: 15px;
@@ -570,6 +615,29 @@
           <button class="btn btn-secondary" onclick="fetchPendingHITL()" title="Manual refresh">
             🔄 Refresh
           </button>
+        </div>
+      </div>
+
+      <div class="metrics-strip" id="metricsStrip" title="GET /admin/metrics — tự cập nhật mỗi 15s">
+        <div class="metric-tile">
+          <div class="metric-label">Deflection</div>
+          <div class="metric-value" id="mDeflection">—</div>
+          <div class="metric-sub" id="mDeflectionSub">mục tiêu ≥ 80%</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">Support queue</div>
+          <div class="metric-value" id="mQueue">—</div>
+          <div class="metric-sub">đang chờ</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">HITL paused</div>
+          <div class="metric-value" id="mPaused">—</div>
+          <div class="metric-sub">chờ duyệt</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">Degraded</div>
+          <div class="metric-value" id="mDegraded">—</div>
+          <div class="metric-sub">turn từ lúc start</div>
         </div>
       </div>
 
@@ -1133,9 +1201,44 @@
                 .replace(/'/g, "&#039;");
     }
 
+    // v3-0 P3 (T12 3.4): 80/20 metrics strip
+    async function fetchMetrics() {
+      const adminKey = document.getElementById('adminKey').value;
+      const set = (id, text, cls = '') => {
+        const el = document.getElementById(id);
+        el.innerText = text;
+        el.className = 'metric-value' + (cls ? ' ' + cls : '');
+      };
+      try {
+        const res = await fetch('/admin/metrics', { headers: { 'X-Admin-Key': adminKey } });
+        if (!res.ok) {
+          ['mDeflection', 'mQueue', 'mPaused', 'mDegraded'].forEach(id => set(id, '—'));
+          document.getElementById('mDeflectionSub').innerText = `lỗi ${res.status}`;
+          return;
+        }
+        const m = await res.json();
+        const target = m.deflection_target ?? 0.8;
+        if (m.deflection_rate === null || m.deflection_rate === undefined) {
+          set('mDeflection', '—');
+        } else {
+          const r = m.deflection_rate;
+          set('mDeflection', `${Math.round(r * 100)}%`, r >= target ? 'ok' : r >= target - 0.2 ? 'warn' : 'bad');
+        }
+        document.getElementById('mDeflectionSub').innerText =
+          `mục tiêu ≥ ${Math.round(target * 100)}% · ${m.handoff_sessions}/${m.total_sessions} handoff`;
+        set('mQueue', String(m.support_queue_depth), m.support_queue_depth > 5 ? 'warn' : '');
+        set('mPaused', String(m.hitl_paused_count));
+        set('mDegraded', String(m.degraded_turns), m.degraded_turns > 0 ? 'warn' : '');
+      } catch (err) {
+        document.getElementById('mDeflectionSub').innerText = 'mất kết nối';
+      }
+    }
+
     // Initial Load
     fetchPendingHITL();
     setInterval(fetchPendingHITL, 5000); // Auto-poll every 5s
+    fetchMetrics();
+    setInterval(fetchMetrics, 15000);
   </script>
 </body>
 </html>

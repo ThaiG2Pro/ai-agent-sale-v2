@@ -27,6 +27,19 @@ async def test_get_ui_endpoint_returns_200_html():
 
 
 @pytest.mark.asyncio
+async def test_ui_renders_metrics_strip_from_admin_metrics():
+    """v3-0 P3 (T12 3.4): the mini dashboard reads GET /admin/metrics."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/ui")
+
+    assert 'id="metricsStrip"' in response.text
+    assert "fetch('/admin/metrics'" in response.text
+    for tile_id in ("mDeflection", "mQueue", "mPaused", "mDegraded"):
+        assert f'id="{tile_id}"' in response.text
+
+
+@pytest.mark.asyncio
 async def test_get_pending_hitl_endpoint():
     """Ensures GET /hitl/pending returns list of pending sessions."""
 
