@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     What it does: Loads environment variables from .env or system environment.
     """
 
+    # ── Spacely support integration (2026-10-01) ────────────────────────────
+    # Optional shared secret for the customer-facing agent routes. Empty =
+    # open (local/dev, tests). When set, callers must send
+    # `X-Agent-Key: <value>` — the Next.js proxy route in elearning-platform
+    # does. Admin endpoints keep X_ADMIN_KEY.
+    AGENT_API_KEY: str | None = None
+
     # Deployment environment — gates fail-fast secret validation at startup.
     # "production" refuses to boot with default secrets; other envs only warn.
     ENV: Literal["dev", "staging", "production"] = "dev"

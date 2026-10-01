@@ -33,6 +33,28 @@ async def verify_admin_key(x_admin_key: str = Header(None)):
         )
 
 
+async def verify_agent_key(
+    x_agent_key: str | None = Header(default=None, alias="X-Agent-Key"),
+) -> None:
+    """Optional shared secret for the customer-facing /agent/* routes.
+
+    Why: when the agent is embedded in another product (Spacely's support
+    widget proxies through its own Next.js route), the FastAPI port should
+    not be an open LLM endpoint. ``AGENT_API_KEY`` unset = open (local dev,
+    tests, the Telegram-only deployment where /agent is not exposed).
+    """
+    expected = settings.AGENT_API_KEY
+    if not expected:
+        return
+    provided = x_agent_key or ""
+    if not provided or not compare_digest(provided, expected):
+        logfire.warn("Agent request rejected: missing/invalid X-Agent-Key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing X-Agent-Key",
+        )
+
+
 async def verify_telegram_secret(
     x_telegram_bot_api_secret_token: str | None = Header(
         default=None,

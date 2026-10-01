@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [spacely-support-groundwork] — 2026-10-01
+
+### Fixed
+- `AIGateway.embed`: `EMBED_MODEL=local/<name>` embeds in-process via fastembed
+  again (ADR-006 §B). The branch was dropped in d042a82 and "local/" silently
+  routed to an unreachable Ollama entry.
+
+### Added
+- Groundwork for the Spacely support graph (docs/upgrade-plan-support-graph.md):
+  `core/support/persona.py` (support prompts), optional `AGENT_API_KEY`
+  (`X-Agent-Key` header) via `api.dependencies.verify_agent_key` — not yet
+  wired to any route — `scripts/ingest_spacely_faq.py` (FAQ corpus from
+  Spacely's `/api/v1/support/knowledge`) and `scripts/run_spacely_local.sh`
+  (separate database).
+
 ## [006-telegram-docker]
 
 ### Added
