@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.agent.state import IntentEnum
 from core.config import settings
@@ -121,10 +121,7 @@ async def _maybe_extract_intent(
 
         # Extract intent from conversation
         conversation_text = "\n".join(
-            [
-                f"{msg.get('role', 'unknown')}: {msg.get('content', '')}"
-                for msg in state.get("messages", [])
-            ]
+            f"{_msg_role(msg)}: {_msg_content(msg)}" for msg in state.get("messages", [])
         )
 
         async with db_factory() as db:
@@ -382,6 +379,21 @@ async def _summarize_and_embed(
         )
         return
     await _update_semantic_memory(customer_id, thread_id, state, db_factory)
+
+
+def _msg_role(msg: Any) -> str:
+    """Role of a conversation entry — graph state holds LangChain messages
+    (HumanMessage/AIMessage), older callers/tests pass plain dicts."""
+    if isinstance(msg, dict):
+        return str(msg.get("role", "unknown"))
+    kind = getattr(msg, "type", None)
+    return {"human": "user", "ai": "assistant"}.get(kind, kind or "unknown")
+
+
+def _msg_content(msg: Any) -> str:
+    if isinstance(msg, dict):
+        return str(msg.get("content", ""))
+    return str(getattr(msg, "content", "") or "")
 
 
 async def post_turn_tasks(
