@@ -1,6 +1,6 @@
 # Plan: `support_graph` — graph CSKH cho Spacely (hướng 2)
 
-Ngày: 2026-10-01. Trạng thái: bước 0–4 xong (commit), bước 5 trở đi chưa làm.
+Ngày: 2026-10-01. Trạng thái: bước 0–5 xong, bước 6 (test/eval) và 7 (elearning) chưa làm.
 
 ## Mục tiêu
 
@@ -138,6 +138,21 @@ premium, policy NEGOTIATION, CTA bán hàng.
   đã bị Groq gỡ. Đổi sang `groq/openai/gpt-oss-120b` (chat) và
   `groq/openai/gpt-oss-20b` (light). Việc này ảnh hưởng cả shop, cần chủ repo
   quyết.
+
+### Kết quả smoke bước 5 (2026-10-01, gpt-oss-120b/20b qua Groq, DB spacely_agent, 14 docs)
+
+| Câu | Intent | declined | ms | Nhận xét |
+|---|---|---|---|---|
+| xin chào | SMALLTALK (fast-path) | no | 308 | template, 0 LLM |
+| Clone space của người khác được không? | INFO_QUERY | no | 20171 | đúng FAQ, có lưu ý nội dung AI trả phí |
+| mua credit giá bao nhiêu? | PRICING | no | 3437 | đúng 3 gói từ CreditLedger |
+| tôi muốn đặt mua 2 cái iphone 15 | INFO_QUERY | **yes** | 4230 | từ chối, không đi vào order |
+| app lỗi… hoàn tiền cho tôi | COMPLAINT | no | 2501 | xin lỗi, hỏi 3 thông tin, trỏ "Liên hệ hỗ trợ", không hứa hoàn |
+| giải bài toán 2x+3=7 | INFO_QUERY | **yes** | 6547 | từ chối ngoài phạm vi |
+
+Lỗi nền (không chặn trả lời): `services/memory/background.py:125`
+`_maybe_extract_intent` gọi `msg.get()` trên `HumanMessage` → AttributeError
+mỗi lượt. Bug có sẵn, dùng chung với `/agent/query`; cần sửa riêng.
 
 ## Bước 6 — Test và eval (3 giờ)
 
