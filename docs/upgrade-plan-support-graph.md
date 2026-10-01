@@ -1,6 +1,6 @@
 # Plan: `support_graph` — graph CSKH cho Spacely (hướng 2)
 
-Ngày: 2026-10-01. Trạng thái: bước 0–2 xong (commit), bước 3 trở đi chưa code.
+Ngày: 2026-10-01. Trạng thái: bước 0–3 xong (commit), bước 4 trở đi chưa code.
 
 ## Mục tiêu
 
@@ -164,6 +164,10 @@ premium, policy NEGOTIATION, CTA bán hàng.
   kích hoạt vì intent không bao giờ là ORDER; vẫn thêm test khẳng định.
 - `retrieval_node` prompt decomposition nói "product catalog" — chấp nhận,
   chỉ ảnh hưởng câu ghép; theo dõi qua eval.
+- Judge groundedness (`services/rag/groundedness.py`) có prompt "sales
+  assistant / PRODUCT CONTEXT" nhưng tiêu chí answerable/supported là chung;
+  dùng nguyên, chỉ áp cho INFO/PRICING (COMPLAINT là thủ tục, không chấm).
+  Nếu eval thấy từ chối oan thì tách prompt judge theo graph.
 - Rate-limit Groq free (30 RPM): mỗi lượt support tốn 2–3 call (router,
   answer, groundedness). Đã có `LLM_RPM_LIMIT=28`; ở widget thì 15 tin/phút/
   người là trần an toàn.
