@@ -300,6 +300,50 @@ def _with_schema_prompt(
 # HTTPX auto-instrumentation produces spans for every outbound call to Ollama/OpenAI.
 
 
+# ── In-process embedding (EMBED_MODEL="local/<name>") ─────────────────────────
+# Restored 2026-10-01: ADR-006 §B promises fastembed ONNX in-process embedding
+# for the "local/" prefix (zero-cost path when chat runs on a cloud provider),
+# and core/ai_config.py's docstring says AIGateway.embed short-circuits it —
+# but the branch was dropped in d042a82 and "local/" silently fell through to
+# an Ollama router entry that is unreachable without an Ollama server.
+_LOCAL_EMBED_ALIASES = {
+    # 1024-dim — matches the pgvector Vector(1024) column seeded by ingest.
+    "multilingual-e5-large": "intfloat/multilingual-e5-large",
+    "bge-m3": "intfloat/multilingual-e5-large",
+}
+_local_embedder: Any = None
+
+
+def _resolve_local_embed_id(embed_model: str) -> str:
+    name = embed_model.removeprefix("local/")
+    return _LOCAL_EMBED_ALIASES.get(name, name)
+
+
+async def _embed_local(texts: list[str]) -> list[list[float]]:
+    """Embed via fastembed in a worker thread (CPU-bound, keeps the loop free)."""
+    global _local_embedder
+    start_time = time.perf_counter()
+    model_id = _resolve_local_embed_id(settings.EMBED_MODEL)
+    if _local_embedder is None:
+        from fastembed import TextEmbedding
+
+        _local_embedder = await asyncio.to_thread(TextEmbedding, model_name=model_id)
+    embedder = _local_embedder
+    vectors = await asyncio.to_thread(lambda: [v.tolist() for v in embedder.embed(texts)])
+    for vec in vectors:
+        if len(vec) != settings.EMBED_DIMENSION:
+            raise ValueError(
+                f"Configuration Error: Model Mismatch — local embedding dimension "
+                f"{len(vec)} (expected {settings.EMBED_DIMENSION})"
+            )
+    logfire.info(
+        "AI Embedding finished: {model} (local), Latency: {latency:.4f}s",
+        model=model_id,
+        latency=time.perf_counter() - start_time,
+    )
+    return vectors
+
+
 class AIGateway:
     """
     Why this exists: Unified interface for AI operations (Chat & Embedding).
@@ -435,6 +479,11 @@ class AIGateway:
         # Ensure input is a list for consistent processing
         if isinstance(input_text, str):
             input_text = [input_text]
+
+        from core.config import settings as _settings
+
+        if _settings.EMBED_MODEL.startswith("local/"):
+            return await _embed_local(input_text)
 
         try:
             logfire.info("AI Embedding started: {model}", model=model)
