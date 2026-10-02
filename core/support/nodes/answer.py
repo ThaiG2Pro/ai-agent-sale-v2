@@ -19,7 +19,9 @@ Paths:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 import time
 from typing import TYPE_CHECKING, cast
 
@@ -99,11 +101,41 @@ def _build_messages(state: AgentState) -> tuple[list[dict[str, str]], str]:
     )
 
 
+_RATE_LIMIT_RETRIES = 2
+_RATE_LIMIT_MAX_WAIT_S = 15.0
+_RETRY_AFTER_RE = re.compile(r"try again in ([0-9.]+)\s*(ms|s)", re.IGNORECASE)
+
+
+def _retry_after_seconds(exc: Exception) -> float:
+    """Groq puts 'Please try again in 4.99s' / '832.5ms' in the 429 body."""
+    m = _RETRY_AFTER_RE.search(str(exc))
+    if not m:
+        return 5.0
+    value = float(m.group(1))
+    wait = value / 1000 if m.group(2).lower() == "ms" else value
+    return min(max(wait + 0.5, 1.0), _RATE_LIMIT_MAX_WAIT_S)
+
+
 async def _generate(messages: list[dict[str, str]]) -> tuple[str, LLMUsageMetrics]:
-    start = time.perf_counter()
-    result = await AIGateway.complete(model=_ANSWER_MODEL, messages=messages)
-    metrics = extract_llm_metrics(result, latency_ms=(time.perf_counter() - start) * 1000)
-    return (result.choices[0].message.content or "").strip(), metrics
+    """One answer call; a provider 429 (Groq free tier: 8k tokens/min on the
+    chat model) is waited out and retried instead of surfacing as a holding
+    message — a single support turn is 1-2k tokens, so the wait is seconds."""
+    from litellm.exceptions import RateLimitError
+
+    for attempt in range(_RATE_LIMIT_RETRIES + 1):
+        start = time.perf_counter()
+        try:
+            result = await AIGateway.complete(model=_ANSWER_MODEL, messages=messages)
+        except RateLimitError as exc:
+            if attempt == _RATE_LIMIT_RETRIES:
+                raise
+            wait = _retry_after_seconds(exc)
+            logger.warning("support_answer rate-limited, retry %d in %.1fs", attempt + 1, wait)
+            await asyncio.sleep(wait)
+            continue
+        metrics = extract_llm_metrics(result, latency_ms=(time.perf_counter() - start) * 1000)
+        return (result.choices[0].message.content or "").strip(), metrics
+    raise RuntimeError("unreachable")  # pragma: no cover
 
 
 async def _ground(

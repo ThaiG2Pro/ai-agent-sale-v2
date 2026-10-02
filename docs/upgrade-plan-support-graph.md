@@ -1,6 +1,6 @@
 # Plan: `support_graph` — graph CSKH cho Spacely (hướng 2)
 
-Ngày: 2026-10-01. Trạng thái: bước 0–5 và 7 xong; còn bước 6 (eval set).
+Ngày: 2026-10-01. Trạng thái: hoàn thành bước 0–7 (2026-10-02).
 
 ## Mục tiêu
 
@@ -166,6 +166,19 @@ mỗi lượt. Bug có sẵn, dùng chung với `/agent/query`; cần sửa riê
 - Smoke thủ công 6 câu đã dùng hôm nay: chào / clone / giá credit / "mua 2
   iPhone" (phải từ chối ngoài phạm vi) / khiếu nại mất credit (phải xin lỗi +
   hướng sang người thật, không hứa hoàn) / giải toán (từ chối).
+
+### Kết quả bước 6 (2026-10-02)
+
+- `scripts/eval_support.py` + `tests/eval/support_gold.json` (20 câu):
+  Tier-R 14/14, Tier-F 20/20. Baseline: `tests/eval/baselines/tier-support-{r,f}-20261002.json`.
+  Chạy: `./scripts/run_spacely_local.sh eval --tier all` (gate: tụt >2pp thì exit 1).
+- Chấm must_decline = từ chối HOẶC chuyển hướng lịch sự ("chỉ hỗ trợ Spacely",
+  "không bán…") vì nhánh SMALLTALK không bao giờ đặt `declined`; lỗi thật
+  (trả lời câu ngoài phạm vi) bắt bằng `forbidden_terms`.
+- Phát hiện: Groq free tier giới hạn **8.000 token/phút** trên `openai/gpt-oss-120b`
+  (~4–5 lượt RAG/phút cho CẢ hệ thống). `support_answer_node` giờ chờ theo
+  "try again in Xs" và thử lại tối đa 2 lần trước khi trả holding message.
+  Lên prod cần Groq Dev tier hoặc provider khác cho `CHAT_MODEL`.
 
 ## Bước 7 — Phía elearning-platform (30 phút)
 

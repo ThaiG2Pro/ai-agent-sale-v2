@@ -245,3 +245,45 @@ async def test_complaint_ignores_confidence_decline():
         out = await support_answer_node(s, _CFG)
     llm.assert_awaited_once()
     assert out["response"] == "Mình xin lỗi…" and out["declined"] is False
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_is_retried_then_succeeds():
+    from litellm.exceptions import RateLimitError
+
+    from core.support.nodes import answer as mod
+
+    s = _state("credit là gì", "PRICING", retrieved_chunks=[{"text": "…"}])
+    err = RateLimitError(
+        "Rate limit… Please try again in 832.5ms.", llm_provider="groq", model="x"
+    )
+    calls = AsyncMock(side_effect=[err, _llm("Credit là…")])
+    with (
+        patch("services.ai.AIGateway.complete", new=calls),
+        patch.object(mod.asyncio, "sleep", new=AsyncMock()) as slept,
+        patch(
+            "services.rag.groundedness.check_groundedness",
+            new=AsyncMock(return_value=GroundednessVerdict(answerable=True, supported=True)),
+        ),
+    ):
+        out = await support_answer_node(s, _CFG)
+    assert calls.await_count == 2
+    assert slept.await_args.args[0] == pytest.approx(1.3325)  # 0.8325s + 0.5 headroom
+    assert out["response"] == "Credit là…" and out["model_used"] == "economy-chat"
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_exhausted_returns_holding_message():
+    from litellm.exceptions import RateLimitError
+
+    from core.support.nodes import answer as mod
+
+    s = _state("credit là gì", "PRICING", retrieved_chunks=[{"text": "…"}])
+    err = RateLimitError("Rate limit… try again in 2s", llm_provider="groq", model="x")
+    with (
+        patch("services.ai.AIGateway.complete", new=AsyncMock(side_effect=err)) as calls,
+        patch.object(mod.asyncio, "sleep", new=AsyncMock()),
+    ):
+        out = await support_answer_node(s, _CFG)
+    assert calls.await_count == 3
+    assert out["response"] == P.holding_message

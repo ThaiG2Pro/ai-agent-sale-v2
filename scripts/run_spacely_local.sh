@@ -6,6 +6,7 @@
 #   ./scripts/run_spacely_local.sh migrate   # create DB (if missing) + alembic upgrade head
 #   ./scripts/run_spacely_local.sh ingest [URL|FILE]   # (re)load FAQ corpus
 #   ./scripts/run_spacely_local.sh api       # uvicorn on :8000 (support graph: see docs/upgrade-plan-support-graph.md)
+#   ./scripts/run_spacely_local.sh eval --tier all [--save-baseline]   # scripts/eval_support.py
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -33,6 +34,10 @@ case "${1:-}" in
   api)
     uv run uvicorn api.main:app --host 0.0.0.0 --port "${API_PORT:-8000}"
     ;;
+  eval)
+    shift
+    uv run python scripts/eval_support.py "$@"
+    ;;
   *)
-    echo "usage: $0 {migrate|ingest [URL|FILE]|api}" >&2; exit 2;;
+    echo "usage: $0 {migrate|ingest [URL|FILE]|api|eval ...}" >&2; exit 2;;
 esac
