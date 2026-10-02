@@ -3,6 +3,17 @@
 **Status**: Accepted  
 **Date**: 2026-03-30  
 **Context**: Feature 006 - Telegram Integration & Production Docker  
+
+> **Terminology.** "Article N" references point to the project's original engineering
+> charter (`docs/specs/*/plan.md`, "Constitution"): II = graph-based orchestration & simplicity,
+> V = async I/O only, VI = all model calls through LiteLLM, VII = single database, X = cost /
+> image-size discipline. They are kept for traceability to the spec-kit era.
+
+> **Image-size note (2026-10-02).** The <300 MB image target used below was **not met**: the
+> current image is ~1.5 GB, dominated by the ML stack (torch-free fastembed ONNX runtime,
+> LangChain/LiteLLM, PyMuPDF, crawl4ai). The 15–20 MB saved here is real but marginal; the
+> decision stands on the simplicity and event-loop arguments. Slimming the image is open
+> backlog (upgrade-plan-v4).
 **Constitution Article**: Article XI (Engineering Maturity)
 
 ---
@@ -175,7 +186,7 @@ async def send_telegram_message(bot_token: str, message: TelegramMessage):
 
 - **Contract Tests**: Mock httpx responses for Telegram API
 - **Integration Tests**: Use Telegram Bot API test environment
-- **Type Safety**: mypy validates Pydantic models end-to-end
+- **Type Safety**: Pydantic models validate every inbound update at runtime (no separate type-checker runs in CI; ruff only)
 
 ---
 
@@ -207,16 +218,11 @@ async def send_telegram_message(bot_token: str, message: TelegramMessage):
 
 ## Review and Approval
 
-- **Proposed by**: AI Agent (speckit.plan workflow)
-- **Reviewed by**: (To be filled during implementation)
-- **Approved by**: (To be filled during implementation)
+- **Author / decider**: Thái Hoàng (solo project; drafted with AI-assisted planning, reviewed and accepted by the author)
 - **Implementation Date**: 2026-03-30 (Week 6)
 
 ---
 
 ## Amendments
 
-None yet. This ADR may be amended if:
-1. Telegram API significantly changes (breaking changes)
-2. Image size pressure requires removing httpx entirely (extremely unlikely)
-3. Constitutional articles change to favor higher-level abstractions (unlikely)
+- 2026-10-02: added the image-size note above; "Constitution" terminology explained.

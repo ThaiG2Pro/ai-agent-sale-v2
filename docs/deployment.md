@@ -3,8 +3,14 @@
 ## Prerequisites
 
 - Docker Engine + Docker Compose plugin
-- A DB password file at `./secrets/db_password.txt`
+- A DB password file at `./secrets/db_password.txt` (Docker secret `db_password`)
 - `.env` file copied from `.env.example`
+
+Password resolution in the app: `DB_PASSWORD` env → the mounted secret file
+(`DB_PASSWORD_FILE`, default `/run/secrets/db_password`) → dev default `password`.
+Inside compose both `db` and `api` mount the secret, so leave `DB_PASSWORD` empty
+there. For host-run commands (`alembic`, `scripts/*`, `uvicorn`) set
+`DB_PASSWORD` in `.env` to the file's content.
 
 ## Environment Variables
 
@@ -12,8 +18,8 @@ Use `.env.example` as baseline, then set:
 
 - `DB_USER`, `DB_NAME`, `DB_PORT`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_URL`
-- `DATABASE_POOL_SIZE=20`
-- `DATABASE_MAX_OVERFLOW=0`
+- `DATABASE_POOL_SIZE=20`, `DATABASE_MAX_OVERFLOW=40` (compose maps these to
+  `DB_POOL_SIZE` / `DB_MAX_OVERFLOW`; app dev defaults are 10 / 20)
 
 Optional explicit DSN format:
 
@@ -35,7 +41,7 @@ keys straight from the environment; `docker-compose.yml` passes them through
 > concurrency, cloud API for zero-ops) and the mandatory Ollama mitigations
 > (`num_ctx`, exact quant tags).
 
-### Option A — Cloud chat + local embeddings (current default)
+### Option A — Cloud chat + local embeddings (the `.env.example` default)
 
 No Ollama needed at all; embeddings run in-process (fastembed ONNX, CPU):
 
@@ -49,9 +55,9 @@ EMBED_MODEL=local/multilingual-e5-large   # fastembed, in-process
 
 ### Option B — Fully local chat (Ollama on the host)
 
-The `api` container reaches host Ollama via `host.docker.internal`
-(`extra_hosts: host-gateway` is preconfigured); the default
-`OLLAMA_BASE_URL=http://host.docker.internal:11434` works out of the box.
+The `api` container runs with `network_mode: host`, so host Ollama is simply
+`OLLAMA_BASE_URL=http://localhost:11434` (Profile 1 in `.env.example`; the
+compose fallback points at a llama-server on `:8080`, so set it explicitly).
 Set `num_ctx` explicitly and pin exact quant tags — see ADR-006.
 
 ### ⚠️ Embedding model / dimension constraint
@@ -100,7 +106,8 @@ curl -s http://localhost:8000/health/readiness
 
 - `api` keeps restarting: verify `TELEGRAM_WEBHOOK_SECRET` length (>=20 chars).
 - readiness returns `503`: check Postgres logs and DB secret file content.
-- DB auth failures: ensure `./secrets/db_password.txt` matches DB credentials.
+- DB auth failures from host-run commands: `DB_PASSWORD` in `.env` must equal the
+  content of `./secrets/db_password.txt` (containers read the secret directly).
 - slow startup: first build compiles dependencies; subsequent builds are cached.
 
 ## Branch Protection (one-time, needs repo owner)
@@ -122,9 +129,10 @@ gh api -X PUT repos/ThaiG2Pro/ai-agent-sale-v2/branches/main/protection \
 ## Security Note
 
 - Never commit `.env` or `secrets/*`.
-- Use Docker secrets (`db_password`) instead of plaintext env passwords.
+- Containers read the DB password from the Docker secret (`db_password`); only
+  host-run tooling needs it in `.env`.
 
-## Rate Limiting (Week 7 Consideration)
+## Rate Limiting (not implemented — recommendation)
 
 - Telegram webhook endpoint should be protected by request rate limits once traffic grows.
 - Start with per-chat and per-IP limits at reverse proxy layer (Nginx/Traefik) before app-level policies.

@@ -25,7 +25,7 @@ FastAPI / CLI / SQLAlchemy / HTTPX / LangGraph
 |---|---|
 | `FastAPIInstrumentor` | HTTP requests, status codes, latency |
 | `SQLAlchemyInstrumentor` | every DB query with parameters |
-| `HTTPXClientInstrumentor` | **all LiteLLM outbound calls** (Ollama/OpenAI) + other HTTP |
+| `HTTPXClientInstrumentor` | **all LiteLLM outbound calls** (Groq / Ollama / OpenAI …) + other HTTP |
 | `LoggingInstrumentor` | injects `trace_id`/`span_id` into log records |
 | `LangChainInstrumentor` | LangGraph node executions, LLM call semantics (OpenInference) |
 
@@ -83,14 +83,13 @@ docker compose up phoenix -d
 **Config (`.env` or `core/config.py` defaults):**
 
 ```env
-OTLP_ENDPOINT=http://localhost:4317        # app on host; in compose → http://phoenix:4317 (auto)
+OTLP_ENDPOINT=http://localhost:4317        # Phoenix OTLP gRPC port, mapped to the host
 OTEL_SERVICE_NAME=ai-sales-agent
 PHOENIX_PROJECT_NAME=ai-sales-agent        # Phoenix UI project traces land in
 ```
 
-> **App on host vs in Docker:** when the API runs via `docker compose up api`, compose
-> overrides `OTLP_ENDPOINT` to `http://phoenix:4317` (the in-network service address) —
-> `localhost:4317` only works for a host-run app. Nothing to configure manually.
+> **App on host vs in Docker:** the `api` container uses `network_mode: host`, so
+> `localhost:4317` is correct in both cases. Nothing to configure manually.
 
 > **Persistence:** Phoenix stores traces in the `phoenix_data` volume
 > (`PHOENIX_WORKING_DIR=/mnt/data`) — they survive container restarts.
@@ -139,11 +138,7 @@ turn's trace — so one `/agent/query` shows a parent-child tree with per-node l
 
 **When to use:** Staging/prod — deep Python monitoring, alerts, dashboards.
 
-**Install:**
-
-```bash
-uv add "logfire[fastapi]"  # already installed
-```
+**Install:** `logfire[fastapi]` is already a project dependency (`pyproject.toml`).
 
 **Changes to `core/logging.py`:**
 
@@ -220,7 +215,7 @@ LANGCHAIN_PROJECT=ai-sales-agent
 ```yaml
 services:
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.62.0
     ports:
       - "16686:16686"   # Jaeger UI
       - "14250:14250"   # gRPC collector
@@ -228,13 +223,13 @@ services:
     restart: always
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.55.1
     ports:
       - "9090:9090"
     restart: always
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.3.0
     ports:
       - "3000:3000"
     restart: always

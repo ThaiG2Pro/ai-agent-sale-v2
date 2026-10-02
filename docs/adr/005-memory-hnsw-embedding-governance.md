@@ -2,7 +2,8 @@
 
 **Date**: 2026-03-11  
 **Status**: ACCEPTED  
-**Authors**: AI Sales Agent Team  
+**Author**: Thái Hoàng  
+**Amended**: 2026-10-02 — §C aligned with ADR-006 (embedding runtime)  
 
 ---
 
@@ -70,10 +71,13 @@ model_version: str    # e.g., "ollama/bge-m3@1024" (composite key)
 
 ### C. Embedding Dimension Consistency
 
-One embedding model per environment:
-- **Dev**: `ollama/bge-m3` (1024 dim)
-- **Staging**: `cohere/embed-english-light-v3.0` (384 dim) — optimized for cost
-- **Prod**: (TBD by ops, but never mix dimensions in same DB)
+One embedding model per database, and it must emit **1024-dim** vectors because the
+pgvector columns are `Vector(1024)`:
+- **Default (all environments)**: `local/multilingual-e5-large` — fastembed ONNX in-process,
+  exact-pinned (ADR-006 §B). Multilingual, so Vietnamese catalog text embeds well.
+- **Offline alternative**: `ollama/bge-m3` (1024 dim) when an Ollama server is available.
+- Never mix models or dimensions in the same DB; switching models is a migration event
+  (runbook in ADR-006).
 
 **Enforcement**: Pydantic validator on SemanticMemory to catch dimension mismatches at insert time.
 
@@ -94,8 +98,8 @@ One embedding model per environment:
 - ⚠️  Must choose embedding model per environment; cannot mix multiple models in same DB
 
 ### Mitigation
-- **Dimension mismatch**: Caught at Pydantic validation + INSERT trigger guard (FR-010)
-- **Query latency**: HNSW parameters tuned for 100k entry scale; stress test in Phase 7
+- **Dimension mismatch**: caught at the AI gateway (`AIGateway.embed` raises on a dimension ≠ `EMBED_DIMENSION`) before any INSERT; pgvector rejects a wrong-width vector as a second line of defence
+- **Query latency**: HNSW parameters tuned for 100k entry scale; verified by the week-7 stress test (`tests/performance/`)
 - **Model drift**: `flag_stale()` + CLI `reembed-semantic-memory` defers re-embedding work
 
 ---
@@ -133,6 +137,6 @@ One embedding model per environment:
 
 - **pgvector Documentation**: https://github.com/pgvector/pgvector
 - **HNSW Papers**: "Efficient and robust approximate nearest neighbor search in high dimensional spaces"
-- **Week 5 Spec**: See spec.md FR-007 through FR-010b for memory requirements
-- **Article VII (Constitution)**: Single-database-only principle
+- **Week 5 Spec**: `docs/specs/005-async-persistence-memory/spec.md`, FR-007 through FR-010b
+- **Article VII (Constitution)**: single-database-only principle — the project's original engineering charter (`docs/specs/*/plan.md`)
 

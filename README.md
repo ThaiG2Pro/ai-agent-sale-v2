@@ -22,7 +22,7 @@ Most chatbot demos stop at "it answers". This project is built and **measured** 
 | | |
 |---|---|
 | 🧪 **782 automated tests** | unit / integration / contract / eval / performance suites; integration tests run the *real* LangGraph against real Postgres |
-| 📊 **LLM eval gates with committed baselines** | **Tier-R** (retrieval recall, 34/34) runs on every PR with zero LLM cost; **Tier-F** (full agent graph, 12/12 across 3 consecutive runs) runs nightly — a >2pp regression fails the build |
+| 📊 **LLM eval gates with committed baselines** | **Tier-R** (retrieval recall, 34/34 retrieval cases of the ~40-case gold set) runs on every PR with zero LLM cost; **Tier-F** (full agent graph, 12/12 across 3 consecutive runs) runs nightly — a >2pp regression fails the build |
 | 🛡️ **CI that blocks bad commits** | lint → unit (real pgvector, mocked LLM) → eval, with a **75% coverage gate** (`--cov-fail-under=75`) |
 | 🔍 **Per-node distributed tracing** | every graph node emits an OpenTelemetry span (OpenInference-annotated) into Phoenix — you can see exactly which node was slow in any turn, with a kill-switch and measured overhead |
 | 📜 **Decisions written down** | [ADRs](docs/adr/) cover model/provider choice, orchestration, embedding governance — including two real incidents (see below) |
@@ -129,10 +129,11 @@ Plan and decisions: [docs/upgrade-plan-support-graph.md](docs/upgrade-plan-suppo
 ```bash
 # 1. Install uv, then:
 uv sync
-cp .env.example .env          # set TELEGRAM_* vars; add GROQ_API_KEY for cloud chat
-echo "change-me" > secrets/db_password.txt
+cp .env.example .env          # set TELEGRAM_* vars + GROQ_API_KEY (default profile: Groq chat, local embeddings)
+echo "change-me" > secrets/db_password.txt   # Postgres + the api container read this Docker secret
+echo "DB_PASSWORD=change-me" >> .env         # host-run commands (alembic, scripts) use the env var
 
-# 2. Infra (Postgres+pgvector, Phoenix tracing UI)
+# 2. Infra (Postgres+pgvector, Phoenix tracing UI, and the API on :8000 via host networking)
 docker compose up -d --build
 
 # 3. Migrations + demo catalog
@@ -151,12 +152,13 @@ full deployment guide: [docs/deployment.md](docs/deployment.md) · scripted demo
 **Model config** (any LiteLLM string works):
 
 ```bash
-# Cloud chat + local embeddings (default, no GPU needed)
+# Cloud chat + local embeddings (the .env.example default, no GPU needed)
 CHAT_MODEL=groq/llama-3.3-70b-versatile
 EMBED_MODEL=local/multilingual-e5-large    # fastembed ONNX, in-process
 
-# ...or fully offline via Ollama (see ADR-006 for mandatory num_ctx/quant settings)
-CHAT_MODEL=ollama/qwen3-1.7b
+# ...or fully offline via Ollama — Profile 1 in .env.example
+# (see ADR-006 for the mandatory num_ctx setting; always pin the exact quant tag)
+CHAT_MODEL=ollama/qwen3-4b-q6:latest
 ```
 
 ## Development
@@ -180,7 +182,7 @@ repo owners is documented in [docs/deployment.md](docs/deployment.md).
 | [docs/observability.md](docs/observability.md) | OTel → Phoenix setup, per-node span design |
 | [docs/deployment.md](docs/deployment.md) | Docker deployment, provider options, ops notes |
 | [docs/demo-runbook.md](docs/demo-runbook.md) | 5 scripted demo scenarios with seed data |
-| [docs/feature-scorecard.md](docs/feature-scorecard.md) | honest self-assessment, re-scored after each upgrade plan |
+| [docs/feature-scorecard.md](docs/feature-scorecard.md) | honest self-assessment, re-scored after each upgrade plan (last: 2026-10-02) |
 | [docs/upgrade-plan-support-graph.md](docs/upgrade-plan-support-graph.md) | the Spacely support graph: why a second graph, node contracts, eval results |
 
 ---

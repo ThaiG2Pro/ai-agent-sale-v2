@@ -18,10 +18,10 @@ Offline-First principle. Since then two things changed:
    (`num_ctx` truncation, silent q4 quantization), non-standard model
    management, and no continuous batching. The criticism is valid, but it
    applies to *how* Ollama is deployed, not to this codebase's architecture.
-2. **The project already drifted off Ollama in practice**: chat runs on Groq
-   (`groq/llama-3.3-70b-versatile`), embeddings run **in-process via fastembed
-   ONNX** (`local/multilingual-e5-large`). Ollama has been down in dev for days
-   with zero breakage.
+2. **The project already drifted off Ollama in practice**: chat runs on a Groq
+   model (e.g. `groq/llama-3.3-70b-versatile`, the `.env.example` default),
+   embeddings run **in-process via fastembed ONNX** (`local/multilingual-e5-large`).
+   Dev ran for an extended period without an Ollama server and nothing broke.
 
 This ADR records the decision framework so "should we drop Ollama for
 llama.cpp/vLLM?" does not get re-litigated per deployment.
@@ -43,9 +43,9 @@ cloud API is a config change, not a code change. Therefore this is a
 | Deployment context | Backend | Rationale |
 |---|---|---|
 | **Dev laptop / demo** | Ollama (via LiteLLM `ollama/...`) | One-command model pull; fastest onboarding. Mitigations below are MANDATORY. |
-| **Prod self-host, CPU or small GPU, low concurrency (typical SME)** | **`llama.cpp` (`llama-server`)** via LiteLLM `openai/...` pointing at its OpenAI-compatible endpoint | Lightweight, explicit GGUF quant choice, explicit `--ctx-size`, no hidden model rewrites. The "production Ollama" without the magic. |
+| **Prod self-host, CPU or small GPU, low concurrency (typical SME)** | **`llama.cpp` (`llama-server`)** via LiteLLM `hosted_vllm/...` (OpenAI-compatible endpoint, `LLAMA_SERVER_BASE_URL`; Profile 2 in `.env.example`) | Lightweight, explicit GGUF quant choice, explicit `--ctx-size`, no hidden model rewrites. The "production Ollama" without the magic. |
 | **Prod, real GPU, many concurrent users** | **vLLM** (or SGLang) | Continuous batching, PagedAttention — actual throughput engine. Overkill below ~double-digit concurrent sessions. |
-| **Prod, no model-ops budget** | Cloud API (Groq / Gemini / OpenAI via LiteLLM) | Current default. Eval Tier-F 12/12 on Groq. Trades Offline-First for zero ops. |
+| **Prod, no model-ops budget** | Cloud API (Groq / Gemini / OpenAI via LiteLLM) | `.env.example` default (Profile 3). Eval Tier-F 12/12 on Groq. Trades Offline-First for zero ops. |
 
 **Ollama mitigations (mandatory wherever Ollama is used):**
 
@@ -119,7 +119,7 @@ a plain config tweak. Checklist:
 4. **Semantic memory**: run `flag_stale()` (marks old-model rows STALE), then
    optionally re-embed via the CLI (ADR-005).
 5. **Semantic cache**: no action needed — name filter makes old rows dead;
-   optionally flush (`scripts/eval_gate.sh --flush-cache` path or TTL expiry).
+   optionally flush (`./scripts/eval_gate.sh --tier r --flush-cache`, or wait for TTL expiry).
 6. **Re-baseline evals**: Tier-R recall baseline is embedding-dependent —
    re-run `./scripts/eval_gate.sh --tier r --rerun` and commit the new
    baseline; then Tier-F.

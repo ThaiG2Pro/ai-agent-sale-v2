@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,7 +28,10 @@ class Settings(BaseSettings):
 
     # Database Configuration
     DB_USER: str = "user"
-    DB_PASSWORD: str = "password"
+    # Resolution order: DB_PASSWORD env → file at DB_PASSWORD_FILE (the Docker
+    # secret compose mounts at /run/secrets/db_password) → dev default "password".
+    DB_PASSWORD: str = ""
+    DB_PASSWORD_FILE: str = "/run/secrets/db_password"
     DB_NAME: str = "ai_agent"
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
@@ -35,6 +39,15 @@ class Settings(BaseSettings):
     # Dev default: small (5+10). Prod: set DB_POOL_SIZE=20, DB_MAX_OVERFLOW=40 via env.
     DB_POOL_SIZE: int = Field(default=10, ge=1, le=100)
     DB_MAX_OVERFLOW: int = Field(default=20, ge=0, le=200)
+
+    @model_validator(mode="after")
+    def _resolve_db_password(self) -> Settings:
+        if not self.DB_PASSWORD:
+            secret = Path(self.DB_PASSWORD_FILE)
+            self.DB_PASSWORD = (
+                secret.read_text(encoding="utf-8").strip() if secret.is_file() else "password"
+            )
+        return self
 
     @property
     def database_url(self) -> str:

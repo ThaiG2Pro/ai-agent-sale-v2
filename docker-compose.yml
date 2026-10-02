@@ -8,7 +8,8 @@ services:
     environment:
       DB_HOST: localhost
       DB_USER: ${DB_USER:-user}
-      DB_PASSWORD: ${DB_PASSWORD:-password}
+      # Empty → the app reads the mounted Docker secret /run/secrets/db_password.
+      DB_PASSWORD: ${DB_PASSWORD:-}
       DB_NAME: ${DB_NAME:-ai_agent}
       DB_PORT: ${DB_PORT:-5432}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-1234567890:telegram_bot_token_for_local_testing_12345}
@@ -18,7 +19,7 @@ services:
       DB_POOL_SIZE: ${DATABASE_POOL_SIZE:-20}
       DB_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-0}
       # ── AI provider config ──────────────────────────────────────────────
-      # Default: Ollama running on the Docker host (see extra_hosts below).
+      # api runs with network_mode: host, so host services are plain localhost.
       # Cloud fast-path: set CHAT_MODEL etc. to any LiteLLM model string
       # (e.g. gemini/gemini-2.5-flash) + the matching provider API key.
       # Empty pass-through values are ignored by the app (env_ignore_empty).

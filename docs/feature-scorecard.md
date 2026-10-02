@@ -1,11 +1,33 @@
 # Feature Scorecard — ai-agent-sale-v2
 
 > Đánh giá từng feature theo thang **1–5**: `1 = chỉ chạy được` · `2 = chạy đúng nghiệp vụ` · `3 = chạy thông minh/tối ưu` · `4 = chạy ổn định` · `5 = chuẩn production 2026`.
-> Phương pháp: map spec (`specs/00X-*`) ↔ code thật, kiểm chứng bằng `file:line` (không tin lời `tasks.md`).
-> **Ngày: 2026-08-03 (re-score sau plan V2, WP-V2-0 → V2-5 + Verification tổng). Nhánh: `main` @ `4772905`.**
-> Bản re-score trước 2026-07-16 @ `4d85bb3` (điểm cũ ghi ở cột "Cũ"); audit gốc 2026-07-15.
+> Phương pháp: map spec (`docs/specs/00X-*`) ↔ code thật, kiểm chứng bằng `file:line` (không tin lời `tasks.md`).
+> **Ngày: 2026-10-02 (re-score sau plan V3 + v3-0 + support graph).** Bản trước: 2026-08-03 @ `4772905`
+> (sau plan V2); 2026-07-16 @ `4d85bb3`; audit gốc 2026-07-15. Chi tiết từng sub-feature bên dưới
+> giữ nguyên bằng chứng `file:line` của đợt 08-03 — chỉ phần tổng quan được cập nhật.
 
 ## Tổng quan
+
+**Điểm trung bình toàn dự án: ~4.7 / 5** *(08-03: ~4.6 · 07-16: ~4.3)* — *"Tự bảo vệ được: CI
+lint → unit+coverage → Tier-R trên mỗi push, Tier-F nightly với baseline commit; OTel span từng
+node vào Phoenix; v3-0 thêm risk-tier HITL hoàn chỉnh, resilience (rate-limit, cooldown), tool-loop
+cho 20% case khó. Suite 782 collected / 744 pass trong CI; Tier-R 34/34; Tier-F 12/12 ×3."*
+
+| # | Feature | 10-02 | 08-03 | Thay đổi từ 08-03 |
+|---|---------|:----:|:----:|---|
+| 001 | Project Infra Setup | **4.8** | 4.3 | V3-0 CI pipeline (lint/unit/eval), V3-1 coverage gate (`--cov-fail-under`, hiện 75%), V3-2 OTel per-node + kill-switch |
+| 002 | Vietnamese RAG & Eval | **4.8** | 4.7 | V3-3 Tier-F nightly vs baseline; incident fastembed pooling → runbook migration (ADR-006) |
+| 003 | Agentic Workflow | **4.7** | 4.7 | v3-0 P4 tool-loop + fast-path; regex heuristics dọn khỏi router (22-8 report). Còn mở: intent-flip P1 |
+| 006 | Telegram & Docker | **4.5** | 4.5 | Giữ nguyên; image 1.5 GB vẫn là backlog |
+| 004 | Human-in-the-Loop | **4.7** | 4.6 | v3-0 P2 trục order/HITL hoàn chỉnh (draft order, handoff package, timeout scheduler) |
+| 005 | Async Persistence & Memory | **4.6** | 4.6 | Giữ nguyên |
+
+**Còn mở để lên 5 tuyệt đối:** coverage trở lại 80%; intent-flip (P1); 3 case conv-eval fail;
+CD lên production thật (plan v4); Docker image < 500 MB.
+
+---
+
+## Snapshot 2026-08-03 (sau plan V2) — giữ làm lịch sử
 
 **Điểm trung bình toàn dự án: ~4.6 / 5** *(cũ: ~4.3)* — *"Production-lean: agent ĐÚNG hơn (groundedness + cascade + fragment citations), KHÔN hơn (clarify loop, decomposition, episodic memory, risk-tier HITL), RẺ hơn (cost dashboard, budget guard, cheap-intent routing). Suite 549 pass / 5 skip / 0 fail; eval Tier-R 34/34; demo 3 kịch bản live PASS."*
 
@@ -32,7 +54,7 @@
 2. ✅ Eval: Tier-R **34/34 (Δ0.0pp)**; Tier-F **11/12** — 1 case multi-intent dao động (grader groundedness borderline, xoay vòng mi_001/mi_002 giữa các run), cả 2 pass khi chạy riêng trên config production 70b; không có regression code (main không đổi từ lần 12/12).
 3. ✅ Demo 3 kịch bản live qua `/agent/query` (server thật + Groq): (a) clarify 2 turn; (b) thuộc tính không tồn tại (HDMI/5G) → nói thẳng không có info, không bịa; (c) khách quen đơn nhỏ auto-approve / đơn to pause + pause_id.
 4. ✅ `GET /admin/costs` khớp raw SQL `model_traces` chính xác (62 calls, 33.261 tokens, $0); auth 401/400/200 đúng.
-5. Điểm 5 tuyệt đối cần: CI/CD + coverage gate + OTel per-node — backlog riêng (ngoài scope plan V2).
+5. Điểm 5 tuyệt đối cần: CI/CD + coverage gate + OTel per-node — backlog riêng (ngoài scope plan V2). *(Đã làm trong plan V3, xem tổng quan 10-02.)*
 
 > **CR `agentic-rag-retry-loop`: ĐÃ MERGE** (S1→S6 DONE, archived; merge `dcd1470`). Retry loop chạy trong graph thật qua `retrieval_node` → `retrieve_with_retry` (`services/rag/pipeline.py:306`), kill-switch `RAG_RETRY_MAX_ATTEMPTS=0` (`core/config.py:69`, `.env.example:60`).
 
@@ -40,7 +62,7 @@
 
 ---
 
-## 001 — Project Infra Setup · **4.3 / 5** 🟢 *(cũ 3.8)*
+## 001 — Project Infra Setup · **4.3 / 5** 🟢 *(07-16: 4.3)*
 
 | Sub-feature | Điểm | Cũ | Bằng chứng / Ghi chú |
 |---|:--:|:--:|---|
@@ -55,7 +77,7 @@
 
 ---
 
-## 002 — Vietnamese RAG & Eval · **4.2 / 5** 🟢 *(cũ 3.5)*
+## 002 — Vietnamese RAG & Eval · **4.7 / 5** 🟢 *(07-16: 4.2)*
 
 | Sub-feature | Điểm | Cũ | Bằng chứng / Ghi chú |
 |---|:--:|:--:|---|
@@ -74,7 +96,7 @@
 
 ---
 
-## 003 — Agentic Workflow · **4.3 / 5** 🟢 *(cũ 3.6)*
+## 003 — Agentic Workflow · **4.7 / 5** 🟢 *(07-16: 4.3)*
 
 | Node / Sub-feature | Điểm | Cũ | Bằng chứng / Ghi chú |
 |---|:--:|:--:|---|
@@ -94,7 +116,7 @@
 
 ---
 
-## 006 — Telegram & Docker · **4.5 / 5** 🟢 *(cũ 3.7)*
+## 006 — Telegram & Docker · **4.5 / 5** 🟢 *(07-16: 4.5)*
 
 | Sub-feature | Điểm | Cũ | Bằng chứng / Ghi chú |
 |---|:--:|:--:|---|
@@ -109,7 +131,7 @@
 
 ---
 
-## 004 — Human-in-the-Loop · **4.3 / 5** 🟢 *(cũ 3.0)*
+## 004 — Human-in-the-Loop · **4.6 / 5** 🟢 *(07-16: 4.3)*
 
 | Sub-feature | Điểm | Cũ | Bằng chứng / Ghi chú |
 |---|:--:|:--:|---|
@@ -127,7 +149,7 @@
 
 ---
 
-## 005 — Async Persistence & Memory · **4.4 / 5** 🟢 *(cũ 2.6)*
+## 005 — Async Persistence & Memory · **4.6 / 5** 🟢 *(07-16: 4.4)*
 
 | Sub-feature | Điểm | Cũ | Bằng chứng / Ghi chú |
 |---|:--:|:--:|---|

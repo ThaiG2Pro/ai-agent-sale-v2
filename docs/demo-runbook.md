@@ -1,15 +1,14 @@
 # Demo Runbook — 5 kịch bản demo cho khách SME
 
-> **Why this exists:** đóng nốt mục P2/WP6 của scorecard — demo pack đã có `scripts/demo_seed.py`
-> nhưng chưa có runbook. Tài liệu này là kịch bản từng bước (lệnh curl + Telegram) để bất kỳ ai
-> trong team chạy lại đúng 5 demo đã PASS ở Verification tổng V2 (2026-08-03), không cần nhớ gì.
+> **Why this exists:** kịch bản từng bước (lệnh curl + Telegram) để bất kỳ ai chạy lại đúng
+> 5 demo đã PASS ở Verification tổng V2 (2026-08-03) mà không cần nhớ gì.
 
 ## 0. Chuẩn bị (một lần trước buổi demo)
 
 ### 0.1 Hạ tầng
 
 ```bash
-docker compose up -d                      # Postgres (pgvector) + Phoenix
+docker compose up -d db phoenix           # chỉ Postgres (pgvector) + Phoenix; API chạy ở §0.3
 uv run alembic upgrade head               # schema mới nhất
 ```
 
@@ -17,13 +16,14 @@ LLM backend — chọn MỘT trong hai:
 
 | Backend | Cấu hình `.env` | Ghi chú |
 |---|---|---|
-| **Ollama local** (Zero-Cost) | mặc định trong `.env.example` (`CHAT_MODEL=ollama/qwen3-4b-q6`) | Cần `ollama serve` + đã pull `qwen3`, `bge-m3`. Máy yếu: chậm nhưng chạy được |
-| **Groq** (demo mượt, đã dùng ở Verification tổng) | `GROQ_API_KEY=...` + trỏ `CHAT_MODEL`/`POWERFUL_CHAT_MODEL` sang `groq/llama-3.3-70b-versatile` (xem comment sẵn trong `.env.example`) | Embedding VẪN cần Ollama local (`bge-m3`) |
+| **Groq** (mặc định `.env.example`, demo mượt, đã dùng ở Verification tổng) | chỉ cần điền `GROQ_API_KEY=...` | Embedding chạy in-process (fastembed, `EMBED_MODEL=local/multilingual-e5-large`), không cần Ollama |
+| **Ollama local** (Zero-Cost) | bỏ comment Profile 1 trong `.env.example` (`CHAT_MODEL=ollama/qwen3-4b-q6:latest`, `EMBED_MODEL=ollama/bge-m3`) | Cần `ollama serve` + đã pull `qwen3`, `bge-m3`. Máy yếu: chậm nhưng chạy được |
 
 ### 0.2 Seed dữ liệu demo
 
 ```bash
-uv run python scripts/demo_seed.py        # ~20 sản phẩm VN (điện thoại/laptop/phụ kiện) + tồn kho 8-32
+uv run python scripts/demo_seed.py        # 20 sản phẩm VN (điện thoại/laptop/phụ kiện) + tồn kho 8-32
+# --limit 27 để seed trọn catalog (CI dùng 27)
 ```
 
 Idempotent — chạy lại bao nhiêu lần cũng được (SKU đã có thì skip, tồn kho được set lại).
@@ -31,7 +31,7 @@ Idempotent — chạy lại bao nhiêu lần cũng được (SKU đã có thì s
 ### 0.3 Chạy server + biến môi trường cho lệnh curl
 
 ```bash
-uvicorn api.main:app --port 8000
+uv run uvicorn api.main:app --port 8000
 # Terminal thứ hai:
 export API=http://localhost:8000
 export ADMIN_KEY="<giá trị X_ADMIN_KEY trong .env>"   # KHÔNG hardcode vào lệnh/log
@@ -72,9 +72,9 @@ curl -s $API/agent/query -X POST -H 'Content-Type: application/json' -d '{
 # Kỳ vọng: trả lời đúng về Samsung Galaxy S24 Ultra 256GB (giá ~24.990.000đ, còn hàng)
 ```
 
-> Lưu ý (đã ghi nhận ở WP-V3-4): với router thật, clarify_node chỉ kích hoạt trong điều kiện hẹp —
-> nếu lượt 1 bot tự hỏi lại từ answer node thì demo vẫn đạt về mặt UX, nhưng đó chưa phải
-> clarify_node; V3-4 sẽ mở rộng điều kiện này.
+> Lưu ý: clarify_node chỉ kích hoạt khi confidence rơi vào vùng borderline (anti-loop
+> `clarify_count`). Nếu lượt 1 bot tự hỏi lại từ answer node thì demo vẫn đạt về mặt UX,
+> nhưng đó không phải clarify_node — kiểm tra span `node.clarify_node` trong Phoenix để chắc.
 
 ## Kịch bản 2 — Không bịa thuộc tính không tồn tại (groundedness)
 
@@ -182,7 +182,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "X-Admin-Key: $ADMIN_KEY" \
   "$API/admin/costs?group_by=nope"                                               # 400
 ```
 
-Điểm nhấn khi demo với Ollama: cột USD = **$0** — đúng triết lý Zero-Cost-First.
+Điểm nhấn khi demo với Profile 1 (Ollama + fastembed): cột USD = **$0** — đúng triết lý Zero-Cost-First.
 
 ---
 
@@ -197,7 +197,7 @@ chat_id Telegram, không cần tự đặt. Duyệt HITL (3b) vẫn qua curl `/h
 | Triệu chứng | Nguyên nhân / cách xử lý |
 |---|---|
 | `/agent/query` treo lâu lần đầu | Ollama đang load model vào RAM — gọi warm-up 1 câu trước buổi demo |
-| Bot decline liên tục | Chưa seed catalog, hoặc embedding backend chết — chạy lại §0.2, check `ollama ps` |
+| Bot decline liên tục | Chưa seed catalog (chạy lại §0.2); hoặc với Profile 1 Ollama embedding chết — check `ollama ps`. Với fastembed: lần đầu tải model ~2 GB, chờ log "AI Embedding finished" |
 | `/hitl/review` trả 409 | Pause đã được xử lý rồi (double-click) — xem `status` trong detail; demo idempotency luôn |
 | `/hitl/review` trả 404 | Sai `pause_id` — lấy lại từ `/hitl/session/{session_id}/state` |
 | Máy yếu bị nghẽn | Đừng chạy pytest/eval song song với server demo; tắt Phoenix nếu không cần trace |

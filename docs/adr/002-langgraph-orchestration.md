@@ -2,8 +2,13 @@
 
 **Status**: ACCEPTED  
 **Date**: 2026-03-05  
-**Authors**: AI Sales Agent Team  
-**Deciders**: Engineering, Architecture  
+**Author**: Thái Hoàng (solo project)  
+**Last reviewed**: 2026-10-02 — implementation notes updated to the current graph  
+
+> **Terminology.** "Article N" references point to the project's original engineering
+> charter (`docs/specs/*/plan.md`, "Constitution"): II = graph-based orchestration & simplicity,
+> V = async I/O only, VI = all model calls through LiteLLM, VII = single database, X = cost /
+> image-size discipline. They are kept for traceability to the spec-kit era.
 
 ## Context
 
@@ -27,30 +32,30 @@ Week 3 must support:
 
 ## Decision
 
-**Adopt LangGraph (v0.1.27+) as the orchestration framework.**
+**Adopt LangGraph as the orchestration framework** (adopted at v0.1.27; the project now pins `langgraph>=0.3`).
 
 LangGraph provides:
-1. **Typed StateGraph**: Compile-time state schema validation (via TypedDict) prevents runtime type errors
+1. **Typed StateGraph**: `AgentState` is a `TypedDict` (`core/agent/state.py`); the graph is built as `StateGraph(AgentState)` so node outputs are checked against one schema
 2. **Conditional Edges**: `add_conditional_edges()` enables intent-driven routing without nested if/else
 3. **Command API**: Return `Command(goto=node_name, update=state_delta)` for clean state mutations
 4. **Checkpointing**: `AsyncPostgresSaver` for Week 5 multi-turn conversation persistence
 5. **Event Streaming**: `astream_events()` v2 API for per-node deltas (FR-006 compliance)
-6. **Interrupt Support**: `interrupt_before` for Week 4 human-in-the-loop workflows
+6. **Interrupt Support**: `interrupt()` inside `hitl_guard_node` pauses the run for human review (HITL)
 
 ## Consequences
 
 ### Positive
 - **Single Source of Truth**: Graph structure in `core/agent/graph.py` is the canonical state machine definition
-- **Type Safety**: Pydantic AgentState catches field mismatches at compile time
+- **Type Safety**: the `AgentState` TypedDict gives static (pyright/IDE) checking of node inputs and outputs
 - **Testability**: Node functions are pure (state→state dict) — unit testable without mocking the graph
-- **Observability**: LangSmith integration via `checkpointer` parameter; OpenTelemetry spans auto-emitted
-- **Week 4 Ready**: `interrupt_before` parameter enables HITL workflows without redesign
+- **Observability**: every node is wrapped by `traced_node()` and emits an OpenTelemetry span (`node.<name>`) into Phoenix
+- **HITL ready**: `interrupt()` + the Postgres checkpointer enable pause/resume without redesign
 
 ### Negative
 - **Compile Overhead**: `build_graph()` compile takes ~50ms (one-time, CLI startup cost)
   - Mitigated: Compile in `cli/run_agent.py`, cache in tests via `MemorySaver()`
-- **State Serialization**: checkpointer requires `AgentState` to serialize (Pydantic-compatible)
-  - Mitigated: Use `model_dump()` / `model_validate()` for persistence
+- **State Serialization**: the checkpointer must serialize every `AgentState` field
+  - Mitigated: plain JSON-able types only; `JsonPlusSerializer(pickle_fallback=False)` (no pickle)
 - **Node Isolation**: Graph nodes cannot share mutable state; must flow through state dict
   - Mitigated: This is intentional (Article II mandates stateless logic)
 - **Debugging**: Multi-branch graphs harder to trace than linear pipelines
@@ -93,14 +98,20 @@ Pydantic AI offers agent scaffolding but:
 
 ## Implementation Notes
 
-**Graph Structure** (5 nodes):
+**Graph Structure** — original week-3 shape (5 nodes):
 ```
 START → router_node
-         ├──→ retrieval_node → confidence_node ──(intent-check)──→ answer_node
-         ├──→ escalation_node → answer_node                        ↓
-         └──→ answer_node (SMALLTALK direct) ────────────────────→ END
-         └──→ escalation_node (COMPLAINT/NEGOTIATION) → answer_node
+         ├──→ retrieval_node → confidence_node ──(intent-check)──→ answer_node → END
+         ├──→ escalation_node (COMPLAINT/NEGOTIATION) → answer_node
+         └──→ answer_node (SMALLTALK direct)
 ```
+
+**Current graph** (13 nodes, registered in `_NODE_FUNCS` in `core/agent/graph.py`; the
+`GRAPH_NODES` set is derived from it so tracing can never miss a node):
+`router_node`, `retrieval_node`, `memory_retrieval_node`, `confidence_node`, `clarify_node`,
+`escalation_node`, `answer_node`, `hitl_guard_node`, `order_execution_node`, `cancellation_node`,
+`customer_support_node`, `queue_consumer_node`, `state_freshness_validator_node`.
+The README's mermaid diagram shows the current routing.
 
 **State Mutation Pattern:**
 ```python
@@ -115,20 +126,22 @@ async def router_node(state: AgentState) -> Command:
     )
 ```
 
-**Checkpointer Integration** (Week 5):
+**Checkpointer Integration** (`core/agent/checkpointer.py`):
 ```python
-from langgraph.checkpoint.postgres import AsyncPostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-checkpointer = AsyncPostgresSaver(
-    sync_connection_string="postgresql://...",  # used for schema init
-    async_connection_string="postgresql+asyncpg://...",
-)
-graph = build_graph(checkpointer=checkpointer)
+async def create_checkpointer(dsn: str) -> AsyncPostgresSaver:
+    async with AsyncPostgresSaver.from_conn_string(dsn) as setup_saver:
+        await setup_saver.setup()            # autocommit: CREATE INDEX CONCURRENTLY
+    pool = AsyncConnectionPool(dsn, ...)     # psycopg3 pool for runtime
+    return AsyncPostgresSaver(pool, serde=JsonPlusSerializer(pickle_fallback=False))
 ```
+`thread_id = session_id`; the checkpointer uses psycopg3 while the app's own tables use asyncpg.
 
 ## Related Decisions
 
-- **ADR 001**: Vector database (pgvector) for L2 cache
+- **ADR 001**: Core stack (PostgreSQL + pgvector, LiteLLM, async SQLAlchemy)
 - **Article II**: Graph-based orchestration requirement
 - **Article VI**: LiteLLM-only model calling (no direct SDKs)
 - **FR-006**: Per-node event streaming via `astream_events()` v2
