@@ -51,12 +51,12 @@ jobs:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
       - name: Cache fastembed ONNX model (~2 GB, download once)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /home/runner/.cache/fastembed
           key: fastembed-multilingual-e5-large-v1
