@@ -13,9 +13,6 @@ to any cloud LLM with one env var — no code change.
 **Stack**: Python 3.13 · FastAPI · LangGraph · LiteLLM · PostgreSQL + pgvector · SQLAlchemy 2.0
 async · OpenTelemetry → Arize Phoenix · Docker
 
-<!-- TODO: 2–3 min demo video (Telegram conversation + Phoenix trace tree) -->
-<!-- [▶ Watch the demo](https://youtu.be/...) -->
-
 ---
 
 ## Engineering highlights
