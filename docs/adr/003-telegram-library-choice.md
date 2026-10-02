@@ -117,7 +117,7 @@ async def send_telegram_message(bot_token: str, message: TelegramMessage):
 1. **Constitutional Alignment**:
    - Article II (Simplicity): Direct HTTP calls are simpler than learning framework abstractions
    - Article X (Cost Management): Zero incremental cost for new dependency
-   - Article VI (Type Safety): Pydantic models provide same type safety as library
+   - Type safety: Pydantic models for every Telegram payload give the same guarantees as the library classes
 
 2. **Technical Merit**:
    - httpx is already in our dependency tree (zero marginal cost)

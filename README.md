@@ -38,14 +38,14 @@ turns and platforms).
 flowchart LR
     START([user message]) --> R[router_node]
     R -->|info / price / availability| RET[retrieval_node]
-    R -->|order / cancel / complaint| HG[hitl_guard]
+    R -->|order / cancel / complaint| HG[hitl_guard_node]
     RET --> MEM[memory_retrieval_node]
     MEM --> C[confidence_node]
     C -->|confident| A[answer_node]
     C -->|ambiguous| CL[clarify_node] --> A
     C -->|hard query| E[escalation_node<br/>premium model tier] --> A
-    HG --> OE[order_execution] --> A
-    HG --> CS[customer_support<br/>human review queue]
+    HG --> OE[order_execution_node] --> A
+    HG --> CS[customer_support_node<br/>human review queue]
     A --> END([reply + citations])
 ```
 

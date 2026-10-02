@@ -5,7 +5,7 @@ schema: spec-driven
 # Add your tech stack, conventions, style guides, domain knowledge, etc.
 context: |
   AI Sales Agent for E-commerce (ai-agent-sale-v2): async, offline-first RAG sales agent for SMEs.
-  Stack: Python 3.13 (uv), FastAPI + uvicorn, LangGraph StateGraph agent, LiteLLM → Ollama local
+  Stack: Python 3.13 (uv), FastAPI + uvicorn, LangGraph StateGraph agent, LiteLLM (default Groq chat + in-process fastembed embeddings; Ollama optional)
   models (qwen3 / deepseek-r1 / bge-m3), SQLAlchemy 2.0 async + asyncpg on PostgreSQL + pgvector,
   Alembic migrations, Pydantic v2 / pydantic-settings, Typer CLI, Logfire + OpenTelemetry + Phoenix.
   Tests: pytest + pytest-asyncio (strict) + respx; real test DB (ai_agent_test). Lint/format: ruff
