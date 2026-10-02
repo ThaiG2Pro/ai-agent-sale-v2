@@ -35,7 +35,7 @@ from rich.console import Console
 from rich.table import Table
 from sqlalchemy import delete, select
 
-from models.schema import Product
+from models.schema import Product, TextEmbedding
 from services.database import AsyncSessionLocal
 from services.rag.ingest import ingest_product_text
 from services.semantic_cache import invalidate_cache
@@ -70,15 +70,18 @@ async def _run(payload: dict) -> None:
     ok = failed = 0
     async with AsyncSessionLocal() as db:
         # Purge previous corpus so edited/removed FAQ entries do not linger.
-        stale = (
-            (await db.execute(select(Product.sku).where(Product.sku.like(f"{SKU_PREFIX}%"))))
+        stale_ids = (
+            (await db.execute(select(Product.id).where(Product.sku.like(f"{SKU_PREFIX}%"))))
             .scalars()
             .all()
         )
-        if stale:
-            await db.execute(delete(Product).where(Product.sku.like(f"{SKU_PREFIX}%")))
+        if stale_ids:
+            # Bulk DELETE bypasses the ORM relationship cascade — drop the
+            # embeddings explicitly or the FK on text_embeddings.source_id fires.
+            await db.execute(delete(TextEmbedding).where(TextEmbedding.source_id.in_(stale_ids)))
+            await db.execute(delete(Product).where(Product.id.in_(stale_ids)))
             await db.commit()
-            console.print(f"🧹 removed {len(stale)} previous spacely-* docs")
+            console.print(f"🧹 removed {len(stale_ids)} previous spacely-* docs")
 
         for doc in docs:
             sku = f"{SKU_PREFIX}{doc['id']}"[:50]

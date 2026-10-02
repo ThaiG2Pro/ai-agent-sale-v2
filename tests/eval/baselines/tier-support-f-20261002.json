@@ -1,13 +1,18 @@
 {
   "tier": "support-f",
-  "dataset_hash": "2aea58b1704d",
-  "created_at": "2026-10-02T06:52:01.076001+00:00",
+  "dataset_hash": "3a8b87e5c660",
+  "created_at": "2026-10-02T07:18:01.112512+00:00",
   "summary": {
-    "total": 20,
-    "passed": 20,
+    "total": 25,
+    "passed": 25,
     "pass_rate": 1.0,
     "by_category": {
       "complaint": {
+        "total": 2,
+        "passed": 2,
+        "pass_rate": 1.0
+      },
+      "faq_about": {
         "total": 2,
         "passed": 2,
         "pass_rate": 1.0
@@ -20,6 +25,11 @@
       "faq_feature": {
         "total": 4,
         "passed": 4,
+        "pass_rate": 1.0
+      },
+      "faq_guide": {
+        "total": 3,
+        "passed": 3,
         "pass_rate": 1.0
       },
       "faq_pricing": {
@@ -41,10 +51,50 @@
   },
   "results": [
     {
+      "id": "sp_about_001",
+      "tier": "support-f",
+      "category": "faq_about",
+      "dataset_hash": "3a8b87e5c660",
+      "intent": "INFO_QUERY",
+      "declined": false,
+      "cited_skus": [
+        "spacely-about-cam-ket",
+        "spacely-chia-se-space",
+        "spacely-bat-dau-hoc",
+        "spacely-about-spacely",
+        "spacely-clone-space"
+      ],
+      "answer_snippet": "Trong Space không có quảng cáo nào cả — chỉ có video bạn dán, ghi chú của bạn và các bài quiz. Bạn sẽ không thấy banner, gợi ý video khác hay quảng cáo xen vào. Bạn có câu hỏi nào khác về tính năng kh",
+      "checks": {
+        "cited_expected": true
+      },
+      "passed": true
+    },
+    {
+      "id": "sp_about_002",
+      "tier": "support-f",
+      "category": "faq_about",
+      "dataset_hash": "3a8b87e5c660",
+      "intent": "INFO_QUERY",
+      "declined": false,
+      "cited_skus": [
+        "spacely-xoa-tk",
+        "spacely-guide-chia-se",
+        "spacely-about-cam-ket",
+        "spacely-clone-space",
+        "spacely-quen-mk"
+      ],
+      "answer_snippet": "Có, mình có thể tải về một file JSON chứa toàn bộ dữ liệu cá nhân — hồ sơ, Space, tiến độ học, ghi chú… Bạn vào **Hồ sơ cá nhân**, chọn tải dữ liệu và hệ thống sẽ tạo file JSON cho bạn.  \n\nBạn muốn mì",
+      "checks": {
+        "cited_expected": true
+      },
+      "passed": true
+    },
+    {
       "id": "sp_acct_001",
       "tier": "support-f",
       "category": "faq_account",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
@@ -52,9 +102,9 @@
         "spacely-xoa-tk",
         "spacely-khong-thay-email",
         "spacely-nen-tang-co-gi",
-        "spacely-ai-mien-phi"
+        "spacely-guide-tien-do"
       ],
-      "answer_snippet": "Bạn vào trang đăng nhập, chọn “Quên mật khẩu”. Hệ thống sẽ gửi link đặt lại mật khẩu tới email đã đăng ký. Kiểm tra hộp thư (cả mục Spam/Quảng cáo) để nhận link. Nếu chưa nhận được, hãy thử lại một lầ",
+      "answer_snippet": "Bạn vào trang đăng nhập, nhấn nút **‘Quên mật khẩu’**. Hệ thống sẽ gửi cho bạn một link đặt lại mật khẩu qua email đã đăng ký. Kiểm tra hộp thư (cả mục Spam/Quảng cáo) để lấy link và làm theo hướng dẫ",
       "checks": {
         "intent": true,
         "cited_expected": true
@@ -65,17 +115,17 @@
       "id": "sp_acct_002",
       "tier": "support-f",
       "category": "faq_account",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
         "spacely-khong-thay-email",
         "spacely-quen-mk",
-        "spacely-chia-se-space",
-        "spacely-xoa-tk",
-        "spacely-nen-tang-co-gi"
+        "spacely-guide-chia-se",
+        "spacely-guide-tien-do",
+        "spacely-chia-se-space"
       ],
-      "answer_snippet": "Nếu chưa thấy mail kích hoạt, hãy kiểm tra mục Spam/Quảng cáo nhé.  \nNếu vẫn không có, bạn có thể đăng ký lại ngay bằng cùng email đó; hệ thống sẽ tự ghi đè và gửi mail mới cho bạn.  \n\nBạn đã thử kiểm",
+      "answer_snippet": "Bạn thử kiểm tra mục Spam/Quảng cáo trong hộp thư nhé.  \nNếu vẫn không thấy, hãy đăng ký lại ngay bằng đúng email mình đã dùng; hệ thống sẽ tự ghi đè lên lượt chưa kích hoạt và gửi lại mail kích hoạt ",
       "checks": {
         "cited_expected": true
       },
@@ -85,17 +135,17 @@
       "id": "sp_acct_003",
       "tier": "support-f",
       "category": "faq_account",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
         "spacely-xoa-tk",
+        "spacely-about-cam-ket",
         "spacely-chia-se-space",
-        "spacely-co-mat-phi-khong",
-        "spacely-bat-dau-hoc",
-        "spacely-clone-space"
+        "spacely-guide-chia-se",
+        "spacely-co-mat-phi-khong"
       ],
-      "answer_snippet": "Đúng rồi, khi bạn xoá tài khoản, mọi Space của bạn sẽ bị xóa cùng với dữ liệu khác. Trước khi thực hiện, mình khuyên bạn tải về bản JSON chứa toàn bộ dữ liệu (Space, tiến độ, ghi chú…) trong mục **Hồ ",
+      "answer_snippet": "Mình xin lỗi nếu gây bất tiện. Khi bạn xoá tài khoản, mọi dữ liệu liên quan—including Space, tiến độ học và ghi chú—sẽ bị xoá hoàn toàn. Trước khi xoá, bạn có thể tải về một bản JSON chứa toàn bộ dữ l",
       "checks": {
         "cited_expected": true
       },
@@ -105,26 +155,27 @@
       "id": "sp_compl_001",
       "tier": "support-f",
       "category": "complaint",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "COMPLAINT",
       "declined": false,
       "cited_skus": [
         "spacely-hoan-tien",
         "spacely-co-mat-phi-khong",
+        "spacely-guide-gioi-han",
+        "spacely-guide-vao-hoc",
         "spacely-credit-la-gi",
         "spacely-goi-credit-hien-ban",
+        "spacely-guide-sap-xep",
         "spacely-video-dai",
         "spacely-nen-tang-co-gi",
         "spacely-ai-mien-phi",
         "spacely-quen-mk",
+        "spacely-guide-dan-link",
+        "spacely-about-cam-ket",
         "spacely-xoa-tk",
-        "spacely-gioi-han-ngay",
-        "spacely-bat-dau-hoc",
-        "spacely-khong-thay-email",
-        "spacely-chia-se-space",
-        "spacely-clone-space"
+        "spacely-guide-tien-do"
       ],
-      "answer_snippet": "Mình rất tiếc vì sự cố này. Bạn vui lòng cho mình biết email tài khoản, link Space (hoặc video) mà bạn đã tạo quiz và thời gian xảy ra lỗi được không?  \nSau khi có thông tin, mình sẽ hướng dẫn bạn nhấ",
+      "answer_snippet": "Mình rất tiếc vì sự cố này. Bạn có thể cung cấp:  \n\n- Email đăng nhập tài khoản  \n- Link Space (hoặc video) mà bạn đã tạo quiz  \n- Bước bạn thực hiện và thông báo lỗi cụ thể (nếu có)  \n\nSau khi có thô",
       "checks": {
         "intent": true,
         "required_any": true,
@@ -136,26 +187,27 @@
       "id": "sp_compl_002",
       "tier": "support-f",
       "category": "complaint",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "COMPLAINT",
       "declined": false,
       "cited_skus": [
+        "spacely-guide-vao-hoc",
+        "spacely-guide-sap-xep",
+        "spacely-guide-dan-link",
         "spacely-ai-mien-phi",
         "spacely-co-mat-phi-khong",
+        "spacely-guide-gioi-han",
         "spacely-hoan-tien",
         "spacely-credit-la-gi",
         "spacely-nen-tang-co-gi",
         "spacely-goi-credit-hien-ban",
+        "spacely-guide-tien-do",
+        "spacely-about-cam-ket",
         "spacely-xoa-tk",
-        "spacely-bat-dau-hoc",
-        "spacely-quen-mk",
-        "spacely-video-dai",
-        "spacely-gioi-han-ngay",
-        "spacely-khong-thay-email",
-        "spacely-chia-se-space",
-        "spacely-clone-space"
+        "spacely-guide-chia-se",
+        "spacely-bat-dau-hoc"
       ],
-      "answer_snippet": "Mình rất xin lỗi vì sự bất tiện này. Bạn có thể cho mình biết email tài khoản, link Space (hoặc video) mà bạn đã dùng, và thao tác cụ thể khi bị trừ 3 credit nhưng quiz không có nội dung không?  \nBạn ",
+      "answer_snippet": "Mình rất xin lỗi vì sự cố này. Bạn vui lòng cho mình biết:\n\n- Email tài khoản đang dùng  \n- Space (hoặc video) mà bạn đã tạo quiz  \n- Thao tác bạn thực hiện khi quiz xuất hiện trống và số credit bị tr",
       "checks": {
         "intent": true,
         "required_any": true,
@@ -167,17 +219,17 @@
       "id": "sp_feat_001",
       "tier": "support-f",
       "category": "faq_feature",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
-        "spacely-nen-tang-co-gi",
-        "spacely-bat-dau-hoc",
-        "spacely-co-mat-phi-khong",
-        "spacely-chia-se-space",
-        "spacely-clone-space"
+        "spacely-about-spacely",
+        "spacely-about-cam-ket",
+        "spacely-guide-gioi-han",
+        "spacely-guide-chia-se",
+        "spacely-guide-tien-do"
       ],
-      "answer_snippet": "Spacely là nền tảng học trực tuyến, cho phép bạn dán một link video YouTube và ngay lập tức có một “Space” – không gian học riêng. Bạn có thể bấm nút để AI tạo quiz ôn tập, theo dõi tiến độ và ghi chú",
+      "answer_snippet": "Spacely là nền tảng học trực tuyến, chỉ cần dán một link YouTube là ngay có một “Space” để học nghiêm túc: ghi chú gắn vào đúng thời gian video, tạo quiz tự kiểm tra và theo dõi tiến độ. Trong Space k",
       "checks": {
         "intent": true,
         "cited_expected": true
@@ -188,17 +240,17 @@
       "id": "sp_feat_002",
       "tier": "support-f",
       "category": "faq_feature",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
         "spacely-bat-dau-hoc",
         "spacely-nen-tang-co-gi",
-        "spacely-quen-mk",
-        "spacely-ai-mien-phi",
-        "spacely-khong-thay-email"
+        "spacely-guide-vao-hoc",
+        "spacely-guide-dan-link",
+        "spacely-guide-tien-do"
       ],
-      "answer_snippet": "Mình chỉ cần bạn:\n\n- Tạo một tài khoản miễn phí trên Spacely.  \n- Đăng nhập rồi dán link video YouTube mà muốn học vào.  \n- Hệ thống sẽ tự động tạo cho bạn một Space học riêng, sẵn sàng dùng ngay.  \n\n",
+      "answer_snippet": "Bạn chỉ cần tạo tài khoản miễn phí, rồi dán link video YouTube muốn học vào ô **Tạo nhanh** ở trang chủ. Hệ thống sẽ tự lấy tiêu đề, ảnh bìa và tạo một Space học riêng cho bạn.  \n\n- **Học ngay**: nhấn",
       "checks": {
         "intent": true,
         "cited_expected": true
@@ -209,17 +261,17 @@
       "id": "sp_feat_003",
       "tier": "support-f",
       "category": "faq_feature",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
         "spacely-clone-space",
+        "spacely-guide-chia-se",
         "spacely-chia-se-space",
-        "spacely-co-mat-phi-khong",
-        "spacely-bat-dau-hoc",
-        "spacely-xoa-tk"
+        "spacely-about-cam-ket",
+        "spacely-guide-gioi-han"
       ],
-      "answer_snippet": "Có, bạn chỉ cần đăng nhập rồi bấm nút “Sao chép về học” trên Space công khai để tạo bản riêng, chỉnh sửa thoải mái. Việc sao chép không ảnh hưởng tới Space gốc. Bạn có muốn mình hướng dẫn cách thực hi",
+      "answer_snippet": "Có, bạn chỉ cần đăng nhập rồi bấm **Sao chép về học** trên Space công khai muốn sao chép. Bản sao sẽ là Space riêng của bạn, có thể chỉnh sửa và lưu tiến độ độc lập. Còn nội dung AI trả credit ở Space",
       "checks": {
         "intent": true,
         "cited_expected": true
@@ -230,19 +282,80 @@
       "id": "sp_feat_004",
       "tier": "support-f",
       "category": "faq_feature",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
         "spacely-chia-se-space",
         "spacely-bat-dau-hoc",
-        "spacely-quen-mk",
-        "spacely-co-mat-phi-khong",
-        "spacely-nen-tang-co-gi"
+        "spacely-guide-chia-se",
+        "spacely-guide-dan-link",
+        "spacely-guide-tien-do"
       ],
-      "answer_snippet": "Có, mình có thể dùng link chia sẻ để gửi Space cho người chưa có tài khoản và họ sẽ xem được ngay. Bạn chỉ cần sao chép link chia sẻ và gửi cho họ. Còn thắc mắc nào khác mình có thể giúp không?",
+      "answer_snippet": "Có, bạn chỉ cần sao đặt link **Chia sẻ** và gửi cho người chưa có tài khoản, họ có thể xem Space ngay lập tức.  \nLưu ý: khi xem bằng link này, tiến độ học sẽ không được lưu lại.  \nNếu muốn họ có thể l",
       "checks": {
         "intent": true,
+        "cited_expected": true
+      },
+      "passed": true
+    },
+    {
+      "id": "sp_guide_001",
+      "tier": "support-f",
+      "category": "faq_guide",
+      "dataset_hash": "3a8b87e5c660",
+      "intent": "INFO_QUERY",
+      "declined": false,
+      "cited_skus": [
+        "spacely-guide-vao-hoc",
+        "spacely-nen-tang-co-gi",
+        "spacely-quen-mk",
+        "spacely-hoan-tien",
+        "spacely-guide-tien-do"
+      ],
+      "answer_snippet": "Chế độ Tập trung là tính năng ẩn mọi thành phần khác ngoài video đang xem, giúp bạn chỉ tập trung vào nội dung bài học. Bạn bật chế độ này bằng cách nhấn nút **Chế độ tập trung** trên giao diện khi đa",
+      "checks": {
+        "intent": true,
+        "cited_expected": true
+      },
+      "passed": true
+    },
+    {
+      "id": "sp_guide_002",
+      "tier": "support-f",
+      "category": "faq_guide",
+      "dataset_hash": "3a8b87e5c660",
+      "intent": "INFO_QUERY",
+      "declined": false,
+      "cited_skus": [
+        "spacely-guide-tien-do",
+        "spacely-nen-tang-co-gi",
+        "spacely-guide-vao-hoc",
+        "spacely-guide-chia-se",
+        "spacely-quen-mk"
+      ],
+      "answer_snippet": "Bạn vào **Trang chủ**, mục **Đang học** sẽ hiện các Space đang học và phần trăm hoàn thành. Hoặc nhấn **Học tiếp** trên thanh trên cùng để xem toàn bộ Space kèm tỷ lệ phần trăm, có thể lọc theo chưa h",
+      "checks": {
+        "cited_expected": true
+      },
+      "passed": true
+    },
+    {
+      "id": "sp_guide_003",
+      "tier": "support-f",
+      "category": "faq_guide",
+      "dataset_hash": "3a8b87e5c660",
+      "intent": "INFO_QUERY",
+      "declined": false,
+      "cited_skus": [
+        "spacely-guide-gioi-han",
+        "spacely-nen-tang-co-gi",
+        "spacely-guide-dan-link",
+        "spacely-bat-dau-hoc",
+        "spacely-about-spacely"
+      ],
+      "answer_snippet": "Hi bạn, hiện tại Spacely chỉ hỗ trợ dán **một link video YouTube một lần**, chưa thể dán nguyên playlist được. Bạn có thể dán từng video riêng lẻ rồi sắp xếp chúng vào các chương trong Space của mình.",
+      "checks": {
         "cited_expected": true
       },
       "passed": true
@@ -251,7 +364,7 @@
       "id": "sp_price_001",
       "tier": "support-f",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "PRICING",
       "declined": false,
       "cited_skus": [
@@ -261,7 +374,7 @@
         "spacely-video-dai",
         "spacely-nen-tang-co-gi"
       ],
-      "answer_snippet": "Mình sử dụng Spacely cho việc học, tạo Space, làm quiz, ghi chú, theo dõi tiến độ thì **hoàn toàn miễn phí**.  \nBạn chỉ cần dùng credit khi muốn AI tạo nội dung tùy biến (đổi độ dài, giọng văn…) mà kh",
+      "answer_snippet": "Mình xin trả lời là: việc tạo Space, dán link video, ghi chú, theo dõi tiến độ và dùng AI tạo quiz chuẩn đều hoàn toàn miễn phí. Chỉ khi bạn muốn AI tạo nội dung tùy biến (đổi độ dài, giọng văn…) hoặc",
       "checks": {
         "intent": true,
         "cited_expected": true
@@ -272,7 +385,7 @@
       "id": "sp_price_002",
       "tier": "support-f",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "PRICING",
       "declined": false,
       "cited_skus": [
@@ -282,7 +395,7 @@
         "spacely-co-mat-phi-khong",
         "spacely-quen-mk"
       ],
-      "answer_snippet": "Credit là đơn vị để AI tạo nội dung tuỳ biến (ví dụ quiz) trong Spacely, mỗi lượt tạo trừ 1 credit. Bạn có thể mua credit ở trang Giá (/pricing) sau khi đăng nhập, với các gói:  \n- 10 credit – $1  \n- ",
+      "answer_snippet": "Credit là đơn vị tiêu tốn khi bạn dùng AI tạo nội dung tuỳ biến (ví dụ quiz). Mỗi lượt tạo AI sẽ trừ 1 credit. Bạn có thể mua credit ở trang Giá (/pricing) sau khi đăng nhập, với các gói: 10 credit ($",
       "checks": {
         "intent": true,
         "cited_expected": true
@@ -293,17 +406,17 @@
       "id": "sp_price_003",
       "tier": "support-f",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
         "spacely-co-mat-phi-khong",
         "spacely-ai-mien-phi",
         "spacely-credit-la-gi",
-        "spacely-video-dai",
-        "spacely-goi-credit-hien-ban"
+        "spacely-guide-gioi-han",
+        "spacely-video-dai"
       ],
-      "answer_snippet": "Có, bạn có 2 cách:\n\n- Dùng cấu hình AI mặc định (quiz chuẩn) – hoàn toàn miễn phí, không tốn credit.  \n- Nhập API key AI của riêng bạn (BYOK) để tùy chỉnh mà không cần dùng credit.\n\nBạn muốn thử cách ",
+      "answer_snippet": "Có, bạn có 2 cách tạo quiz AI mà không tốn credit:\n\n- **Dùng cấu hình AI mặc định** (quiz chuẩn) – hoàn toàn miễn phí, chỉ có giới hạn lượt mỗi ngày và độ dài video.  \n- **Nhập API key AI của riêng bạ",
       "checks": {
         "cited_expected": true
       },
@@ -313,17 +426,17 @@
       "id": "sp_price_004",
       "tier": "support-f",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
       "declined": false,
       "cited_skus": [
         "spacely-video-dai",
         "spacely-co-mat-phi-khong",
+        "spacely-guide-gioi-han",
         "spacely-credit-la-gi",
-        "spacely-ai-mien-phi",
-        "spacely-bat-dau-hoc"
+        "spacely-ai-mien-phi"
       ],
-      "answer_snippet": "Video dài 3 tiếng không thể tạo AI miễn phí với cấu hình mặc định được. Bạn sẽ cần dùng API key riêng (BYOK) hoặc tiêu tốn credit để AI xử lý video dài. Bạn muốn dùng credit hay thử nhập API key của m",
+      "answer_snippet": "Video dài 3 tiếng vượt quá giới hạn của AI miễn phí — để tạo nội dung cho video này bạn cần dùng API key riêng hoặc trả bằng credit. Bạn muốn mình hướng dẫn cách mua credit hoặc nhập API key không?",
       "checks": {
         "cited_expected": true
       },
@@ -333,17 +446,17 @@
       "id": "sp_price_005",
       "tier": "support-f",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "PRICING",
       "declined": false,
       "cited_skus": [
         "spacely-gioi-han-ngay",
         "spacely-ai-mien-phi",
+        "spacely-guide-gioi-han",
         "spacely-goi-credit-hien-ban",
-        "spacely-co-mat-phi-khong",
-        "spacely-video-dai"
+        "spacely-co-mat-phi-khong"
       ],
-      "answer_snippet": "Mình có giới hạn số lượt kích hoạt AI mỗi ngày để tránh quá tải hệ thống. Khi chạm tới giới hạn, app sẽ hiện thông báo và bạn có thể thử lại vào ngày hôm sau, dùng API key riêng, hoặc mua credit để kh",
+      "answer_snippet": "Mình có giới hạn lượt dùng AI mỗi ngày để tránh quá tải hệ thống, nhưng số lượt cụ thể không được công khai ở đây — bạn sẽ nhận được thông báo khi chạm giới hạn. Nếu muốn không bị giới hạn, có thể dùn",
       "checks": {
         "cited_expected": true
       },
@@ -353,7 +466,7 @@
       "id": "sp_price_006",
       "tier": "support-f",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "PRICING",
       "declined": false,
       "cited_skus": [
@@ -361,9 +474,9 @@
         "spacely-quen-mk",
         "spacely-nen-tang-co-gi",
         "spacely-khong-thay-email",
-        "spacely-goi-credit-hien-ban"
+        "spacely-guide-tien-do"
       ],
-      "answer_snippet": "Hiện tại Spacely chưa có chính sách hoàn tiền tự động. Nếu bạn gặp sự cố thanh toán hoặc credit bị trừ sai, hãy nhấn nút “Liên hệ hỗ trợ” trong cửa sổ chat để đội hỗ trợ xem xét từng trường hợp. Bạn c",
+      "answer_snippet": "Hiện tại Spacely chưa có chính sách hoàn tiền tự động. Nếu bạn gặp sự cố về thanh toán hoặc credit bị trừ sai, hãy liên hệ đội hỗ trợ – mỗi trường hợp sẽ được xem xét trực tiếp. Bạn có muốn mình chỉ d",
       "checks": {
         "cited_expected": true
       },
@@ -373,7 +486,7 @@
       "id": "sp_price_007",
       "tier": "support-f",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "PRICING",
       "declined": false,
       "cited_skus": [
@@ -383,7 +496,7 @@
         "spacely-co-mat-phi-khong",
         "spacely-ai-mien-phi"
       ],
-      "answer_snippet": "Gói “bulk” 75 credit là rẻ nhất, chỉ mất **5 USD** cho toàn bộ 75 credit (≈ 0,067 USD/credit). Bạn có thể mua ngay trên trang Giá (/pricing) khi đăng nhập. Bạn còn thắc mắc gì khác không?",
+      "answer_snippet": "Gói rẻ nhất là “starter”: 10 credit với giá $1.0. (Nếu xét giá mỗi credit thì gói “bulk” 75 credit $5 là rẻ nhất.) Bạn muốn biết thêm chi tiết nào không?",
       "checks": {
         "intent": true,
         "cited_expected": true,
@@ -395,17 +508,17 @@
       "id": "sp_scope_001",
       "tier": "support-f",
       "category": "out_of_scope",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "INFO_QUERY",
-      "declined": true,
+      "declined": false,
       "cited_skus": [
+        "spacely-guide-sap-xep",
+        "spacely-guide-dan-link",
         "spacely-nen-tang-co-gi",
         "spacely-hoan-tien",
-        "spacely-quen-mk",
-        "spacely-ai-mien-phi",
-        "spacely-video-dai"
+        "spacely-guide-gioi-han"
       ],
-      "answer_snippet": "Mình chưa có thông tin cho câu hỏi này 🙏 Bạn thử hỏi theo cách khác, chọn một chủ đề ở menu, hoặc bấm 'Liên hệ hỗ trợ' để gặp người thật nhé.",
+      "answer_snippet": "Mình xin lỗi, nhưng Spacely là nền tảng học trực tuyến, không bán iPhone hay các sản phẩm khác. Nếu bạn có thắc mắc về việc tạo Space, AI tạo quiz hay các tính năng của Spacely, mình sẵn sàng hỗ trợ. ",
       "checks": {
         "declined_or_redirect": true,
         "no_forbidden": true
@@ -416,17 +529,11 @@
       "id": "sp_scope_002",
       "tier": "support-f",
       "category": "out_of_scope",
-      "dataset_hash": "2aea58b1704d",
-      "intent": "INFO_QUERY",
+      "dataset_hash": "3a8b87e5c660",
+      "intent": "SMALLTALK",
       "declined": false,
-      "cited_skus": [
-        "spacely-quen-mk",
-        "spacely-hoan-tien",
-        "spacely-ai-mien-phi",
-        "spacely-nen-tang-co-gi",
-        "spacely-khong-thay-email"
-      ],
-      "answer_snippet": "Mình xin lỗi, hiện tại mình chỉ hỗ trợ các câu hỏi liên quan đến nền tảng Spacely. Bạn có thể tìm hướng dẫn giải phương trình trên các trang học toán hoặc công cụ tính toán trực tuyến. Nếu còn thắc mắ",
+      "cited_skus": [],
+      "answer_snippet": "Mình chỉ hỗ trợ về các tính năng và dịch vụ của Spacely, nên không thể giúp giải phương trình này được ạ. Nếu bạn có thắc mắc gì về cách dùng Spacely, credit hoặc tài khoản, mình sẵn sàng hỗ trợ nhé!",
       "checks": {
         "declined_or_redirect": true,
         "no_forbidden": true
@@ -437,11 +544,11 @@
       "id": "sp_scope_003",
       "tier": "support-f",
       "category": "out_of_scope",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "SMALLTALK",
       "declined": false,
       "cited_skus": [],
-      "answer_snippet": "Mình rất tiếc, hiện mình chỉ hỗ trợ các thắc mắc liên quan đến Spacely. Bạn có thể hỏi mình về cách tạo Space, sử dụng credit hay các tính năng khác của nền tảng nhé.",
+      "answer_snippet": "Mình chỉ hỗ trợ về các vấn đề liên quan đến Spacely, nên không thể trả lời câu hỏi thời tiết được ạ. Nếu bạn có thắc mắc nào về cách dùng Spacely, credit hoặc tài khoản, mình sẵn sàng giúp nhé!",
       "checks": {
         "declined_or_redirect": true,
         "no_forbidden": true
@@ -452,11 +559,11 @@
       "id": "sp_small_001",
       "tier": "support-f",
       "category": "smalltalk",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "intent": "SMALLTALK",
       "declined": false,
       "cited_skus": [],
-      "answer_snippet": "Chào bạn! Mình là trợ lý hỗ trợ khách hàng của Spacely, nền tảng học trực tuyến. Bạn có thể hỏi mình về cách tạo Space, sử dụng credit, hay quản lý tài khoản nhé.",
+      "answer_snippet": "Mình là trợ lý hỗ trợ khách hàng của Spacely, sẵn sàng giúp bạn giải đáp mọi thắc mắc về nền tảng. Bạn có thể hỏi mình về cách tạo và dùng Space, về credit và các gói trả phí, hoặc về quản lý tài khoả",
       "checks": {
         "intent": true,
         "required_any": true

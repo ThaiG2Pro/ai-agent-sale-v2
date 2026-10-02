@@ -1,12 +1,17 @@
 {
   "tier": "support-r",
-  "dataset_hash": "2aea58b1704d",
-  "created_at": "2026-10-02T06:52:30.612539+00:00",
+  "dataset_hash": "3a8b87e5c660",
+  "created_at": "2026-10-02T07:13:58.483656+00:00",
   "summary": {
-    "total": 14,
-    "passed": 14,
+    "total": 19,
+    "passed": 19,
     "pass_rate": 1.0,
     "by_category": {
+      "faq_about": {
+        "total": 2,
+        "passed": 2,
+        "pass_rate": 1.0
+      },
       "faq_account": {
         "total": 3,
         "passed": 3,
@@ -15,6 +20,11 @@
       "faq_feature": {
         "total": 4,
         "passed": 4,
+        "pass_rate": 1.0
+      },
+      "faq_guide": {
+        "total": 3,
+        "passed": 3,
         "pass_rate": 1.0
       },
       "faq_pricing": {
@@ -26,22 +36,60 @@
   },
   "results": [
     {
+      "id": "sp_about_001",
+      "tier": "support-r",
+      "category": "faq_about",
+      "dataset_hash": "3a8b87e5c660",
+      "top_k": 5,
+      "found_skus": [
+        "spacely-about-cam-ket",
+        "spacely-chia-se-space",
+        "spacely-bat-dau-hoc",
+        "spacely-about-spacely",
+        "spacely-clone-space"
+      ],
+      "recall": 1.0,
+      "hits": [
+        "spacely-about-cam-ket"
+      ],
+      "passed": true
+    },
+    {
+      "id": "sp_about_002",
+      "tier": "support-r",
+      "category": "faq_about",
+      "dataset_hash": "3a8b87e5c660",
+      "top_k": 5,
+      "found_skus": [
+        "spacely-xoa-tk",
+        "spacely-guide-chia-se",
+        "spacely-about-cam-ket",
+        "spacely-clone-space",
+        "spacely-quen-mk"
+      ],
+      "recall": 1.0,
+      "hits": [
+        "spacely-about-cam-ket"
+      ],
+      "passed": true
+    },
+    {
       "id": "sp_acct_001",
       "tier": "support-r",
       "category": "faq_account",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-quen-mk",
         "spacely-xoa-tk",
         "spacely-khong-thay-email",
         "spacely-nen-tang-co-gi",
+        "spacely-guide-tien-do",
         "spacely-ai-mien-phi",
+        "spacely-guide-chia-se",
+        "spacely-guide-gioi-han",
         "spacely-hoan-tien",
-        "spacely-gioi-han-ngay",
-        "spacely-co-mat-phi-khong",
-        "spacely-bat-dau-hoc",
-        "spacely-video-dai"
+        "spacely-gioi-han-ngay"
       ],
       "recall": 1.0,
       "hits": [
@@ -53,19 +101,19 @@
       "id": "sp_acct_002",
       "tier": "support-r",
       "category": "faq_account",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-khong-thay-email",
         "spacely-quen-mk",
+        "spacely-guide-chia-se",
+        "spacely-guide-tien-do",
         "spacely-chia-se-space",
         "spacely-xoa-tk",
+        "spacely-guide-dan-link",
         "spacely-nen-tang-co-gi",
         "spacely-hoan-tien",
-        "spacely-bat-dau-hoc",
-        "spacely-gioi-han-ngay",
-        "spacely-ai-mien-phi",
-        "spacely-goi-credit-hien-ban"
+        "spacely-bat-dau-hoc"
       ],
       "recall": 1.0,
       "hits": [
@@ -77,19 +125,19 @@
       "id": "sp_acct_003",
       "tier": "support-r",
       "category": "faq_account",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-xoa-tk",
+        "spacely-about-cam-ket",
         "spacely-chia-se-space",
+        "spacely-guide-chia-se",
         "spacely-co-mat-phi-khong",
         "spacely-bat-dau-hoc",
-        "spacely-clone-space",
-        "spacely-quen-mk",
-        "spacely-hoan-tien",
-        "spacely-nen-tang-co-gi",
-        "spacely-khong-thay-email",
-        "spacely-gioi-han-ngay"
+        "spacely-guide-tien-do",
+        "spacely-guide-dan-link",
+        "spacely-guide-gioi-han",
+        "spacely-guide-sap-xep"
       ],
       "recall": 1.0,
       "hits": [
@@ -101,23 +149,18 @@
       "id": "sp_feat_001",
       "tier": "support-r",
       "category": "faq_feature",
-      "dataset_hash": "2aea58b1704d",
-      "top_k": 10,
+      "dataset_hash": "3a8b87e5c660",
+      "top_k": 5,
       "found_skus": [
-        "spacely-nen-tang-co-gi",
-        "spacely-bat-dau-hoc",
-        "spacely-co-mat-phi-khong",
-        "spacely-chia-se-space",
-        "spacely-clone-space",
-        "spacely-xoa-tk",
-        "spacely-quen-mk",
-        "spacely-hoan-tien",
-        "spacely-goi-credit-hien-ban",
-        "spacely-credit-la-gi"
+        "spacely-about-spacely",
+        "spacely-about-cam-ket",
+        "spacely-guide-gioi-han",
+        "spacely-guide-chia-se",
+        "spacely-guide-tien-do"
       ],
-      "recall": 1.0,
+      "recall": 0.5,
       "hits": [
-        "spacely-nen-tang-co-gi"
+        "spacely-about-spacely"
       ],
       "passed": true
     },
@@ -125,19 +168,19 @@
       "id": "sp_feat_002",
       "tier": "support-r",
       "category": "faq_feature",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-bat-dau-hoc",
         "spacely-nen-tang-co-gi",
+        "spacely-guide-vao-hoc",
+        "spacely-guide-dan-link",
+        "spacely-guide-tien-do",
         "spacely-quen-mk",
-        "spacely-ai-mien-phi",
-        "spacely-khong-thay-email",
-        "spacely-xoa-tk",
-        "spacely-clone-space",
-        "spacely-co-mat-phi-khong",
-        "spacely-chia-se-space",
-        "spacely-goi-credit-hien-ban"
+        "spacely-guide-chia-se",
+        "spacely-about-spacely",
+        "spacely-guide-sap-xep",
+        "spacely-ai-mien-phi"
       ],
       "recall": 1.0,
       "hits": [
@@ -149,19 +192,19 @@
       "id": "sp_feat_003",
       "tier": "support-r",
       "category": "faq_feature",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-clone-space",
+        "spacely-guide-chia-se",
         "spacely-chia-se-space",
+        "spacely-about-cam-ket",
+        "spacely-guide-gioi-han",
         "spacely-co-mat-phi-khong",
         "spacely-bat-dau-hoc",
+        "spacely-guide-tien-do",
         "spacely-xoa-tk",
-        "spacely-nen-tang-co-gi",
-        "spacely-video-dai",
-        "spacely-gioi-han-ngay",
-        "spacely-hoan-tien",
-        "spacely-quen-mk"
+        "spacely-about-spacely"
       ],
       "recall": 1.0,
       "hits": [
@@ -173,19 +216,19 @@
       "id": "sp_feat_004",
       "tier": "support-r",
       "category": "faq_feature",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-chia-se-space",
         "spacely-bat-dau-hoc",
+        "spacely-guide-chia-se",
+        "spacely-guide-dan-link",
+        "spacely-guide-tien-do",
         "spacely-quen-mk",
-        "spacely-co-mat-phi-khong",
-        "spacely-nen-tang-co-gi",
-        "spacely-clone-space",
-        "spacely-xoa-tk",
-        "spacely-khong-thay-email",
-        "spacely-video-dai",
-        "spacely-hoan-tien"
+        "spacely-guide-gioi-han",
+        "spacely-guide-sap-xep",
+        "spacely-about-spacely",
+        "spacely-about-cam-ket"
       ],
       "recall": 1.0,
       "hits": [
@@ -194,10 +237,67 @@
       "passed": true
     },
     {
+      "id": "sp_guide_001",
+      "tier": "support-r",
+      "category": "faq_guide",
+      "dataset_hash": "3a8b87e5c660",
+      "top_k": 5,
+      "found_skus": [
+        "spacely-guide-vao-hoc",
+        "spacely-nen-tang-co-gi",
+        "spacely-quen-mk",
+        "spacely-hoan-tien",
+        "spacely-guide-tien-do"
+      ],
+      "recall": 1.0,
+      "hits": [
+        "spacely-guide-vao-hoc"
+      ],
+      "passed": true
+    },
+    {
+      "id": "sp_guide_002",
+      "tier": "support-r",
+      "category": "faq_guide",
+      "dataset_hash": "3a8b87e5c660",
+      "top_k": 5,
+      "found_skus": [
+        "spacely-guide-tien-do",
+        "spacely-nen-tang-co-gi",
+        "spacely-guide-vao-hoc",
+        "spacely-guide-chia-se",
+        "spacely-quen-mk"
+      ],
+      "recall": 1.0,
+      "hits": [
+        "spacely-guide-tien-do"
+      ],
+      "passed": true
+    },
+    {
+      "id": "sp_guide_003",
+      "tier": "support-r",
+      "category": "faq_guide",
+      "dataset_hash": "3a8b87e5c660",
+      "top_k": 5,
+      "found_skus": [
+        "spacely-guide-gioi-han",
+        "spacely-nen-tang-co-gi",
+        "spacely-guide-dan-link",
+        "spacely-bat-dau-hoc",
+        "spacely-about-spacely"
+      ],
+      "recall": 1.0,
+      "hits": [
+        "spacely-guide-gioi-han"
+      ],
+      "passed": true
+    },
+    {
       "id": "sp_price_001",
       "tier": "support-r",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-co-mat-phi-khong",
@@ -205,11 +305,11 @@
         "spacely-hoan-tien",
         "spacely-video-dai",
         "spacely-nen-tang-co-gi",
+        "spacely-about-cam-ket",
         "spacely-bat-dau-hoc",
         "spacely-gioi-han-ngay",
         "spacely-credit-la-gi",
-        "spacely-goi-credit-hien-ban",
-        "spacely-quen-mk"
+        "spacely-goi-credit-hien-ban"
       ],
       "recall": 1.0,
       "hits": [
@@ -221,7 +321,7 @@
       "id": "sp_price_002",
       "tier": "support-r",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-credit-la-gi",
@@ -232,8 +332,8 @@
         "spacely-bat-dau-hoc",
         "spacely-nen-tang-co-gi",
         "spacely-ai-mien-phi",
-        "spacely-video-dai",
-        "spacely-xoa-tk"
+        "spacely-guide-gioi-han",
+        "spacely-about-spacely"
       ],
       "recall": 1.0,
       "hits": [
@@ -245,14 +345,14 @@
       "id": "sp_price_003",
       "tier": "support-r",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 5,
       "found_skus": [
         "spacely-co-mat-phi-khong",
         "spacely-ai-mien-phi",
         "spacely-credit-la-gi",
-        "spacely-video-dai",
-        "spacely-goi-credit-hien-ban"
+        "spacely-guide-gioi-han",
+        "spacely-video-dai"
       ],
       "recall": 1.0,
       "hits": [
@@ -264,14 +364,14 @@
       "id": "sp_price_004",
       "tier": "support-r",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 5,
       "found_skus": [
         "spacely-video-dai",
         "spacely-co-mat-phi-khong",
+        "spacely-guide-gioi-han",
         "spacely-credit-la-gi",
-        "spacely-ai-mien-phi",
-        "spacely-bat-dau-hoc"
+        "spacely-ai-mien-phi"
       ],
       "recall": 1.0,
       "hits": [
@@ -283,14 +383,14 @@
       "id": "sp_price_005",
       "tier": "support-r",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 5,
       "found_skus": [
         "spacely-gioi-han-ngay",
         "spacely-ai-mien-phi",
+        "spacely-guide-gioi-han",
         "spacely-goi-credit-hien-ban",
-        "spacely-co-mat-phi-khong",
-        "spacely-video-dai"
+        "spacely-co-mat-phi-khong"
       ],
       "recall": 1.0,
       "hits": [
@@ -302,19 +402,19 @@
       "id": "sp_price_006",
       "tier": "support-r",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-hoan-tien",
         "spacely-quen-mk",
         "spacely-nen-tang-co-gi",
         "spacely-khong-thay-email",
+        "spacely-guide-tien-do",
+        "spacely-guide-gioi-han",
+        "spacely-guide-vao-hoc",
         "spacely-goi-credit-hien-ban",
         "spacely-credit-la-gi",
-        "spacely-gioi-han-ngay",
-        "spacely-xoa-tk",
-        "spacely-ai-mien-phi",
-        "spacely-video-dai"
+        "spacely-gioi-han-ngay"
       ],
       "recall": 1.0,
       "hits": [
@@ -326,7 +426,7 @@
       "id": "sp_price_007",
       "tier": "support-r",
       "category": "faq_pricing",
-      "dataset_hash": "2aea58b1704d",
+      "dataset_hash": "3a8b87e5c660",
       "top_k": 10,
       "found_skus": [
         "spacely-goi-credit-hien-ban",
@@ -335,10 +435,10 @@
         "spacely-co-mat-phi-khong",
         "spacely-ai-mien-phi",
         "spacely-quen-mk",
+        "spacely-guide-gioi-han",
         "spacely-bat-dau-hoc",
         "spacely-nen-tang-co-gi",
-        "spacely-video-dai",
-        "spacely-gioi-han-ngay"
+        "spacely-video-dai"
       ],
       "recall": 1.0,
       "hits": [

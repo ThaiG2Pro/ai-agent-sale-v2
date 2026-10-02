@@ -1,22 +1,265 @@
 [
-  {"id": "sp_feat_001", "query": "Spacely là gì, có gì hay?", "category": "faq_feature", "expected_skus": ["spacely-nen-tang-co-gi"], "expected_intent": "INFO_QUERY"},
-  {"id": "sp_feat_002", "query": "mới vào thì bắt đầu học kiểu gì?", "category": "faq_feature", "expected_skus": ["spacely-bat-dau-hoc"], "expected_intent": "INFO_QUERY"},
-  {"id": "sp_feat_003", "query": "có copy được space của người khác về không", "category": "faq_feature", "expected_skus": ["spacely-clone-space"], "expected_intent": "INFO_QUERY"},
-  {"id": "sp_feat_004", "query": "gửi link space cho bạn chưa có tài khoản xem được không?", "category": "faq_feature", "expected_skus": ["spacely-chia-se-space"], "expected_intent": "INFO_QUERY"},
-  {"id": "sp_price_001", "query": "xài có tốn tiền không?", "category": "faq_pricing", "expected_skus": ["spacely-co-mat-phi-khong"], "expected_intent": "PRICING"},
-  {"id": "sp_price_002", "query": "credit là cái gì, mua ở đâu", "category": "faq_pricing", "expected_skus": ["spacely-credit-la-gi"], "expected_intent": "PRICING"},
-  {"id": "sp_price_003", "query": "có cách nào tạo quiz AI mà không mất credit không", "category": "faq_pricing", "expected_skus": ["spacely-ai-mien-phi"], "match": "any", "top_k": 5},
-  {"id": "sp_price_004", "query": "video dài 3 tiếng có tạo AI miễn phí được không", "category": "faq_pricing", "expected_skus": ["spacely-video-dai"], "match": "any", "top_k": 5},
-  {"id": "sp_price_005", "query": "một ngày dùng AI được bao nhiêu lần?", "category": "faq_pricing", "expected_skus": ["spacely-gioi-han-ngay"], "match": "any", "top_k": 5},
-  {"id": "sp_price_006", "query": "chính sách hoàn tiền thế nào?", "category": "faq_pricing", "expected_skus": ["spacely-hoan-tien"]},
-  {"id": "sp_price_007", "query": "gói credit nào rẻ nhất, bao nhiêu đô?", "category": "faq_pricing", "expected_skus": ["spacely-goi-credit-hien-ban"], "expected_intent": "PRICING", "required_any": ["$5", "75 credit", "bulk"]},
-  {"id": "sp_acct_001", "query": "tôi quên mật khẩu rồi", "category": "faq_account", "expected_skus": ["spacely-quen-mk"], "expected_intent": "INFO_QUERY"},
-  {"id": "sp_acct_002", "query": "đăng ký xong mà không thấy mail kích hoạt đâu", "category": "faq_account", "expected_skus": ["spacely-khong-thay-email"]},
-  {"id": "sp_acct_003", "query": "xoá tài khoản thì space của tôi có mất không", "category": "faq_account", "expected_skus": ["spacely-xoa-tk"]},
-  {"id": "sp_scope_001", "query": "tôi muốn đặt mua 2 cái iphone 15 pro max", "category": "out_of_scope", "must_decline": true, "forbidden_terms": ["đặt hàng", "giỏ hàng", "giao hàng"]},
-  {"id": "sp_scope_002", "query": "giải giúp tôi phương trình 2x + 3 = 7", "category": "out_of_scope", "must_decline": true, "forbidden_terms": ["x = 2", "x=2"]},
-  {"id": "sp_scope_003", "query": "hôm nay thời tiết Hà Nội thế nào?", "category": "out_of_scope", "must_decline": true, "forbidden_terms": ["độ c", "°c", "nắng", "mưa", "nhiệt độ"]},
-  {"id": "sp_compl_001", "query": "app bị lỗi, tạo quiz xong mất hết credit mà không ra gì, hoàn tiền cho tôi", "category": "complaint", "expected_intent": "COMPLAINT", "required_any": ["liên hệ hỗ trợ", "đội hỗ trợ", "người thật"], "forbidden_terms": ["sẽ hoàn tiền", "hoàn tiền cho bạn ngay", "đã hoàn tiền", "xử lý hoàn tiền cho bạn", "hoàn lại tiền cho bạn"]},
-  {"id": "sp_compl_002", "query": "bực quá, bị trừ 3 credit mà quiz trống trơn, các bạn làm ăn kiểu gì vậy", "category": "complaint", "expected_intent": "COMPLAINT", "required_any": ["liên hệ hỗ trợ", "đội hỗ trợ", "người thật"], "forbidden_terms": ["sẽ hoàn", "hoàn lại 3 credit", "đã hoàn", "cộng lại credit cho bạn"]},
-  {"id": "sp_small_001", "query": "chào bạn, bạn là ai?", "category": "smalltalk", "expected_intent": "SMALLTALK", "required_any": ["spacely"]}
+  {
+    "id": "sp_feat_001",
+    "query": "Spacely là gì, có gì hay?",
+    "category": "faq_feature",
+    "expected_skus": [
+      "spacely-nen-tang-co-gi",
+      "spacely-about-spacely"
+    ],
+    "expected_intent": "INFO_QUERY",
+    "match": "any",
+    "top_k": 5
+  },
+  {
+    "id": "sp_feat_002",
+    "query": "mới vào thì bắt đầu học kiểu gì?",
+    "category": "faq_feature",
+    "expected_skus": [
+      "spacely-bat-dau-hoc"
+    ],
+    "expected_intent": "INFO_QUERY"
+  },
+  {
+    "id": "sp_feat_003",
+    "query": "có copy được space của người khác về không",
+    "category": "faq_feature",
+    "expected_skus": [
+      "spacely-clone-space"
+    ],
+    "expected_intent": "INFO_QUERY"
+  },
+  {
+    "id": "sp_feat_004",
+    "query": "gửi link space cho bạn chưa có tài khoản xem được không?",
+    "category": "faq_feature",
+    "expected_skus": [
+      "spacely-chia-se-space"
+    ],
+    "expected_intent": "INFO_QUERY"
+  },
+  {
+    "id": "sp_price_001",
+    "query": "xài có tốn tiền không?",
+    "category": "faq_pricing",
+    "expected_skus": [
+      "spacely-co-mat-phi-khong"
+    ],
+    "expected_intent": "PRICING"
+  },
+  {
+    "id": "sp_price_002",
+    "query": "credit là cái gì, mua ở đâu",
+    "category": "faq_pricing",
+    "expected_skus": [
+      "spacely-credit-la-gi"
+    ],
+    "expected_intent": "PRICING"
+  },
+  {
+    "id": "sp_price_003",
+    "query": "có cách nào tạo quiz AI mà không mất credit không",
+    "category": "faq_pricing",
+    "expected_skus": [
+      "spacely-ai-mien-phi"
+    ],
+    "match": "any",
+    "top_k": 5
+  },
+  {
+    "id": "sp_price_004",
+    "query": "video dài 3 tiếng có tạo AI miễn phí được không",
+    "category": "faq_pricing",
+    "expected_skus": [
+      "spacely-video-dai"
+    ],
+    "match": "any",
+    "top_k": 5
+  },
+  {
+    "id": "sp_price_005",
+    "query": "một ngày dùng AI được bao nhiêu lần?",
+    "category": "faq_pricing",
+    "expected_skus": [
+      "spacely-gioi-han-ngay"
+    ],
+    "match": "any",
+    "top_k": 5
+  },
+  {
+    "id": "sp_price_006",
+    "query": "chính sách hoàn tiền thế nào?",
+    "category": "faq_pricing",
+    "expected_skus": [
+      "spacely-hoan-tien"
+    ]
+  },
+  {
+    "id": "sp_price_007",
+    "query": "gói credit nào rẻ nhất, bao nhiêu đô?",
+    "category": "faq_pricing",
+    "expected_skus": [
+      "spacely-goi-credit-hien-ban"
+    ],
+    "expected_intent": "PRICING",
+    "required_any": [
+      "$5",
+      "75 credit",
+      "bulk"
+    ]
+  },
+  {
+    "id": "sp_acct_001",
+    "query": "tôi quên mật khẩu rồi",
+    "category": "faq_account",
+    "expected_skus": [
+      "spacely-quen-mk"
+    ],
+    "expected_intent": "INFO_QUERY"
+  },
+  {
+    "id": "sp_acct_002",
+    "query": "đăng ký xong mà không thấy mail kích hoạt đâu",
+    "category": "faq_account",
+    "expected_skus": [
+      "spacely-khong-thay-email"
+    ]
+  },
+  {
+    "id": "sp_acct_003",
+    "query": "xoá tài khoản thì space của tôi có mất không",
+    "category": "faq_account",
+    "expected_skus": [
+      "spacely-xoa-tk"
+    ]
+  },
+  {
+    "id": "sp_guide_001",
+    "query": "chế độ tập trung là gì, bật ở đâu?",
+    "category": "faq_guide",
+    "expected_skus": [
+      "spacely-guide-vao-hoc"
+    ],
+    "match": "any",
+    "top_k": 5,
+    "expected_intent": "INFO_QUERY"
+  },
+  {
+    "id": "sp_guide_002",
+    "query": "muốn xem mình học được bao nhiêu phần trăm rồi thì vào đâu",
+    "category": "faq_guide",
+    "expected_skus": [
+      "spacely-guide-tien-do"
+    ],
+    "match": "any",
+    "top_k": 5
+  },
+  {
+    "id": "sp_guide_003",
+    "query": "dán nguyên playlist youtube được không?",
+    "category": "faq_guide",
+    "expected_skus": [
+      "spacely-guide-gioi-han"
+    ],
+    "match": "any",
+    "top_k": 5
+  },
+  {
+    "id": "sp_about_001",
+    "query": "trong Space có quảng cáo không?",
+    "category": "faq_about",
+    "expected_skus": [
+      "spacely-about-cam-ket"
+    ],
+    "match": "any",
+    "top_k": 5
+  },
+  {
+    "id": "sp_about_002",
+    "query": "tôi có tải dữ liệu của mình về được không",
+    "category": "faq_about",
+    "expected_skus": [
+      "spacely-about-cam-ket"
+    ],
+    "match": "any",
+    "top_k": 5
+  },
+  {
+    "id": "sp_scope_001",
+    "query": "tôi muốn đặt mua 2 cái iphone 15 pro max",
+    "category": "out_of_scope",
+    "must_decline": true,
+    "forbidden_terms": [
+      "đặt hàng",
+      "giỏ hàng",
+      "giao hàng"
+    ]
+  },
+  {
+    "id": "sp_scope_002",
+    "query": "giải giúp tôi phương trình 2x + 3 = 7",
+    "category": "out_of_scope",
+    "must_decline": true,
+    "forbidden_terms": [
+      "x = 2",
+      "x=2"
+    ]
+  },
+  {
+    "id": "sp_scope_003",
+    "query": "hôm nay thời tiết Hà Nội thế nào?",
+    "category": "out_of_scope",
+    "must_decline": true,
+    "forbidden_terms": [
+      "độ c",
+      "°c",
+      "nắng",
+      "mưa",
+      "nhiệt độ"
+    ]
+  },
+  {
+    "id": "sp_compl_001",
+    "query": "app bị lỗi, tạo quiz xong mất hết credit mà không ra gì, hoàn tiền cho tôi",
+    "category": "complaint",
+    "expected_intent": "COMPLAINT",
+    "required_any": [
+      "liên hệ hỗ trợ",
+      "đội hỗ trợ",
+      "người thật"
+    ],
+    "forbidden_terms": [
+      "sẽ hoàn tiền",
+      "hoàn tiền cho bạn ngay",
+      "đã hoàn tiền",
+      "xử lý hoàn tiền cho bạn",
+      "hoàn lại tiền cho bạn"
+    ]
+  },
+  {
+    "id": "sp_compl_002",
+    "query": "bực quá, bị trừ 3 credit mà quiz trống trơn, các bạn làm ăn kiểu gì vậy",
+    "category": "complaint",
+    "expected_intent": "COMPLAINT",
+    "required_any": [
+      "liên hệ hỗ trợ",
+      "đội hỗ trợ",
+      "người thật"
+    ],
+    "forbidden_terms": [
+      "sẽ hoàn",
+      "hoàn lại 3 credit",
+      "đã hoàn",
+      "cộng lại credit cho bạn"
+    ]
+  },
+  {
+    "id": "sp_small_001",
+    "query": "chào bạn, bạn là ai?",
+    "category": "smalltalk",
+    "expected_intent": "SMALLTALK",
+    "required_any": [
+      "spacely"
+    ]
+  }
 ]
