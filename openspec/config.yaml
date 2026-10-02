@@ -9,7 +9,7 @@ context: |
   models (qwen3 / deepseek-r1 / bge-m3), SQLAlchemy 2.0 async + asyncpg on PostgreSQL + pgvector,
   Alembic migrations, Pydantic v2 / pydantic-settings, Typer CLI, Logfire + OpenTelemetry + Phoenix.
   Tests: pytest + pytest-asyncio (strict) + respx; real test DB (ai_agent_test). Lint/format: ruff
-  (line 99) via ./scripts/lint.sh. Coverage target ≥80% (R-COV-001) but not yet CI-enforced.
+  (line 99) via ./scripts/lint.sh. Coverage gate ≥75% (R-COV-001 target 80%), CI-enforced via --cov-fail-under.
   API: plain Pydantic response_model (NOT {data,meta}); errors = FastAPI {"detail": ...}; real HTTP
   codes (400/401/404/409/500); lists = {items,total,limit,offset}. No global version prefix; per-change
   openapi.yaml is the S3 output. Architecture: async modular monolith, layers interface(api,cli) →

@@ -170,4 +170,4 @@
 | P2 | 004 | hitl_guard resume-vs-fresh detect bằng query DB — mong manh |
 | P2 | WP6 | **`docs/demo-runbook.md` chưa được viết** (demo pack mới có `scripts/demo_seed.py`; 5 kịch bản demo chưa có runbook) |
 | P2 | eval | 1 case multi-intent Tier-F dao động theo run (grader groundedness borderline với câu 2 ý) — cân nhắc nới verdict hoặc chạy decomposition trong Tier-F |
-| P3 | — | CI/CD + coverage gate ≥80% chưa có (điều kiện lên điểm 5 tuyệt đối) |
+| P3 | — | Coverage gate đang ở 75% (hạ từ 80% ngày 2026-10-02 sau support graph, 76.8%); nâng lại 80% khi bù test (điều kiện lên điểm 5 tuyệt đối) |
