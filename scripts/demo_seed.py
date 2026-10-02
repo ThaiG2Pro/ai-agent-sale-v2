@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import traceback
 from pathlib import Path
 
 # ── stdlib path hack so script runs from repo root ──────────────────────────
@@ -60,6 +61,7 @@ async def _seed(limit: int, stock: int | None) -> None:
     table.add_column("Trạng thái")
 
     ok = failed = 0
+    first_error: str | None = None
     async with AsyncSessionLocal() as db:
         for i, item in enumerate(catalog):
             sku = item["sku"]
@@ -89,10 +91,17 @@ async def _seed(limit: int, stock: int | None) -> None:
             except Exception as e:
                 await db.rollback()
                 failed += 1
+                if first_error is None:
+                    first_error = traceback.format_exc()
                 table.add_row(sku, item["name"][:40], f"{item['price']:,}", "-", f"❌ {e}")
 
     console.print(table)
     console.print(f"[bold]Done:[/bold] {ok} seeded, {failed} failed")
+    if first_error:
+        # Rich table truncates the error column in CI logs; print the first
+        # failure verbatim so the root cause is readable.
+        print("\n--- first failure (full traceback) ---", file=sys.stderr)
+        print(first_error, file=sys.stderr)
     if failed:
         raise typer.Exit(code=1)
 
