@@ -1,7 +1,7 @@
 # Tasks: Core System Foundation & Infrastructure
 
 **Feature**: Core System Foundation & Infrastructure
-**Plan**: `specs/001-project-infra-setup/plan.md`
+**Plan**: `docs/specs/001-project-infra-setup/plan.md`
 
 ## Phase 1: Setup (Project Initialization)
 
@@ -74,7 +74,7 @@ Story goal: AI functions running locally via LiteLLM + Ollama.
 
 Story goal: Final documentation and architectural records.
 
-- [X] T030 [P] Write ADR 001 for technical selections in `docs/adr/001_tech_selection.md`
+- [X] T030 [P] Write ADR 001 for technical selections in `docs/adr/001-tech-selection.md`
 - [X] T031 Document minimum hardware requirements in `README.md`
 - [X] T032 [P] Finalize `pyproject.toml` metadata and descriptions
 - [X] T033 Implement version-based cache invalidation logic in `services/semantic_cache.py`

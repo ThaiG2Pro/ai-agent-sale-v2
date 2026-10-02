@@ -97,7 +97,7 @@ WITH (m = 16, ef_construction = 64);
 
 **Rationale**: Matching existing index parameters ensures consistent performance characteristics across all vector tables (Article XI ADR consistency). 500ms p95 target is achievable with HNSW on 500+ entries on modest local hardware — confirmed by existing semantic cache benchmarks.
 
-**Document in**: `docs/adr/ADR-005-memory-hnsw-embedding-governance.md`
+**Document in**: `docs/adr/005-memory-hnsw-embedding-governance.md`
 
 ---
 

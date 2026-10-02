@@ -1,11 +1,11 @@
 # Proposal: v3-0-agent-effectiveness-resilience — Locked Upgrade Spec
 
 **Type**: upgrade-plan (LOCKED 2026-08-12 — tổng hợp từ wayfinder map
-"Agent Effectiveness & Resilience Upgrade Spec", `wayfinder/map.md`)
+"Agent Effectiveness & Resilience Upgrade Spec", `docs/wayfinder/map.md`)
 **Status**: planning-only. Spec này KHÔNG kèm implementation; đưa vào SDLC pipeline
 theo từng nhóm ưu tiên P1→P4 (mỗi nhóm có thể bổ thành change con khi build).
-**Nguồn quyết định**: 12 ticket đã đóng trong `wayfinder/tickets/` — spec này lắp ráp
-và KHÓA, chi tiết đầy đủ nằm ở ticket + `wayfinder/research/`.
+**Nguồn quyết định**: 12 ticket đã đóng trong `docs/wayfinder/tickets/` — spec này lắp ráp
+và KHÓA, chi tiết đầy đủ nằm ở ticket + `docs/wayfinder/research/`.
 
 ## Problem
 

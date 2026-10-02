@@ -1,6 +1,6 @@
 # Tasks: Async Persistence & Memory
 
-**Input**: Design documents from `specs/005-async-persistence-memory/`  
+**Input**: Design documents from `docs/specs/005-async-persistence-memory/`  
 **Branch**: `005-async-persistence-memory`  
 **Spec**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md) | **Data Model**: [data-model.md](./data-model.md)
 
@@ -19,7 +19,7 @@
 
 - [X] T001 Add 8 memory config settings to `core/config.py`: `MEMORY_SUMMARY_THRESHOLD=20`, `MEMORY_RELEVANCE_THRESHOLD=0.75`, `MEMORY_TOP_K=3`, `CHECKPOINT_SIZE_WARN_BYTES=1_048_576`, `CHECKPOINT_RETENTION_DAYS=90`, `MEMORY_MERGE_PLATFORMS=True`, `DB_POOL_SIZE=20`, `INTENT_LOCK_MAX_RETRIES=3`, `INTENT_LOCK_RETRY_BACKOFF_MS=[50, 100, 200]`
 - [X] T002 [P] Create `services/memory/__init__.py` with module-level docstring explaining Week 5 memory layer purpose (Article XI)
-- [X] T003 [P] Create `docs/adr/ADR-005-memory-hnsw-embedding-governance.md` with Context → Decision (m=16, ef_construction=64, model_version composite key) → Consequences → Alternatives Considered sections
+- [X] T003 [P] Create `docs/adr/005-memory-hnsw-embedding-governance.md` with Context → Decision (m=16, ef_construction=64, model_version composite key) → Consequences → Alternatives Considered sections
 - [X] T004 [P] Create `tests/unit/test_intent_extractor.py` with file docstring, imports (`pytest`, `pytest_asyncio`, `unittest.mock`), and empty test class `TestSalesIntentExtractor`
 - [X] T005 [P] Create `tests/unit/test_intent_tracker.py` with file docstring, imports, and empty test class `TestIntentTracker`
 - [X] T006 [P] Create `tests/unit/test_summarizer.py` with file docstring, imports, and empty test class `TestConversationSummarizer`

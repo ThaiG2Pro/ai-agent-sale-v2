@@ -201,7 +201,7 @@ async def send_telegram_message(bot_token: str, message: TelegramMessage):
 - [httpx Async Client](https://www.python-httpx.org/async/)
 - Constitution Article II: Simplicity and Anti-Abstraction
 - Constitution Article X: Cost Management and Model Economics
-- Feature 006 Research: `specs/006-telegram-docker/research.md` (Decision 1)
+- Feature 006 Research: `docs/specs/006-telegram-docker/research.md` (Decision 1)
 
 ---
 

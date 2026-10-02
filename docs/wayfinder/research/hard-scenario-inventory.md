@@ -2,11 +2,11 @@
 
 **Ngày**: 2026-08-11 · **Phạm vi**: inventory only — không đề xuất fix/design.
 **Nguồn đã khai thác**:
-- Live scripts commit `7c5517e`: `scripts/test_order_scenarios_live.py`, `scripts/test_7_order_groups.py`, `scripts/test_advanced_edge_cases.py`
+- Live scripts commit `7c5517e`: `scripts/scenarios/test_order_scenarios_live.py`, `scripts/scenarios/test_7_order_groups.py`, `scripts/scenarios/test_advanced_edge_cases.py`
 - Test suite `tests/` (unit / integration / contract / eval / performance) + `tests/eval/gold_dataset.json` (42 case, 9 category — **không có SMALLTALK, không có ORDER/HITL, không có intent-flip**)
 - `reports/eval_runs/tier-f.jsonl` (faithfulness, 12 case) + `tier-r.jsonl` (retrieval, 34 case, recall đều = 1.0) + `reports/eval_results.json` (20 case, tier1 pass 0.95, avg human grade 3.65/5)
 - Báo cáo kịch bản: `reports/problems_edge_cases.md` (SC01–SC10), `reports/problems_s01_s10_round2.md` (S01–S10 round 2), `reports/nightmare_scenarios_report.md` (SC1–SC5), `reports/hack_scenarios_report.md` (NQ1–NQ3), `reports/report_hitl_scenarios.md`, `reports/hitl_queue_fix_verification.md`
-- ⚠️ **Tài liệu "v2-6 draft-order analysis (2026-08-10, 7 edge cases + 5 open questions)" KHÔNG TÌM THẤY** trong `docs/`, `openspec/`, `memory/`, `reports/` (grep "draft", "v2-6", "edge case", "2026-08-10"). Các edge case order đã được tái dựng từ `scripts/test_advanced_edge_cases.py` (8 kịch bản E1–E8) — đánh dấu Source = *script (doc gốc missing)*.
+- ⚠️ **Tài liệu "v2-6 draft-order analysis (2026-08-10, 7 edge cases + 5 open questions)" KHÔNG TÌM THẤY** trong `docs/`, `openspec/`, `memory/`, `reports/` (grep "draft", "v2-6", "edge case", "2026-08-10"). Các edge case order đã được tái dựng từ `scripts/scenarios/test_advanced_edge_cases.py` (8 kịch bản E1–E8) — đánh dấu Source = *script (doc gốc missing)*.
 
 **Ghi chú phương pháp**: các live script chỉ `print()` response, **không có assertion** — kịch bản chỉ có trong script mà không có báo cáo/test kèm theo được đánh dấu `untested` (chưa có bằng chứng pass/fail). Tần suất là **ước lượng** theo bản chất kịch bản.
 

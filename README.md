@@ -24,7 +24,7 @@ Most chatbot demos stop at "it answers". This project is built and **measured** 
 
 | | |
 |---|---|
-| 🧪 **622 automated tests** | unit / integration / contract / eval / performance suites; integration tests run the *real* LangGraph against real Postgres |
+| 🧪 **782 automated tests** | unit / integration / contract / eval / performance suites; integration tests run the *real* LangGraph against real Postgres |
 | 📊 **LLM eval gates with committed baselines** | **Tier-R** (retrieval recall, 34/34) runs on every PR with zero LLM cost; **Tier-F** (full agent graph, 12/12 across 3 consecutive runs) runs nightly — a >2pp regression fails the build |
 | 🛡️ **CI that blocks bad commits** | lint → unit (real pgvector, mocked LLM) → eval, with an **80% coverage gate** (`--cov-fail-under=80`) |
 | 🔍 **Per-node distributed tracing** | every graph node emits an OpenTelemetry span (OpenInference-annotated) into Phoenix — you can see exactly which node was slow in any turn, with a kill-switch and measured overhead |
@@ -59,7 +59,7 @@ flowchart LR
 - **Sales intent tracking** — per-customer intent state with optimistic locking, plus append-only
   intent logs extracted every turn.
 - **Semantic memory** — vectorized conversation summaries retrieved cross-session, scoped by
-  `customer_id`, with model-version governance and STALE-flag migration ([ADR-005](docs/adr/ADR-005-memory-hnsw-embedding-governance.md)).
+  `customer_id`, with model-version governance and STALE-flag migration ([ADR-005](docs/adr/005-memory-hnsw-embedding-governance.md)).
 - **HITL** — risk-scored guard (`0.4·(1−confidence) + 0.4·order_value + 0.2·history`) routes
   sensitive actions to a human review queue with timeout escalation and cost guard.
 
@@ -68,7 +68,7 @@ api/          FastAPI routes, Telegram webhook, middleware
 core/agent/   LangGraph graph, nodes, state, Postgres checkpointer
 services/     rag/ (ingest, retrieval, compression), memory/, hitl/, ai.py (LiteLLM gateway)
 models/       SQLAlchemy 2.0 async schema (UUIDv7, pgvector)   migrations/  Alembic
-tests/        unit / integration / contract / eval / performance (622 tests)
+tests/        unit / integration / contract / eval / performance (782 tests)
 ```
 
 ## How the evals work

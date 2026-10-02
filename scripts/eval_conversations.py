@@ -1,5 +1,5 @@
 """Why this exists: eval gate #1 + #3 of v3-0 proposal — the 14-case T01 conversational
-eval set (wayfinder/research/hard-scenario-inventory.md) had no runner; live scripts
+eval set (docs/wayfinder/research/hard-scenario-inventory.md) had no runner; live scripts
 print but never assert.
 
 What it does: runs 14 multi-turn conversation cases against a LIVE deployment

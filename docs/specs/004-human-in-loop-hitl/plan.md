@@ -1,6 +1,6 @@
 # Implementation Plan: Human-in-the-Loop (HITL) Control System
 
-**Branch**: `004-human-in-loop-hitl` | **Spec**: [`specs/004-human-in-loop-hitl/spec.md`](./spec.md)  
+**Branch**: `004-human-in-loop-hitl` | **Spec**: [`docs/specs/004-human-in-loop-hitl/spec.md`](./spec.md)  
 **Input**: Feature specification v5 (FR-001–033, SC-001–035, 10 edge case fixes)
 
 ---
@@ -71,7 +71,7 @@ classification < 500 ms (economy model, ≤ 5 queued messages)
 ### Documentation (this feature)
 
 ```text
-specs/004-human-in-loop-hitl/
+docs/specs/004-human-in-loop-hitl/
 ├── plan.md              ← This file
 ├── spec.md              ← Authoritative spec (FR-001–033, SC-001–035)
 ├── research.md          ← 9 implementation decisions resolved

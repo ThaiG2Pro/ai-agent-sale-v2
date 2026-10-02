@@ -5,7 +5,7 @@ Vietnamese-first RAG pipeline for the SME sales agent: query classification/norm
 two-tier semantic cache, hybrid retrieval (vector + Vietnamese FTS fused by RRF), context
 compression, confidence gating, and a bounded agentic retry loop. This living spec is the
 single source of truth for the tuned retrieval parameters; it supersedes the numeric values
-in the original locked spec `specs/002-vietnamese-rag-eval/spec.md` (FR-009, FR-012, FR-013,
+in the original locked spec `docs/specs/002-vietnamese-rag-eval/spec.md` (FR-009, FR-012, FR-013,
 FR-015) via the spec-first repair recorded below (R-SDLC-001 remediation, 2026-07-16).
 
 ## Requirements

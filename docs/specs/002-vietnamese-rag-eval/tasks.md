@@ -162,7 +162,7 @@
 
 **Purpose**: Ensure lint, docs, and end-to-end consistency after all stories are complete.
 
-- [x] T037 [P] `specs/002-vietnamese-rag-eval/quickstart.md` — Update Step 3 "Ingest Sample Products" to reference `uv run python scripts/seed_bulk.py --total 50` (the actual script) instead of the nonexistent `scripts/seed_products.py`. No other content changes.
+- [x] T037 [P] `docs/specs/002-vietnamese-rag-eval/quickstart.md` — Update Step 3 "Ingest Sample Products" to reference `uv run python scripts/seed_bulk.py --total 50` (the actual script) instead of the nonexistent `scripts/seed_products.py`. No other content changes.
 
 - [x] T038 [P] `services/rag.py` — Add inline comment above the `answer_with_rag()` signature documenting the updated 9-step flow: `# Flow: normalize → L1 cache → embed → L2 cache → truncate → hybrid_search_rrf → compress → confidence_guard → answer → cache_write`. This helps future maintainers understand the full pipeline at a glance (Article XI).
 

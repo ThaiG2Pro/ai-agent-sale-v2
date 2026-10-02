@@ -565,8 +565,8 @@ After completing this setup:
 
 **Questions or Issues?**
 - Check logs: `docker-compose logs -f api`
-- Review contracts: `specs/006-telegram-docker/contracts/`
-- Read data model: `specs/006-telegram-docker/data-model.md`
+- Review contracts: `docs/specs/006-telegram-docker/contracts/`
+- Read data model: `docs/specs/006-telegram-docker/data-model.md`
 
 ---
 

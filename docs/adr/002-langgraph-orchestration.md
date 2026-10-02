@@ -138,4 +138,4 @@ graph = build_graph(checkpointer=checkpointer)
 - LangGraph Docs: https://langchain-ai.github.io/langgraph/
 - LangGraph `AsyncPostgresSaver`: https://langchain-ai.github.io/langgraph/how-tos/persistence/
 - LangSmith Integration: https://langchain-ai.github.io/langgraph/how-tos/agent-state/
-- Week 3 Spec: `specs/003-agentic-workflow/spec.md` (Article II, FR-006, FR-007)
+- Week 3 Spec: `docs/specs/003-agentic-workflow/spec.md` (Article II, FR-006, FR-007)

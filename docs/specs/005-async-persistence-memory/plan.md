@@ -117,7 +117,7 @@ tests/contract/
 └── test_memory_api.py           # GET/DELETE endpoints before implementation
 
 docs/adr/
-└── ADR-005-memory-hnsw-embedding-governance.md
+└── 005-memory-hnsw-embedding-governance.md
 ```
 
 **Structure Decision**: Single project, extending existing structure. `services/memory/` follows the same pattern as `services/hitl/` from Week 4. No new projects, no new top-level directories.

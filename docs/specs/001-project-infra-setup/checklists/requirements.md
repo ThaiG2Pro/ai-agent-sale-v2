@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-02-13
-**Feature**: [specs/001-project-infra-setup/spec.md]
+**Feature**: [docs/specs/001-project-infra-setup/spec.md]
 
 ## Content Quality
 

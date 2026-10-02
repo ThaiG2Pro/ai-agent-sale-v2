@@ -207,7 +207,7 @@ asyncio.run(test())
 | `tests/unit/test_rag_helpers.py` | 40 TDD unit tests for deterministic functions |
 | `tests/eval/gold_dataset.json` | 20-item Vietnamese gold evaluation dataset |
 | `models/schema.py` | SQLAlchemy models — Product, TextEmbedding, SemanticCache |
-| `specs/002-vietnamese-rag-eval/` | Full feature documentation: spec, plan, research, data-model |
+| `docs/specs/002-vietnamese-rag-eval/` | Full feature documentation: spec, plan, research, data-model |
 
 ---
 
