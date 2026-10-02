@@ -15,6 +15,12 @@ to any cloud LLM with one env var — no code change.
 **Stack**: Python 3.13 · FastAPI · LangGraph · LiteLLM · PostgreSQL + pgvector · SQLAlchemy 2.0
 async · OpenTelemetry → Arize Phoenix · Docker
 
+![Demo: two grounded answers with citations from the local API](docs/img/demo.gif)
+
+<sub>Recorded against a clean clone with `docs/img/demo.tape` (vhs). Note the second answer: price and
+specs come from the catalog, and the bot says it *cannot confirm stock* because the retrieved text has
+no stock field — it does not guess.</sub>
+
 ---
 
 ## Engineering highlights
