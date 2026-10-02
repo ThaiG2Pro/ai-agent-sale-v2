@@ -155,7 +155,7 @@ full deployment guide: [docs/deployment.md](docs/deployment.md) · scripted demo
 
 ```bash
 # Cloud chat + local embeddings (the .env.example default, no GPU needed)
-CHAT_MODEL=groq/llama-3.3-70b-versatile
+CHAT_MODEL=groq/openai/gpt-oss-120b
 EMBED_MODEL=local/multilingual-e5-large    # fastembed ONNX, in-process
 
 # ...or fully offline via Ollama — Profile 1 in .env.example

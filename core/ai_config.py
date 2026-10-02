@@ -64,7 +64,7 @@ def _litellm_params(model_str: str, **extra: Any) -> dict[str, Any]:
        Example: "local/bge-m3" (short-circuited in AIGateway.embed)
 
     4. Cloud Provider Models (OpenAI, Groq, Gemini, Anthropic, OpenRouter, DeepSeek, Cohere, etc.):
-       Model format: "groq/llama-3.3-70b-versatile", "gemini/gemini-2.5-flash", "gpt-4o-mini",
+       Model format: "groq/openai/gpt-oss-120b", "gemini/gemini-2.5-flash", "gpt-4o-mini",
                      "anthropic/claude-3-5-sonnet-20241022", "openrouter/cheap", "deepseek/deepseek-chat"
        Passes model_str directly to LiteLLM, which uses the provider API key from os.environ.
        If provider API key is NOT set, automatically skips and falls back to settings.CHAT_MODEL.
@@ -72,7 +72,7 @@ def _litellm_params(model_str: str, **extra: Any) -> dict[str, Any]:
     # 1. Resolve app alias shortcuts if set in env (e.g. PREMIUM_MODEL=premium-chat)
     if model_str == "premium-chat":
         if settings.GROQ_API_KEY and settings.GROQ_API_KEY not in ("", "sk-no-key-required"):
-            model_str = "groq/llama-3.3-70b-versatile"
+            model_str = "groq/openai/gpt-oss-120b"
         elif settings.GEMINI_API_KEY and settings.GEMINI_API_KEY not in ("", "sk-no-key-required"):
             model_str = "gemini/gemini-2.5-flash"
         elif settings.OPENAI_API_KEY and settings.OPENAI_API_KEY not in ("", "sk-no-key-required"):
@@ -182,7 +182,7 @@ LITELLM_CONFIG = {
         {
             "model_name": "fallback-chat-8b",
             "model_info": {"id": "fallback-chat-8b-model"},
-            "litellm_params": _litellm_params("groq/llama-3.1-8b-instant", stream=False),
+            "litellm_params": _litellm_params("groq/openai/gpt-oss-20b", stream=False),
         },
         # ── Universal Embedding Tier: dynamically configured via EMBED_MODEL ───────
         {

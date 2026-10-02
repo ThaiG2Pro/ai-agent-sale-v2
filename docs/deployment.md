@@ -47,8 +47,8 @@ No Ollama needed at all; embeddings run in-process (fastembed ONNX, CPU):
 
 ```bash
 # .env
-CHAT_MODEL=groq/llama-3.3-70b-versatile
-LIGHT_CHAT_MODEL=groq/llama-3.1-8b-instant
+CHAT_MODEL=groq/openai/gpt-oss-120b
+LIGHT_CHAT_MODEL=groq/openai/gpt-oss-20b
 GROQ_API_KEY=<your key>
 EMBED_MODEL=local/multilingual-e5-large   # fastembed, in-process
 ```

@@ -46,8 +46,8 @@ jobs:
       # Embeddings in-process (fastembed ONNX CPU); chat via Groq — the only
       # cloud call in this workflow. Model pins mirror the dev .env.
       EMBED_MODEL: local/multilingual-e5-large
-      CHAT_MODEL: groq/llama-3.3-70b-versatile
-      LIGHT_CHAT_MODEL: groq/llama-3.1-8b-instant
+      CHAT_MODEL: groq/openai/gpt-oss-120b
+      LIGHT_CHAT_MODEL: groq/openai/gpt-oss-20b
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
     steps:

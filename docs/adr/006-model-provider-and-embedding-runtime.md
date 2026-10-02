@@ -19,7 +19,7 @@ Offline-First principle. Since then two things changed:
    management, and no continuous batching. The criticism is valid, but it
    applies to *how* Ollama is deployed, not to this codebase's architecture.
 2. **The project already drifted off Ollama in practice**: chat runs on a Groq
-   model (e.g. `groq/llama-3.3-70b-versatile`, the `.env.example` default),
+   model (e.g. `groq/openai/gpt-oss-120b`, the `.env.example` default),
    embeddings run **in-process via fastembed ONNX** (`local/multilingual-e5-large`).
    Dev ran for an extended period without an Ollama server and nothing broke.
 
