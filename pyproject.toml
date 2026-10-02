@@ -3,7 +3,7 @@ name = "ai-agent-sale-v2"
 version = "0.1.0"
 description = "SME-Ready AI Sales Agent (2026) - High-performance, asynchronous, and offline-capable RAG agent."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"  # lxml (via crawl4ai) has no 3.14 wheels yet
 license = { text = "MIT" }
 keywords = ["ai", "agent", "rag", "sales", "sme", "fastapi", "async"]
 authors = [

@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/ThaiG2Pro/ai-agent-sale-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/ThaiG2Pro/ai-agent-sale-v2/actions/workflows/ci.yml)
 [![Nightly Eval](https://github.com/ThaiG2Pro/ai-agent-sale-v2/actions/workflows/nightly-eval.yml/badge.svg)](https://github.com/ThaiG2Pro/ai-agent-sale-v2/actions/workflows/nightly-eval.yml)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A production-grade **conversational sales agent** for small e-commerce businesses: it ingests a
 merchant's product catalog, answers customer questions over **Telegram** with **citation-grounded
@@ -173,6 +175,23 @@ uv run pytest -m integration       # full-graph tests (needs a chat LLM)
 CI (`.github/workflows/ci.yml`) runs lint → unit+coverage → Tier-R eval on every push/PR; Tier-F
 runs nightly (`nightly-eval.yml`, needs `GROQ_API_KEY` secret). Branch protection setup for
 repo owners is documented in [docs/deployment.md](docs/deployment.md).
+
+## How this was built (and how AI was used)
+
+Solo project, Feb → Oct 2026, 196 commits. **70 of them are co-authored with Claude** and that
+is on purpose, not hidden:
+
+- **Spec-driven workflow.** Every change goes proposal → spec deltas → design → tasks → build →
+  QA report, with a human gate between phases. The artifacts are committed under `openspec/`
+  (see `openspec/changes/archive/*/` for a full S1→S6 trail including the QA report and retro).
+- **What the AI did:** drafting code against an approved design, writing the first pass of tests,
+  bulk refactors, research digests (`docs/wayfinder/research/`).
+- **What I did:** every architectural decision in `docs/adr/`, the eval gold set and what "pass"
+  means, the HITL risk formula and its invariants, root-causing the two incidents in ADR-006,
+  and rejecting the regex "fixes" that made tests pass but made the agent dumber
+  (`reports/2026-08-22-architecture-analysis.md`).
+- **What went wrong:** AI-drafted docs drifted from code over time; a 2026-10-02 review found and
+  fixed 5 groups of stale claims (see `CHANGELOG.md`). Docs now get reviewed like code.
 
 ## Documentation map
 
