@@ -1,5 +1,7 @@
 # AI Sales Agent for E-commerce SMEs
 
+*Tiếng Việt: [README.vi.md](README.vi.md)*
+
 [![CI](https://github.com/ThaiG2Pro/ai-agent-sale-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/ThaiG2Pro/ai-agent-sale-v2/actions/workflows/ci.yml)
 [![Nightly Eval](https://github.com/ThaiG2Pro/ai-agent-sale-v2/actions/workflows/nightly-eval.yml/badge.svg)](https://github.com/ThaiG2Pro/ai-agent-sale-v2/actions/workflows/nightly-eval.yml)
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](pyproject.toml)
