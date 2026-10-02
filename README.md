@@ -97,6 +97,33 @@ Both are documented in [ADR-006](docs/adr/006-model-provider-and-embedding-runti
    evidence. Fix: explicit `num_ctx` injected at the LiteLLM gateway choke point, enforced by a
    unit test.
 
+## Second graph: a support assistant for another product (Spacely)
+
+The same engine also powers the customer-support chat of
+[Spacely](https://github.com/ThaiG2Pro/elearning-platform), a learning platform — without
+touching the sales graph. Instead of a persona switch inside the order/HITL state machine
+(tried first, rejected: every shop change could break support), `core/support/` compiles a
+**second `StateGraph`** that reuses the domain-neutral nodes and adds three of its own:
+
+```
+support_router_node (4 intents) ─┬→ support_answer_node (smalltalk)
+                                 └→ retrieval_node → memory_retrieval_node → confidence_node
+                                                                              ├→ support_clarify_node → support_answer_node
+                                                                              └→ support_answer_node (RAG + groundedness check)
+```
+
+- Exposed at `POST /support/query` behind `SUPPORT_GRAPH_ENABLED` (default off) and an optional
+  `X-Agent-Key`; Spacely's Next.js route proxies to it (rate limits + identity live there).
+- Knowledge base = Spacely's FAQ / guide / about pages, pulled from its own
+  `GET /api/v1/support/knowledge` by `scripts/ingest_spacely_faq.py` into `products` rows on a
+  **separate database** (`scripts/run_spacely_local.sh`), so the shop catalog never mixes in.
+- No order placement, negotiation, cancellation or HITL pause: those intents fold into
+  advisory ones; complaints always get an apology + human handoff, never a refund promise.
+- Own eval gate: `scripts/eval_support.py` over `tests/eval/support_gold.json` — Tier-R 19/19,
+  Tier-F 25/25 committed as baselines.
+
+Plan and decisions: [docs/upgrade-plan-support-graph.md](docs/upgrade-plan-support-graph.md).
+
 ## Quickstart
 
 ```bash
@@ -154,6 +181,7 @@ repo owners is documented in [docs/deployment.md](docs/deployment.md).
 | [docs/deployment.md](docs/deployment.md) | Docker deployment, provider options, ops notes |
 | [docs/demo-runbook.md](docs/demo-runbook.md) | 5 scripted demo scenarios with seed data |
 | [docs/feature-scorecard.md](docs/feature-scorecard.md) | honest self-assessment, re-scored after each upgrade plan |
+| [docs/upgrade-plan-support-graph.md](docs/upgrade-plan-support-graph.md) | the Spacely support graph: why a second graph, node contracts, eval results |
 
 ---
 
