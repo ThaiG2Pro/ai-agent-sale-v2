@@ -11,6 +11,7 @@ Start here if you are new to the repo. Operational guides first, then history.
 | [observability.md](observability.md) | OpenTelemetry → Phoenix tracing, per-node spans, kill-switch |
 | [demo-runbook.md](demo-runbook.md) | 5 demo scenarios for an SME customer |
 | [feature-scorecard.md](feature-scorecard.md) | Feature-by-feature maturity score (1–5) |
+| [codebase-map.md](codebase-map.md) | Request flow, 13 node, ngưỡng/config, 20 bảng, endpoint, eval commands, known gaps |
 | [adr/](adr/) | Architecture Decision Records — model/provider choice, LangGraph, Telegram lib, embedding governance |
 
 ## Plans and research (why things look the way they do)
