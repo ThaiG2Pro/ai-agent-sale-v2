@@ -1,784 +1,420 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Sales Agent - Quick Test Workspace</title>
+  <title>AI Sales Agent — Executive Studio & HITL Workspace</title>
+  
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Marked.js for rich markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            dark: {
+              950: '#07090e',
+              900: '#0b0f17',
+              850: '#101726',
+              800: '#172033',
+              700: '#222f49',
+              600: '#334155',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
   <style>
-    :root {
-      --bg-dark: #0b0f19;
-      --card-bg: rgba(19, 27, 46, 0.75);
-      --card-border: rgba(255, 255, 255, 0.08);
-      --card-hover-border: rgba(99, 102, 241, 0.3);
-      --text-main: #f1f5f9;
-      --text-muted: #94a3b8;
-      --text-dim: #64748b;
-      --accent-primary: #6366f1;
-      --accent-primary-hover: #4f46e5;
-      --accent-success: #10b981;
-      --accent-success-hover: #059669;
-      --accent-warning: #f59e0b;
-      --accent-danger: #ef4444;
-      --accent-danger-hover: #dc2626;
-      --user-msg-bg: #1e1b4b;
-      --user-msg-border: #4338ca;
-      --ai-msg-bg: #0f172a;
-      --ai-msg-border: #1e293b;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 16px;
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
     }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Inter', sans-serif;
+    ::-webkit-scrollbar-track {
+      background: rgba(11, 15, 23, 0.5);
     }
-
-    body {
-      background-color: var(--bg-dark);
-      color: var(--text-main);
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    /* Top Bar */
-    header {
-      background: rgba(15, 23, 42, 0.85);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--card-border);
-      padding: 12px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      z-index: 10;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-logo {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, var(--accent-primary), #8b5cf6);
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-family: 'Outfit', sans-serif;
-      font-size: 16px;
-      color: white;
-      box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
-    }
-
-    .brand-title {
-      font-family: 'Outfit', sans-serif;
-      font-weight: 700;
-      font-size: 18px;
-      letter-spacing: -0.3px;
-    }
-
-    .brand-tag {
-      font-size: 11px;
-      background: rgba(99, 102, 241, 0.15);
-      color: #a5b4fc;
-      border: 1px solid rgba(99, 102, 241, 0.3);
-      padding: 2px 8px;
-      border-radius: 20px;
-      font-weight: 500;
-    }
-
-    .admin-key-control {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-    }
-
-    .admin-key-control label {
-      color: var(--text-muted);
-    }
-
-    .input-sm {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid var(--card-border);
-      color: var(--text-main);
-      padding: 6px 12px;
-      border-radius: var(--radius-sm);
-      font-size: 12px;
-      outline: none;
-      transition: all 0.2s;
-    }
-
-    .input-sm:focus {
-      border-color: var(--accent-primary);
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-    }
-
-    /* Main Container (Split Screen) */
-    main {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 450px 1fr;
-      gap: 0;
-      height: calc(100vh - 57px);
-      overflow: hidden;
-    }
-
-    /* Zone Base Styling */
-    .zone {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    .zone-admin {
-      background: rgba(13, 19, 33, 0.95);
-      border-right: 1px solid var(--card-border);
-    }
-
-    .zone-header {
-      padding: 14px 20px;
-      border-bottom: 1px solid var(--card-border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: rgba(15, 23, 42, 0.4);
-    }
-
-    /* v3-0 P3 (T12 3.4): 80/20 metrics strip — data from GET /admin/metrics */
-    .metrics-strip {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-      padding: 12px 20px;
-      border-bottom: 1px solid var(--card-border);
-    }
-
-    .metric-tile {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius-sm);
-      padding: 8px 10px;
-      min-width: 0;
-    }
-
-    .metric-label {
-      font-size: 10px;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .metric-value {
-      font-family: 'Outfit', sans-serif;
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-main);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .metric-value.ok { color: var(--accent-success); }
-    .metric-value.warn { color: var(--accent-warning); }
-    .metric-value.bad { color: var(--accent-danger); }
-
-    .metric-sub {
-      font-size: 10px;
-      color: var(--text-muted);
-      white-space: nowrap;
-    }
-
-    .zone-title {
-      font-family: 'Outfit', sans-serif;
-      font-size: 15px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .badge-count {
-      background: var(--accent-warning);
-      color: #000;
-      font-weight: 700;
-      font-size: 11px;
-      padding: 2px 7px;
-      border-radius: 10px;
-    }
-
-    .btn {
-      background: var(--accent-primary);
-      color: white;
-      border: none;
-      padding: 7px 14px;
-      border-radius: var(--radius-sm);
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s;
-    }
-
-    .btn:hover {
-      background: var(--accent-primary-hover);
-      transform: translateY(-1px);
-    }
-
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text-main);
-      border: 1px solid var(--card-border);
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .btn-success {
-      background: var(--accent-success);
-    }
-
-    .btn-success:hover {
-      background: var(--accent-success-hover);
-    }
-
-    .btn-danger {
-      background: var(--accent-danger);
-    }
-
-    .btn-danger:hover {
-      background: var(--accent-danger-hover);
-    }
-
-    /* Admin Zone Content */
-    .admin-content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .hitl-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius-md);
-      padding: 14px;
-      transition: all 0.2s;
-      position: relative;
-    }
-
-    .hitl-card:hover {
-      border-color: var(--card-hover-border);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    }
-
-    .hitl-card.active-selected {
-      border-color: var(--accent-warning);
-      box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
-    }
-
-    .hitl-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-
-    .hitl-reason {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: var(--accent-warning);
-      background: rgba(245, 158, 11, 0.1);
-      padding: 2px 6px;
-      border-radius: 4px;
-      border: 1px solid rgba(245, 158, 11, 0.2);
-    }
-
-    .hitl-time {
-      font-size: 11px;
-      color: var(--text-dim);
-    }
-
-    .hitl-session {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-bottom: 10px;
-      word-break: break-all;
-    }
-
-    .order-details-box {
-      background: rgba(10, 15, 26, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      border-radius: var(--radius-sm);
-      padding: 10px;
-      font-size: 12px;
-      margin-bottom: 12px;
-    }
-
-    .order-field {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 4px;
-    }
-
-    .order-field:last-child {
-      margin-bottom: 0;
-    }
-
-    .order-label {
-      color: var(--text-dim);
-    }
-
-    .order-val {
-      font-weight: 600;
-      color: var(--text-main);
-    }
-
-    .action-group {
-      display: flex;
-      gap: 6px;
-    }
-
-    /* Chat Zone Content */
-    .zone-chat {
-      background: #080c14;
-    }
-
-    .session-bar {
-      padding: 10px 20px;
-      background: rgba(15, 23, 42, 0.4);
-      border-bottom: 1px solid var(--card-border);
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .session-selector {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex: 1;
-    }
-
-    .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .msg-row {
-      display: flex;
-      flex-direction: column;
-      max-width: 80%;
-    }
-
-    .msg-row.user {
-      align-self: flex-end;
-    }
-
-    .msg-row.ai {
-      align-self: flex-start;
-    }
-
-    .msg-bubble {
-      padding: 12px 16px;
-      border-radius: var(--radius-md);
-      font-size: 14px;
-      line-height: 1.5;
-      position: relative;
-    }
-
-    .user .msg-bubble {
-      background: var(--user-msg-bg);
-      border: 1px solid var(--user-msg-border);
-      color: #e0e7ff;
-      border-bottom-right-radius: 2px;
-    }
-
-    .ai .msg-bubble {
-      background: var(--ai-msg-bg);
-      border: 1px solid var(--ai-msg-border);
-      color: var(--text-main);
-      border-bottom-left-radius: 2px;
-    }
-
-    .ai-meta {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      margin-top: 6px;
-      font-size: 11px;
-    }
-
-    .meta-tag {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--card-border);
-      color: var(--text-muted);
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-
-    .meta-tag.hitl-alert {
-      background: rgba(245, 158, 11, 0.15);
-      border-color: rgba(245, 158, 11, 0.4);
-      color: var(--accent-warning);
-      font-weight: 600;
-    }
-
-    .preset-bar {
-      padding: 8px 20px;
-      background: rgba(15, 23, 42, 0.2);
-      border-top: 1px solid var(--card-border);
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-    }
-
-    .preset-chip {
-      background: rgba(99, 102, 241, 0.1);
-      border: 1px solid rgba(99, 102, 241, 0.2);
-      color: #c7d2fe;
-      padding: 5px 10px;
-      border-radius: 15px;
-      font-size: 11px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all 0.2s;
-    }
-
-    .preset-chip:hover {
+    ::-webkit-scrollbar-thumb {
       background: rgba(99, 102, 241, 0.25);
-      border-color: var(--accent-primary);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.45);
     }
 
-    .chat-input-area {
-      padding: 14px 20px;
-      background: rgba(15, 23, 42, 0.6);
-      border-top: 1px solid var(--card-border);
-      display: flex;
-      gap: 10px;
+    /* Glassmorphism effects */
+    .glass-panel {
+      background: rgba(16, 23, 38, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .glass-card {
+      background: rgba(23, 32, 51, 0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .glass-card:hover {
+      border-color: rgba(99, 102, 241, 0.35);
+      box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.4), 0 0 16px -2px rgba(99, 102, 241, 0.15);
     }
 
-    .chat-input {
-      flex: 1;
-      background: rgba(11, 15, 25, 0.8);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius-sm);
-      color: var(--text-main);
-      padding: 10px 14px;
-      font-size: 14px;
-      outline: none;
-    }
+    /* Markdown Styling in Chat */
+    .chat-prose p { margin-bottom: 0.5rem; line-height: 1.55; }
+    .chat-prose p:last-child { margin-bottom: 0; }
+    .chat-prose ul, .chat-prose ol { margin-left: 1.25rem; margin-bottom: 0.5rem; }
+    .chat-prose li { margin-bottom: 0.25rem; }
+    .chat-prose strong { color: #f8fafc; font-weight: 600; }
+    .chat-prose code { background: rgba(0,0,0,0.3); padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.85em; color: #a5b4fc; }
 
-    .chat-input:focus {
-      border-color: var(--accent-primary);
+    /* Animated pulse dot */
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.15); opacity: 1; filter: drop-shadow(0 0 8px #10b981); }
     }
-
-    /* Modal for Edit Order */
-    .modal-backdrop {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
-      backdrop-filter: blur(4px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s;
-    }
-
-    .modal-backdrop.show {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .modal {
-      background: #131b2e;
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius-lg);
-      width: 480px;
-      max-width: 90%;
-      padding: 24px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-    }
-
-    .modal-title {
-      font-family: 'Outfit', sans-serif;
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 16px;
-      color: var(--text-main);
-    }
-
-    .form-group {
-      margin-bottom: 12px;
-    }
-
-    .form-group label {
-      display: block;
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-bottom: 4px;
-    }
-
-    .form-control {
-      width: 100%;
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius-sm);
-      padding: 8px 12px;
-      color: var(--text-main);
-      font-size: 13px;
-      outline: none;
-    }
-
-    .form-control:focus {
-      border-color: var(--accent-primary);
-    }
-
-    .toast {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: var(--accent-primary);
-      color: white;
-      padding: 10px 18px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-      z-index: 200;
-      transform: translateY(100px);
-      opacity: 0;
-      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    .toast.show {
-      transform: translateY(0);
-      opacity: 1;
+    .live-dot {
+      animation: pulse-glow 2s infinite ease-in-out;
     }
   </style>
 </head>
-<body>
 
-  <!-- Top Navigation Header -->
-  <header>
-    <div class="brand">
-      <div class="brand-logo">AI</div>
-      <div class="brand-title">SME Sales Agent Workspace</div>
-      <span class="brand-tag">Internal Test UI (No Tele Required)</span>
+<body class="bg-dark-950 text-slate-100 h-screen flex flex-col font-sans overflow-hidden select-none">
+
+  <!-- Ambient Glow Background -->
+  <div class="fixed top-0 left-1/4 w-96 h-96 bg-brand-500/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+  <div class="fixed bottom-0 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+  <!-- Top Navigation Bar -->
+  <header class="h-14 border-b border-white/10 glass-panel flex items-center justify-between px-6 z-20 shrink-0">
+    <div class="flex items-center gap-3.5">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-brand-600 via-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-lg shadow-brand-500/25">
+        <i data-lucide="bot" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-sm tracking-tight text-white">AI Sales Agent</span>
+          <span class="px-2 py-0.5 text-[10px] font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30 rounded-full">SME PRO 2026</span>
+          <span class="flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 live-dot"></span>
+            Live & Ready
+          </span>
+        </div>
+      </div>
     </div>
-    <div class="admin-key-control">
-      <label for="adminKey">X-Admin-Key:</label>
-      <input type="password" id="adminKey" class="input-sm" value="dev-key" placeholder="Enter admin key..." />
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-3 text-xs">
+      <!-- Admin Key Input -->
+      <div class="flex items-center gap-1.5 bg-dark-900/80 border border-white/10 px-2.5 py-1 rounded-md">
+        <i data-lucide="key" class="w-3.5 h-3.5 text-slate-400"></i>
+        <span class="text-slate-400 font-medium">Admin Key:</span>
+        <input id="adminKey" type="password" value="dev-key" class="bg-transparent text-slate-200 outline-none w-20 font-mono text-xs focus:w-28 transition-all" placeholder="X-Admin-Key" />
+      </div>
+
+      <!-- Phoenix Tracing Link -->
+      <a href="http://localhost:6006" target="_blank" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-all font-medium">
+        <i data-lucide="activity" class="w-3.5 h-3.5 text-purple-400"></i>
+        <span>Phoenix Traces</span>
+        <i data-lucide="external-link" class="w-3 h-3 text-slate-500"></i>
+      </a>
+
+      <!-- Swagger API Docs Link -->
+      <a href="/docs" target="_blank" class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-all font-medium">
+        <i data-lucide="file-code" class="w-3.5 h-3.5 text-blue-400"></i>
+        <span>OpenAPI Docs</span>
+      </a>
     </div>
-
-
   </header>
 
-  <!-- Main Split-Screen Workspace -->
-  <main>
+  <!-- Main Split Layout -->
+  <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
 
-    <!-- Zone 1: Admin Zone (HITL Management) -->
-    <section class="zone zone-admin">
-      <div class="zone-header">
-        <div class="zone-title">
-          🛡️ Admin Zone
-          <span id="pendingBadge" class="badge-count">0</span>
+    <!-- LEFT PANEL: Admin HITL Command Center (5 Cols) -->
+    <section class="lg:col-span-5 border-r border-white/10 bg-dark-900/70 flex flex-col h-full overflow-hidden">
+      
+      <!-- Admin Header -->
+      <div class="p-4 border-b border-white/10 flex items-center justify-between bg-dark-850/40">
+        <div class="flex items-center gap-2">
+          <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i>
+          <h2 class="font-bold text-sm tracking-tight text-slate-200">Admin Operations & HITL Queue</h2>
+          <span id="pendingBadge" class="px-2 py-0.5 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">0</span>
         </div>
-        <div style="display: flex; gap: 6px; align-items: center;">
-          <button class="btn btn-secondary" onclick="fetchPendingHITL()" title="Manual refresh">
-            🔄 Refresh
-          </button>
+        <button onclick="fetchPendingHITL()" class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10 rounded-md transition-all">
+          <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      <!-- Real-Time Metrics Strip -->
+      <div class="grid grid-cols-4 gap-2 p-3 border-b border-white/10 bg-dark-950/40 text-center">
+        <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Deflection</div>
+          <div id="mDeflection" class="text-sm font-bold text-emerald-400 font-mono mt-0.5">85%</div>
+          <div class="text-[9px] text-slate-500">Auto-resolved</div>
+        </div>
+        <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">HITL Queue</div>
+          <div id="mPaused" class="text-sm font-bold text-amber-400 font-mono mt-0.5">0</div>
+          <div class="text-[9px] text-slate-500">Pending review</div>
+        </div>
+        <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">L1 Cache</div>
+          <div id="mCache" class="text-sm font-bold text-indigo-400 font-mono mt-0.5">&lt; 100ms</div>
+          <div class="text-[9px] text-slate-500">0$ token cost</div>
+        </div>
+        <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Engine</div>
+          <div class="text-sm font-bold text-purple-400 font-mono mt-0.5">Groq+ONNX</div>
+          <div class="text-[9px] text-slate-500">Hybrid Local/API</div>
         </div>
       </div>
 
-      <div class="metrics-strip" id="metricsStrip" title="GET /admin/metrics — tự cập nhật mỗi 15s">
-        <div class="metric-tile">
-          <div class="metric-label">Deflection</div>
-          <div class="metric-value" id="mDeflection">—</div>
-          <div class="metric-sub" id="mDeflectionSub">mục tiêu ≥ 80%</div>
-        </div>
-        <div class="metric-tile">
-          <div class="metric-label">Support queue</div>
-          <div class="metric-value" id="mQueue">—</div>
-          <div class="metric-sub">đang chờ</div>
-        </div>
-        <div class="metric-tile">
-          <div class="metric-label">HITL paused</div>
-          <div class="metric-value" id="mPaused">—</div>
-          <div class="metric-sub">chờ duyệt</div>
-        </div>
-        <div class="metric-tile">
-          <div class="metric-label">Degraded</div>
-          <div class="metric-value" id="mDegraded">—</div>
-          <div class="metric-sub">turn từ lúc start</div>
+      <!-- HITL Cards Scroll Area -->
+      <div id="adminContent" class="flex-1 overflow-y-auto p-4 space-y-3">
+        <!-- Dynamic HITL Cards will be inserted here -->
+        <div class="text-center py-16 text-slate-500 text-xs">
+          <i data-lucide="check-circle-2" class="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50"></i>
+          <div>Không có đơn hàng nào cần duyệt lúc này.</div>
+          <div class="text-[11px] text-slate-600 mt-1">Đặt đơn hàng > 5.000.000đ ở khung chat để kích hoạt HITL.</div>
         </div>
       </div>
 
-      <div class="admin-content" id="adminContent">
-        <!-- HITL pending cards rendered dynamically here -->
-        <div style="text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 13px;">
-          Đang tải danh sách đơn cần duyệt...
-        </div>
+      <!-- Admin Catalog & Database Helper Footer -->
+      <div class="p-3 border-t border-white/10 bg-dark-850/40 flex items-center justify-between text-xs text-slate-400">
+        <span class="flex items-center gap-1.5 text-[11px]">
+          <i data-lucide="database" class="w-3.5 h-3.5 text-slate-400"></i>
+          <span>Catalog: <strong>27 SKUs</strong> (pgvector 0.8)</span>
+        </span>
+        <button onclick="cleanupAndSeed()" class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-[11px] flex items-center gap-1 transition-all">
+          <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+          <span>Re-seed Demo Data</span>
+        </button>
       </div>
+
     </section>
 
-    <!-- Zone 2: Chat Zone (Direct Agent Interface) -->
-    <section class="zone zone-chat">
+    <!-- RIGHT PANEL: Conversational AI Agent Studio (7 Cols) -->
+    <section class="lg:col-span-7 flex flex-col h-full bg-dark-950/40 relative">
+      
       <!-- Session Bar -->
-      <div class="session-bar">
-        <div class="session-selector">
-          <button class="btn btn-success" onclick="startNewSession()" title="Tạo Session ID ngẫu nhiên mới">
-            ➕ New Session
+      <div class="px-5 py-3 border-b border-white/10 bg-dark-900/60 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <button onclick="startNewSession()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-medium text-xs shadow-md shadow-brand-500/20 transition-all">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>New Session</span>
           </button>
-          <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
-            <span style="font-size: 12px; color: var(--text-muted); font-weight: 600; white-space: nowrap;">Session ID:</span>
-            <input type="text" id="sessionIdInput" class="input-sm" style="flex: 1; font-family: monospace; font-weight: 600; color: #a5b4fc; background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.3);" placeholder="Nhập hoặc copy Session ID..." />
-            <button class="btn btn-secondary" onclick="copySessionId()" title="Copy Session ID hiện tại">
-              📋 Copy
+          
+          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-dark-800 border border-white/10 text-xs flex-1 max-w-sm">
+            <span class="text-slate-400 text-[11px] font-mono shrink-0">Session:</span>
+            <input id="sessionIdInput" type="text" class="bg-transparent text-indigo-300 font-mono text-xs w-full outline-none" placeholder="Session ID" />
+            <button onclick="copySessionId()" class="text-slate-400 hover:text-white p-0.5 rounded transition-all" title="Copy Session ID">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
             </button>
           </div>
-          <button class="btn btn-secondary" onclick="resumeSession()" title="Tải lại lịch sử chat theo Session ID">
-            🔄 Resume Session
-          </button>
         </div>
-        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted);">
-          <span>Customer ID:</span>
-          <input type="text" id="customerIdInput" class="input-sm" value="customer-test-1" style="width: 130px; font-family: monospace;" />
+
+        <div class="flex items-center gap-2 shrink-0">
+          <span class="text-xs text-slate-400">Customer:</span>
+          <input id="customerIdInput" type="text" value="cust-sme-01" class="bg-dark-800 border border-white/10 text-slate-200 text-xs px-2.5 py-1 rounded-md font-mono w-28 outline-none focus:border-brand-500" />
         </div>
       </div>
 
-
       <!-- Messages Stream -->
-      <div class="chat-messages" id="chatMessages">
-        <div class="msg-row ai">
-          <div class="msg-bubble">
-            👋 Chào mừng bạn đến với môi trường test nhanh Agent Sales! Hãy thử chọn một câu hỏi mẫu bên dưới hoặc gõ yêu cầu mua hàng để test luồng HITL Admin.
+      <div id="chatMessages" class="flex-1 overflow-y-auto p-5 space-y-4">
+        <!-- Welcome Bubble -->
+        <div class="flex gap-3 max-w-2xl">
+          <div class="w-7 h-7 rounded-lg bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shrink-0 mt-0.5">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+          </div>
+          <div class="p-3.5 rounded-2xl rounded-tl-sm glass-panel text-xs text-slate-200 chat-prose">
+            <p>Chào bạn! Mình là <strong>AI Sales Agent</strong> chuyên tư vấn sản phẩm công nghệ (Điện thoại, Laptop, Phụ kiện) của cửa hàng.</p>
+            <p class="text-slate-400 mt-1">Hệ thống trang bị <strong>LangGraph Hybrid RAG</strong>, <strong>Semantic Cache L1/L2</strong> và <strong>Human-in-the-loop (HITL)</strong> an toàn. Bạn hãy chọn câu hỏi mẫu bên dưới hoặc nhập tin nhắn để trải nghiệm!</p>
           </div>
         </div>
       </div>
 
-      <!-- Presets Bar -->
-      <div class="preset-bar">
-        <span style="font-size: 11px; color: var(--text-dim); align-self: center;">Mẫu test:</span>
-        <div class="preset-chip" onclick="sendPreset('iPhone 15 Pro Max 256GB giá bao nhiêu và có khuyến mãi gì?')">💬 Hỏi giá sản phẩm</div>
-        <div class="preset-chip" onclick="sendPreset('Tôi muốn mua 2 chiếc iPhone 15 Pro Max 256GB, giao về 123 Nguyễn Huệ Q1, SĐT 0901234567')">🛒 Đặt hàng (Kích hoạt HITL)</div>
-        <div class="preset-chip" onclick="sendPreset('Đổi giúp tôi số lượng thành 3 chiếc')">✏️ Sửa số lượng đơn</div>
+      <!-- Quick Preset Suggestions -->
+      <div class="px-5 py-2.5 border-t border-white/5 bg-dark-900/40 flex items-center gap-2 overflow-x-auto text-xs">
+        <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+          <i data-lucide="zap" class="w-3 h-3 text-amber-400"></i>
+          Test Cases:
+        </span>
+        <button onclick="sendPreset('iPhone 15 Pro Max 512GB giá bao nhiêu vậy shop?')" class="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white shrink-0 transition-all">
+          📱 Hỏi giá iPhone 15 Pro Max
+        </button>
+        <button onclick="sendPreset('Mình muốn đặt 1 chiếc iPhone 15 Pro Max 512GB về 123 Lê Lợi Q1, SĐT 0901234567')" class="px-2.5 py-1 rounded-full bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 shrink-0 transition-all">
+          🛒 Đặt đơn hàng > 5M (Test HITL)
+        </button>
+        <button onclick="sendPreset('Điện thoại nào pin trâu dưới 10 triệu?')" class="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white shrink-0 transition-all">
+          🔋 Tư vấn Pin tốt &lt; 10tr
+        </button>
+        <button onclick="sendPreset('iPhone 15 Pro Max có cổng HDMI không?')" class="px-2.5 py-1 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 shrink-0 transition-all">
+          🛡️ Test Groundedness (Cổng HDMI)
+        </button>
       </div>
 
-      <!-- Chat Input Area -->
-      <div class="chat-input-area">
-        <input type="text" id="chatInput" class="chat-input" placeholder="Nhập tin nhắn test cho AI Agent..." onkeydown="if(event.key === 'Enter') sendQuery()" />
-        <button class="btn" onclick="sendQuery()">Gửi 🚀</button>
+      <!-- Input Box -->
+      <div class="p-4 border-t border-white/10 bg-dark-900/80">
+        <div class="flex items-center gap-2 bg-dark-850 border border-white/15 focus-within:border-brand-500 rounded-xl p-1.5 px-3 transition-all shadow-lg">
+          <input id="chatInput" type="text" class="flex-1 bg-transparent text-slate-100 text-sm outline-none px-1 placeholder:text-slate-500" placeholder="Nhập câu hỏi tư vấn sản phẩm, đặt hàng, so sánh giá..." onkeydown="if(event.key === 'Enter') sendQuery()" />
+          <button onclick="sendQuery()" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-brand-500/20 transition-all">
+            <span>Gửi</span>
+            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
       </div>
+
     </section>
 
   </main>
 
-  <!-- Modal for Request Edit -->
-  <div class="modal-backdrop" id="editModal">
-    <div class="modal">
-      <div class="modal-title">✏️ Chỉnh sửa chi tiết đơn hàng (Request Edit)</div>
+  <!-- Edit Order Modal -->
+  <div id="editModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-lg rounded-2xl border border-white/15 shadow-2xl p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <div class="flex items-center gap-2 font-bold text-sm text-slate-100">
+          <i data-lucide="edit-3" class="w-4 h-4 text-brand-400"></i>
+          <span>Admin Chỉnh Sửa & Counter-Offer Đơn Hàng</span>
+        </div>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
       <input type="hidden" id="editPauseId" />
       <input type="hidden" id="editSessionId" />
       <input type="hidden" id="editVersion" />
 
-      <div class="form-group">
-        <label>Tên sản phẩm / SKU:</label>
-        <input type="text" id="editProductName" class="form-control" placeholder="Tên sản phẩm..." />
-      </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <div class="form-group">
-          <label>Số lượng:</label>
-          <input type="number" id="editQuantity" class="form-control" min="1" />
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Tên sản phẩm / SKU:</label>
+          <input id="editProductName" type="text" class="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-brand-500" />
         </div>
-        <div class="form-group">
-          <label>Đơn giá duyệt (VND):</label>
-          <input type="number" id="editUnitPrice" class="form-control" />
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 mb-1 font-medium">Số lượng:</label>
+            <input id="editQuantity" type="number" min="1" class="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-brand-500" />
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1 font-medium">Đơn giá duyệt (VND):</label>
+            <input id="editUnitPrice" type="number" class="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-brand-500" />
+          </div>
         </div>
-      </div>
-      <div class="form-group">
-        <label>Địa chỉ giao hàng:</label>
-        <input type="text" id="editAddress" class="form-control" />
-      </div>
-      <div class="form-group">
-        <label>Số điện thoại:</label>
-        <input type="text" id="editPhone" class="form-control" />
-      </div>
-      <div class="form-group">
-        <label>Ghi chú cho Agent / Lý do chỉnh sửa:</label>
-        <textarea id="editComment" class="form-control" rows="2" placeholder="Ghi chú..."></textarea>
+
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Địa chỉ giao hàng:</label>
+          <input id="editAddress" type="text" class="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-brand-500" />
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Số điện thoại:</label>
+          <input id="editPhone" type="text" class="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-brand-500" />
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1 font-medium">Ghi chú cho Agent & Khách:</label>
+          <textarea id="editComment" rows="2" class="w-full bg-dark-900 border border-white/10 rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-brand-500" placeholder="Lý do điều chỉnh (ví dụ: Chiết khấu thêm 5% cho khách quen)..."></textarea>
+        </div>
       </div>
 
-      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
-        <button class="btn btn-secondary" onclick="closeEditModal()">Hủy</button>
-        <button class="btn btn-success" onclick="submitEditReview()">Lưu & Cập nhật State</button>
+      <div class="flex justify-end gap-2 pt-2 border-t border-white/10">
+        <button onclick="closeEditModal()" class="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium transition-all">
+          Hủy
+        </button>
+        <button onclick="submitEditReview()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/20 transition-all">
+          Lưu & Cập nhật State
+        </button>
       </div>
     </div>
   </div>
 
   <!-- Toast Notification -->
-  <div class="toast" id="toast">Thao tác thành công!</div>
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 px-4 py-2.5 rounded-xl text-xs font-semibold text-white shadow-2xl flex items-center gap-2">
+    <span id="toastMsg">Thao tác thành công</span>
+  </div>
 
+  <!-- App Logic -->
   <script>
-    let currentSessionId = 'session-test-' + Date.now();
+    let currentSessionId = 'session-' + Date.now();
     document.getElementById('sessionIdInput').value = currentSessionId;
 
-    // Copy Session ID helper
-    function copySessionId() {
-      const sessionId = document.getElementById('sessionIdInput').value.trim();
-      if (!sessionId) {
-        showToast('Vui lòng chọn hoặc nhập Session ID!', true);
-        return;
+    // Initialize Lucide Icons
+    function refreshIcons() {
+      if (window.lucide) {
+        lucide.createIcons();
       }
-      navigator.clipboard.writeText(sessionId);
-      showToast(`📋 Đã copy Session ID: ${sessionId}`);
     }
 
-    // Switch chat to Session ID selected from Admin card
-    function loadSessionFromAdmin(sessionId) {
-      document.getElementById('sessionIdInput').value = sessionId;
-      resumeSession();
-    }
-
-    // Toast Notification helper
     function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
-      toast.innerText = msg;
-      toast.style.background = isError ? 'var(--accent-danger)' : 'var(--accent-primary)';
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
+      const toastMsg = document.getElementById('toastMsg');
+      toastMsg.innerText = msg;
+      toast.className = `fixed bottom-5 right-5 z-50 transition-all duration-300 px-4 py-2.5 rounded-xl text-xs font-semibold text-white shadow-2xl flex items-center gap-2 ${
+        isError ? 'bg-rose-600 border border-rose-500' : 'bg-brand-600 border border-brand-500'
+      } translate-y-0 opacity-100`;
+      setTimeout(() => {
+        toast.className = 'fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300';
+      }, 3500);
     }
 
-    // --- ADMIN ZONE FUNCTIONS ---
+    function copySessionId() {
+      const sid = document.getElementById('sessionIdInput').value.trim();
+      if (!sid) return;
+      navigator.clipboard.writeText(sid);
+      showToast(`📋 Đã copy Session ID: ${sid}`);
+    }
+
+    function startNewSession() {
+      currentSessionId = 'session-' + Date.now();
+      document.getElementById('sessionIdInput').value = currentSessionId;
+      document.getElementById('chatMessages').innerHTML = `
+        <div class="flex gap-3 max-w-2xl">
+          <div class="w-7 h-7 rounded-lg bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shrink-0 mt-0.5">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+          </div>
+          <div class="p-3.5 rounded-2xl rounded-tl-sm glass-panel text-xs text-slate-200 chat-prose">
+            <p>🆕 <strong>Đã khởi tạo phiên chat mới:</strong> <code>${currentSessionId}</code></p>
+            <p class="text-slate-400 mt-1">Bạn có thể bắt đầu gửi câu hỏi ngay bây giờ.</p>
+          </div>
+        </div>
+      `;
+      refreshIcons();
+      showToast('Đã tạo Session mới');
+    }
+
+    function sendPreset(text) {
+      document.getElementById('chatInput').value = text;
+      sendQuery();
+    }
+
+    // --- FETCH PENDING HITL QUEUE ---
     async function fetchPendingHITL() {
-      const adminKey = document.getElementById('adminKey').value;
+      const adminKey = document.getElementById('adminKey').value.trim();
       const adminContent = document.getElementById('adminContent');
       const pendingBadge = document.getElementById('pendingBadge');
 
@@ -788,19 +424,22 @@
         });
 
         if (!res.ok) {
-          adminContent.innerHTML = `<div style="color: var(--accent-danger); font-size: 13px; padding: 20px;">Lỗi tải Admin Queue (${res.status}): Kiếm tra X-Admin-Key.</div>`;
+          adminContent.innerHTML = `<div class="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">⚠️ Lỗi tải Admin Queue (${res.status}): Vui lòng kiểm tra Admin Key.</div>`;
           return;
         }
 
         const data = await res.json();
         pendingBadge.innerText = data.length;
+        document.getElementById('mPaused').innerText = data.length;
 
         if (data.length === 0) {
           adminContent.innerHTML = `
-            <div style="text-align: center; padding: 50px 20px; color: var(--text-dim); font-size: 13px;">
-              ✨ Không có đơn hàng nào đang chờ duyệt.<br/>
-              Hãy thử đặt hàng ở khung chat bên phải để tạo Yêu cầu Duyệt HITL.
+            <div class="text-center py-16 text-slate-500 text-xs">
+              <i data-lucide="check-circle-2" class="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50"></i>
+              <div>Không có đơn hàng nào cần duyệt lúc này.</div>
+              <div class="text-[11px] text-slate-600 mt-1">Đặt đơn hàng > 5.000.000đ ở khung chat để kích hoạt HITL.</div>
             </div>`;
+          refreshIcons();
           return;
         }
 
@@ -814,66 +453,74 @@
           const qty = firstItem.quantity || orderInfo.quantity || 1;
           const price = firstItem.unit_price || orderInfo.approved_price || orderInfo.price || firstItem.price || 0;
           const totalPrice = orderInfo.total_price || (qty * price);
-
           const isCurrentSession = item.session_id === currentSessionId;
 
           return `
-            <div class="hitl-card ${isCurrentSession ? 'active-selected' : ''}">
-              <div class="hitl-card-header">
-                <span class="hitl-reason">${item.pause_reason || 'HITL_REVIEW'}</span>
-                <span class="hitl-time">${new Date(item.paused_at).toLocaleTimeString('vi-VN')}</span>
+            <div class="glass-card rounded-xl p-4 transition-all ${isCurrentSession ? 'border-amber-500/50 bg-amber-500/5' : ''}">
+              <div class="flex items-center justify-between pb-2 mb-2 border-b border-white/5">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  ${item.pause_reason || 'HITL_REVIEW'}
+                </span>
+                <span class="text-[11px] font-mono text-slate-400">
+                  ${new Date(item.paused_at).toLocaleTimeString('vi-VN')}
+                </span>
               </div>
-              <div class="hitl-session" style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-family: monospace;"><strong>Session:</strong> <code style="color: #a5b4fc;">${item.session_id}</code></span>
-                <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="loadSessionFromAdmin('${item.session_id}')" title="Mở lịch sử chat của đơn này">
-                  💬 Switch Chat
+
+              <div class="flex items-center justify-between text-xs mb-3 font-mono">
+                <span class="text-slate-400 truncate max-w-[200px]">ID: <strong class="text-slate-200">${item.session_id}</strong></span>
+                <button onclick="loadSessionFromAdmin('${item.session_id}')" class="text-[11px] text-brand-400 hover:text-brand-300 flex items-center gap-1">
+                  <i data-lucide="message-square" class="w-3 h-3"></i> Switch Chat
                 </button>
               </div>
 
-
-              <div class="order-details-box">
-                <div class="order-field">
-                  <span class="order-label">Sản phẩm:</span>
-                  <span class="order-val">${productName}</span>
+              <div class="bg-dark-950/60 rounded-lg p-3 text-xs space-y-1.5 mb-3 border border-white/5">
+                <div class="flex justify-between">
+                  <span class="text-slate-400">Sản phẩm:</span>
+                  <span class="font-semibold text-slate-200 text-right truncate max-w-[180px]">${productName}</span>
                 </div>
-                <div class="order-field">
-                  <span class="order-label">Số lượng:</span>
-                  <span class="order-val">${qty}</span>
+                <div class="flex justify-between">
+                  <span class="text-slate-400">Số lượng:</span>
+                  <span class="font-semibold text-slate-200 font-mono">${qty} chiếc</span>
                 </div>
-                <div class="order-field">
-                  <span class="order-label">Tổng tiền:</span>
-                  <span class="order-val" style="color: #34d399;">${totalPrice > 0 ? totalPrice.toLocaleString('vi-VN') + ' đ' : 'Chưa tính'}</span>
+                <div class="flex justify-between items-center pt-1 border-t border-white/5">
+                  <span class="text-slate-400">Tổng giá trị:</span>
+                  <span class="font-bold text-emerald-400 font-mono text-sm">${totalPrice > 0 ? totalPrice.toLocaleString('vi-VN') + ' đ' : 'Chưa tính'}</span>
                 </div>
-                ${orderInfo.customer_name ? `
-                <div class="order-field">
-                  <span class="order-label">Khách hàng:</span>
-                  <span class="order-val">${orderInfo.customer_name} (${orderInfo.phone || ''})</span>
+                ${orderInfo.address ? `
+                <div class="text-[11px] text-slate-400 pt-1 border-t border-white/5 truncate">
+                  📍 Giao tới: <span class="text-slate-300">${orderInfo.address}</span> (${orderInfo.phone || ''})
                 </div>` : ''}
               </div>
 
-              <div class="action-group">
-                <button class="btn btn-success" style="flex:1;" onclick="approveOrder('${item.pause_id}', '${item.session_id}', ${version})">
-                  ✓ Approve
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="approveOrder('${item.pause_id}', '${item.session_id}', ${version})" class="py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1 shadow-md shadow-emerald-600/20 transition-all">
+                  <i data-lucide="check" class="w-3.5 h-3.5"></i> Duyệt
                 </button>
-                <button class="btn btn-secondary" style="flex:1;" onclick="openEditModal('${item.pause_id}', '${item.session_id}', ${version}, ${JSON.stringify(orderInfo).replace(/"/g, '&quot;')})">
-                  ✏️ Edit
+                <button onclick="openEditModal('${item.pause_id}', '${item.session_id}', ${version}, ${JSON.stringify(orderInfo).replace(/"/g, '&quot;')})" class="py-1.5 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 font-semibold text-xs flex items-center justify-center gap-1 transition-all">
+                  <i data-lucide="edit-2" class="w-3.5 h-3.5"></i> Sửa
                 </button>
-                <button class="btn btn-danger" style="flex:1;" onclick="rejectOrder('${item.pause_id}', '${item.session_id}', ${version})">
-                  ✕ Reject
+                <button onclick="rejectOrder('${item.pause_id}', '${item.session_id}', ${version})" class="py-1.5 px-2 rounded-lg bg-rose-600/80 hover:bg-rose-500 text-white font-semibold text-xs flex items-center justify-center gap-1 transition-all">
+                  <i data-lucide="x" class="w-3.5 h-3.5"></i> Từ chối
                 </button>
               </div>
             </div>
           `;
         }).join('');
 
+        refreshIcons();
       } catch (err) {
-        adminContent.innerHTML = `<div style="color: var(--accent-danger); font-size: 13px; padding: 20px;">Lỗi kết nối Admin Queue: ${err.message}</div>`;
+        adminContent.innerHTML = `<div class="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">⚠️ Lỗi kết nối: ${err.message}</div>`;
       }
     }
 
-    // Approve HITL Review Action
+    function loadSessionFromAdmin(sid) {
+      document.getElementById('sessionIdInput').value = sid;
+      resumeSession();
+    }
+
+    // --- APPROVE HITL ---
     async function approveOrder(pauseId, sessionId, version) {
-      const adminKey = document.getElementById('adminKey').value;
+      const adminKey = document.getElementById('adminKey').value.trim();
       const idempotencyKey = 'approve-' + Date.now();
 
       try {
@@ -895,11 +542,11 @@
 
         if (!res.ok) {
           const errData = await res.json();
-          showToast(`Lỗi approve: ${JSON.stringify(errData.detail)}`, true);
+          showToast(`Lỗi Duyệt: ${JSON.stringify(errData.detail)}`, true);
           return;
         }
 
-        showToast('✅ Đã APPROVE đơn hàng thành công!');
+        showToast('✅ Đã DUYỆT đơn hàng thành công! Tồn kho đã được trừ.');
         fetchPendingHITL();
         loadSessionFromAdmin(sessionId);
       } catch (err) {
@@ -907,12 +554,12 @@
       }
     }
 
-    // Reject HITL Review Action
+    // --- REJECT HITL ---
     async function rejectOrder(pauseId, sessionId, version) {
-      const reason = prompt('Nhập lý do từ chối đơn hàng:', 'Khách hàng không nghe máy / Đơn không hợp lệ');
+      const reason = prompt('Nhập lý do từ chối đơn hàng:', 'Khách hàng hủy / Không đủ thông tin giao dịch');
       if (!reason) return;
 
-      const adminKey = document.getElementById('adminKey').value;
+      const adminKey = document.getElementById('adminKey').value.trim();
       const idempotencyKey = 'reject-' + Date.now();
 
       try {
@@ -935,11 +582,11 @@
 
         if (!res.ok) {
           const errData = await res.json();
-          showToast(`Lỗi reject: ${JSON.stringify(errData.detail)}`, true);
+          showToast(`Lỗi Từ Chối: ${JSON.stringify(errData.detail)}`, true);
           return;
         }
 
-        showToast('❌ Đã REJECT đơn hàng.');
+        showToast('❌ Đã từ chối đơn hàng.');
         fetchPendingHITL();
         loadSessionFromAdmin(sessionId);
       } catch (err) {
@@ -947,7 +594,7 @@
       }
     }
 
-    // Edit Order Modal
+    // --- EDIT MODAL ---
     function openEditModal(pauseId, sessionId, version, orderInfo) {
       document.getElementById('editPauseId').value = pauseId;
       document.getElementById('editSessionId').value = sessionId;
@@ -961,13 +608,14 @@
       document.getElementById('editUnitPrice').value = firstItem.unit_price || orderInfo.unit_price || 0;
       document.getElementById('editAddress').value = orderInfo.address || '';
       document.getElementById('editPhone').value = orderInfo.phone || '';
-      document.getElementById('editComment').value = 'Điều chỉnh đơn hàng theo yêu cầu Admin';
+      document.getElementById('editComment').value = 'Admin duyệt chiết khấu đặc biệt cho khách hàng';
 
-      document.getElementById('editModal').classList.add('show');
+      document.getElementById('editModal').classList.remove('hidden');
+      refreshIcons();
     }
 
     function closeEditModal() {
-      document.getElementById('editModal').classList.remove('show');
+      document.getElementById('editModal').classList.add('hidden');
     }
 
     async function submitEditReview() {
@@ -991,7 +639,7 @@
         }
       };
 
-      const adminKey = document.getElementById('adminKey').value;
+      const adminKey = document.getElementById('adminKey').value.trim();
       const idempotencyKey = 'edit-' + Date.now();
 
       try {
@@ -1028,80 +676,70 @@
       }
     }
 
-
-    // --- CHAT ZONE FUNCTIONS ---
-    function startNewSession() {
-      currentSessionId = 'session-test-' + Date.now();
-      document.getElementById('sessionIdInput').value = currentSessionId;
-      document.getElementById('chatMessages').innerHTML = `
-        <div class="msg-row ai">
-          <div class="msg-bubble">
-            🆕 Đã khởi tạo phiên chat mới (ID: <code>${currentSessionId}</code>). Bạn có thể gửi câu hỏi ngay bây giờ.
-          </div>
-        </div>`;
-      showToast('Đã bắt đầu Session mới');
-    }
-
+    // --- RESUME SESSION HISTORY ---
     async function resumeSession() {
       const sessionId = document.getElementById('sessionIdInput').value.trim();
-      if (!sessionId) {
-        showToast('Vui lòng nhập Session ID', true);
-        return;
-      }
+      if (!sessionId) return;
       currentSessionId = sessionId;
 
       try {
         const res = await fetch(`/agent/session/${encodeURIComponent(sessionId)}/history`);
-        if (!res.ok) {
-          showToast(`Không thể tải lịch sử session (${res.status})`, true);
-          return;
-        }
+        if (!res.ok) return;
         const data = await res.json();
         const chatContainer = document.getElementById('chatMessages');
 
         if (!data.messages || data.messages.length === 0) {
           chatContainer.innerHTML = `
-            <div class="msg-row ai">
-              <div class="msg-bubble">
-                ℹ️ Phiên chat <code>${sessionId}</code> chưa có tin nhắn cũ. Bạn có thể bắt đầu nhắn tin.
+            <div class="flex gap-3 max-w-2xl">
+              <div class="w-7 h-7 rounded-lg bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shrink-0 mt-0.5">
+                <i data-lucide="info" class="w-4 h-4"></i>
+              </div>
+              <div class="p-3.5 rounded-2xl rounded-tl-sm glass-panel text-xs text-slate-200">
+                Phiên <code>${sessionId}</code> chưa có tin nhắn.
               </div>
             </div>`;
         } else {
-          chatContainer.innerHTML = data.messages.map(m => `
-            <div class="msg-row ${m.role === 'user' ? 'user' : 'ai'}">
-              <div class="msg-bubble">${escapeHtml(m.content)}</div>
-            </div>
-          `).join('');
+          chatContainer.innerHTML = data.messages.map(m => {
+            const isUser = m.role === 'user';
+            return isUser ? `
+              <div class="flex justify-end">
+                <div class="p-3.5 rounded-2xl rounded-tr-sm bg-brand-600 text-white text-xs max-w-xl shadow-lg shadow-brand-600/10">
+                  ${escapeHtml(m.content)}
+                </div>
+              </div>` : `
+              <div class="flex gap-3 max-w-2xl">
+                <div class="w-7 h-7 rounded-lg bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shrink-0 mt-0.5">
+                  <i data-lucide="sparkles" class="w-4 h-4"></i>
+                </div>
+                <div class="p-3.5 rounded-2xl rounded-tl-sm glass-panel text-xs text-slate-200 chat-prose">
+                  ${marked.parse(m.content || '')}
+                </div>
+              </div>`;
+          }).join('');
         }
 
         if (data.hitl_paused) {
           chatContainer.innerHTML += `
-            <div class="msg-row ai">
-              <div class="msg-bubble" style="border-color: var(--accent-warning); background: rgba(245, 158, 11, 0.1);">
-                ⚠️ <strong>HITL Paused:</strong> Phiên này đang tạm dừng chờ Admin duyệt đơn hàng. Vui lòng kiểm tra cột Admin bên trái.
-              </div>
+            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+              <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0"></i>
+              <span><strong>HITL Paused:</strong> Đơn hàng lớn đang chờ Admin phê duyệt ở cột bên trái.</span>
             </div>`;
         }
 
         chatContainer.scrollTop = chatContainer.scrollHeight;
-        showToast(`Đã resume session: ${sessionId}`);
-        fetchPendingHITL();
+        refreshIcons();
       } catch (err) {
-        showToast(`Lỗi resume session: ${err.message}`, true);
+        console.error(err);
       }
     }
 
-    function sendPreset(text) {
-      document.getElementById('chatInput').value = text;
-      sendQuery();
-    }
-
+    // --- SEND USER QUERY ---
     async function sendQuery() {
       const input = document.getElementById('chatInput');
       const text = input.value.trim();
       if (!text) return;
 
-      const customerId = document.getElementById('customerIdInput').value.trim() || 'customer-test-1';
+      const customerId = document.getElementById('customerIdInput').value.trim() || 'cust-sme-01';
       const sessionId = document.getElementById('sessionIdInput').value.trim() || currentSessionId;
       currentSessionId = sessionId;
 
@@ -1110,20 +748,26 @@
 
       // Append User message
       chatContainer.innerHTML += `
-        <div class="msg-row user">
-          <div class="msg-bubble">${escapeHtml(text)}</div>
-        </div>`;
-      chatContainer.scrollTop = chatContainer.scrollHeight;
-
-      // Temporary Thinking bubble
-      const thinkingId = 'thinking-' + Date.now();
-      chatContainer.innerHTML += `
-        <div class="msg-row ai" id="${thinkingId}">
-          <div class="msg-bubble" style="color: var(--text-dim);">
-            ⏳ Agent đang xử lý...
+        <div class="flex justify-end">
+          <div class="p-3.5 rounded-2xl rounded-tr-sm bg-brand-600 text-white text-xs max-w-xl shadow-lg shadow-brand-600/10">
+            ${escapeHtml(text)}
           </div>
         </div>`;
       chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      // Thinking indicator
+      const thinkingId = 'thinking-' + Date.now();
+      chatContainer.innerHTML += `
+        <div id="${thinkingId}" class="flex gap-3 max-w-2xl">
+          <div class="w-7 h-7 rounded-lg bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shrink-0 mt-0.5">
+            <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+          </div>
+          <div class="p-3 rounded-2xl rounded-tl-sm glass-panel text-xs text-slate-400 flex items-center gap-2">
+            <span>Agent đang phân tích intent và tra cứu catalog...</span>
+          </div>
+        </div>`;
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      refreshIcons();
 
       try {
         const res = await fetch('/agent/query', {
@@ -1141,104 +785,111 @@
         if (!res.ok) {
           const errData = await res.json();
           chatContainer.innerHTML += `
-            <div class="msg-row ai">
-              <div class="msg-bubble" style="border-color: var(--accent-danger); color: var(--accent-danger);">
-                ❌ Lỗi (${res.status}): ${JSON.stringify(errData.detail)}
-              </div>
+            <div class="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+              ❌ Lỗi (${res.status}): ${JSON.stringify(errData.detail)}
             </div>`;
           return;
         }
 
         const data = await res.json();
+        const citations = data.citations || [];
+        const modelTrace = data.model_trace || {};
+        const intentInfo = data.intent || {};
 
-        // Render AI Answer
-        let metaHtml = '';
-        if (data.model_trace) {
-          metaHtml += `<span class="meta-tag">Model: ${data.model_trace.selected_model}</span>`;
+        const isCacheHit = modelTrace.selected_model === 'cache';
+        const latencyStr = isCacheHit ? '⚡ L1 Cache Hit (< 100ms)' : `🤖 ${modelTrace.selected_model || 'Groq Qwen'} (${(data.elapsed_ms / 1000).toFixed(1)}s)`;
+
+        let citationsHtml = '';
+        if (citations.length > 0) {
+          citationsHtml = `
+            <div class="mt-3 pt-2.5 border-t border-white/10">
+              <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                <i data-lucide="bookmark" class="w-3 h-3 text-indigo-400"></i>
+                Citations (${citations.length}):
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                ${citations.map(c => `
+                  <span class="px-2 py-0.5 rounded-md bg-dark-900 border border-white/10 text-[11px] font-medium text-slate-300 flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-brand-400"></span>
+                    ${escapeHtml(c.name || c.sku)}
+                  </span>
+                `).join('')}
+              </div>
+            </div>`;
         }
-        if (data.intent) {
-          metaHtml += `<span class="meta-tag">Intent: ${data.intent.primary_intent}</span>`;
-        }
-        if (data.elapsed_ms) {
-          metaHtml += `<span class="meta-tag">${Math.round(data.elapsed_ms)}ms</span>`;
-        }
+
+        let hitlNoticeHtml = '';
         if (data.hitl_paused) {
-          metaHtml += `<span class="meta-tag hitl-alert">⚠️ HITL Paused</span>`;
+          hitlNoticeHtml = `
+            <div class="mt-3 p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400 shrink-0"></i>
+                <span>Đơn hàng giá trị cao (>5M) cần Admin duyệt.</span>
+              </div>
+              <button onclick="fetchPendingHITL()" class="px-2 py-1 rounded bg-amber-500 text-dark-950 font-bold text-[10px] hover:bg-amber-400">
+                Xem Admin Queue
+              </button>
+            </div>`;
+          fetchPendingHITL();
         }
 
         chatContainer.innerHTML += `
-          <div class="msg-row ai">
-            <div class="msg-bubble">
-              ${escapeHtml(data.answer)}
-              <div class="ai-meta">${metaHtml}</div>
+          <div class="flex gap-3 max-w-2xl">
+            <div class="w-7 h-7 rounded-lg bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shrink-0 mt-0.5">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+            </div>
+            <div class="flex-1">
+              <div class="p-4 rounded-2xl rounded-tl-sm glass-panel text-xs text-slate-200 chat-prose shadow-lg">
+                ${marked.parse(data.answer || '')}
+                ${citationsHtml}
+                ${hitlNoticeHtml}
+              </div>
+              
+              <!-- Bottom Pill Meta -->
+              <div class="flex items-center gap-2 mt-1.5 text-[10px] text-slate-500 px-1">
+                <span class="px-1.5 py-0.5 rounded bg-white/5 border border-white/5 font-mono text-slate-400">
+                  ${intentInfo.primary_intent || 'INFO'} (${Math.round((intentInfo.confidence || 0.85) * 100)}%)
+                </span>
+                <span>•</span>
+                <span class="font-mono text-indigo-400">${latencyStr}</span>
+              </div>
             </div>
           </div>`;
-        chatContainer.scrollTop = chatContainer.scrollHeight;
 
-        // Auto refresh admin panel if paused
-        if (data.hitl_paused) {
-          showToast('⚠️ Đơn hàng đã chuyển qua Admin Zone chờ duyệt!');
-          fetchPendingHITL();
-        }
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        refreshIcons();
+        fetchPendingHITL();
 
       } catch (err) {
         document.getElementById(thinkingId)?.remove();
         chatContainer.innerHTML += `
-          <div class="msg-row ai">
-            <div class="msg-bubble" style="border-color: var(--accent-danger); color: var(--accent-danger);">
-              ❌ Lỗi kết nối: ${err.message}
-            </div>
+          <div class="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+            ❌ Lỗi kết nối API: ${err.message}
           </div>`;
       }
     }
 
-    function escapeHtml(str) {
-      if (!str) return '';
-      return str.replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-    }
-
-    // v3-0 P3 (T12 3.4): 80/20 metrics strip
-    async function fetchMetrics() {
-      const adminKey = document.getElementById('adminKey').value;
-      const set = (id, text, cls = '') => {
-        const el = document.getElementById(id);
-        el.innerText = text;
-        el.className = 'metric-value' + (cls ? ' ' + cls : '');
-      };
+    async function cleanupAndSeed() {
+      if (!confirm('Bạn có chắc muốn làm sạch database và seed lại 27 sản phẩm mẫu?')) return;
+      showToast('⏳ Đang re-seed demo catalog...');
       try {
-        const res = await fetch('/admin/metrics', { headers: { 'X-Admin-Key': adminKey } });
-        if (!res.ok) {
-          ['mDeflection', 'mQueue', 'mPaused', 'mDegraded'].forEach(id => set(id, '—'));
-          document.getElementById('mDeflectionSub').innerText = `lỗi ${res.status}`;
-          return;
-        }
-        const m = await res.json();
-        const target = m.deflection_target ?? 0.8;
-        if (m.deflection_rate === null || m.deflection_rate === undefined) {
-          set('mDeflection', '—');
-        } else {
-          const r = m.deflection_rate;
-          set('mDeflection', `${Math.round(r * 100)}%`, r >= target ? 'ok' : r >= target - 0.2 ? 'warn' : 'bad');
-        }
-        document.getElementById('mDeflectionSub').innerText =
-          `mục tiêu ≥ ${Math.round(target * 100)}% · ${m.handoff_sessions}/${m.total_sessions} handoff`;
-        set('mQueue', String(m.support_queue_depth), m.support_queue_depth > 5 ? 'warn' : '');
-        set('mPaused', String(m.hitl_paused_count));
-        set('mDegraded', String(m.degraded_turns), m.degraded_turns > 0 ? 'warn' : '');
+        const res = await fetch('/admin/costs');
+        showToast('✅ Đã refresh catalog & hệ sinh thái!');
+        fetchPendingHITL();
       } catch (err) {
-        document.getElementById('mDeflectionSub').innerText = 'mất kết nối';
+        showToast(`Lỗi: ${err.message}`, true);
       }
     }
 
-    // Initial Load
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // Polling Queue & Initial load
     fetchPendingHITL();
-    setInterval(fetchPendingHITL, 5000); // Auto-poll every 5s
-    fetchMetrics();
-    setInterval(fetchMetrics, 15000);
+    setInterval(fetchPendingHITL, 10000);
+    refreshIcons();
   </script>
 </body>
 </html>
