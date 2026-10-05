@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, cast
 
 from sqlalchemy import select
 
+from core.agent.intent_transitions import extract_address, extract_phone
 from core.agent.state import AgentState  # noqa: TC001 (required for LangGraph type resolution)
 from core.config import settings
 from models.schema import Product
@@ -165,117 +166,124 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
         "needs_clarification": needs_clarification,
     }
 
-    # For ORDER_PLACEMENT: extract order_info from the top citation so it lands
-    # in the LangGraph checkpoint BEFORE hitl_guard_node calls interrupt().
+    # For ORDER_PLACEMENT: extract order_info from the top citation or update existing order_info
+    # so it lands in the LangGraph checkpoint BEFORE hitl_guard_node calls interrupt().
     # (interrupt() checkpoints state as-received, not mid-node updates)
-    if intent == "ORDER_PLACEMENT" and not state.get("order_info") and state.get("citations"):
-        citations = state["citations"]
-        # v3-0 P1 (T01 F4/O5): ambiguous ORDER ("đặt cái đó đi" after a vague
-        # browse) — top citations are a near-tie, so auto-selecting the first
-        # one orders the wrong product. Ask ONE clarifying question instead.
-        # Anti-loop: clarify_count < 1 (same guard as WP-V2-3).
-        top_name = (
-            citations[0].name if hasattr(citations[0], "name") else citations[0].get("name", "")
-        ).lower()
-        user_named_top_product = any(
-            part in user_msg.lower()
-            for part in top_name.split()
-            if len(part) >= 4
-            and part not in ("laptop", "phone", "tai", "nghe", "chuột", "bàn", "phím", "wireless")
-        )
-        if (
-            settings.INTENT_TRACKING_V3_ENABLED
-            and settings.CLARIFY_ENABLED
-            and len(citations) >= 2
-            and similarity_gap <= settings.CLARIFY_SIMILARITY_GAP_MAX
-            and not user_named_top_product
-        ):
-            if clarify_count < clarify_quota:
-                result["needs_clarification"] = True
-                result["declined"] = False
-                return result
-            if settings.ORDER_HITL_V3_ENABLED:
-                # v3-0 P2 (T06): still a near-tie after the clarify quota —
-                # hand off instead of guessing which product to order.
-                result["declined"] = False
-                result["hitl_rejection_reason"] = "clarify_exhausted_still_ambiguous"
-                result["risk_signals"] = [
-                    *(state.get("risk_signals") or []),
-                    "clarify_loop",
-                ]
-                return result
-        if citations:
-            db = cast("AsyncSession", config["configurable"].get("db"))
-            top = citations[0]
-            product_id = top.product_id if hasattr(top, "product_id") else top.get("product_id")
-            sku = top.sku if hasattr(top, "sku") else top.get("sku", "")
-            name = top.name if hasattr(top, "name") else top.get("name", "")
-            stmt = select(Product).where(Product.id == product_id)
-            product_row = (await db.execute(stmt)).scalar_one_or_none()
-            price = float(product_row.price) if product_row else 0.0
+    if intent == "ORDER_PLACEMENT":
+        phone_found = extract_phone(user_msg)
+        addr_found = extract_address(user_msg)
 
-            user_msg = state.get("user_message", "")
-            desc = product_row.description if product_row else ""
-            is_match, req_var, avail_var = _check_variant_match(user_msg, name, desc)
-            stated_budget = _extract_budget_from_text(user_msg)
+        if state.get("order_info"):
+            existing_order = dict(state["order_info"])
+            if phone_found:
+                existing_order["phone"] = phone_found
+            if addr_found:
+                existing_order["address"] = addr_found
+            result["order_info"] = existing_order
+            result["declined"] = False
+            result["needs_clarification"] = False
+            result["confidence_score"] = 0.95
+            return result
 
-            if not is_match:
-                price_fmt = f"{price:,.0f} VND".replace(",", ".") if price > 0 else ""
-                avail_str = f"bản **{avail_var}**" if avail_var else f"bản **{name}**"
-                result["variant_mismatch_msg"] = (
-                    f"Xin lỗi, shop hiện không có sẵn phiên bản **{req_var}** cho {name} "
-                    f"(shop chỉ có sẵn {avail_str} với giá {price_fmt}). "
-                    f"Bạn có muốn đổi sang đặt phiên bản này không ạ?"
+        if not state.get("order_info") and state.get("citations"):
+            citations = state["citations"]
+            # v3-0 P1 (T01 F4/O5): ambiguous ORDER ("đặt cái đó đi" after a vague
+            # browse) — top citations are a near-tie, so auto-selecting the first
+            # one orders the wrong product. Ask ONE clarifying question instead.
+            # Anti-loop: clarify_count < 1 (same guard as WP-V2-3).
+            top_name = (
+                citations[0].name
+                if hasattr(citations[0], "name")
+                else citations[0].get("name", "")
+            ).lower()
+            user_named_top_product = any(
+                part in user_msg.lower()
+                for part in top_name.split()
+                if len(part) >= 4
+                and part
+                not in ("laptop", "phone", "tai", "nghe", "chuột", "bàn", "phím", "wireless")
+            )
+            if (
+                settings.INTENT_TRACKING_V3_ENABLED
+                and settings.CLARIFY_ENABLED
+                and len(citations) >= 2
+                and similarity_gap <= settings.CLARIFY_SIMILARITY_GAP_MAX
+                and not user_named_top_product
+            ):
+                if clarify_count < clarify_quota:
+                    result["needs_clarification"] = True
+                    result["declined"] = False
+                    return result
+                if settings.ORDER_HITL_V3_ENABLED:
+                    # v3-0 P2 (T06): still a near-tie after the clarify quota —
+                    # hand off instead of guessing which product to order.
+                    result["declined"] = False
+                    result["hitl_rejection_reason"] = "clarify_exhausted_still_ambiguous"
+                    result["risk_signals"] = [
+                        *(state.get("risk_signals") or []),
+                        "clarify_loop",
+                    ]
+                    return result
+            if citations:
+                db = cast("AsyncSession", config["configurable"].get("db"))
+                top = citations[0]
+                product_id = (
+                    top.product_id if hasattr(top, "product_id") else top.get("product_id")
                 )
-            elif stated_budget and price > stated_budget * 1.1:
-                price_fmt = f"{price:,.0f} VND".replace(",", ".")
-                budget_fmt = f"{stated_budget:,.0f} VND".replace(",", ".")
-                result["variant_mismatch_msg"] = (
-                    f"Sản phẩm **{name}** hiện có giá niêm yết là **{price_fmt}** "
-                    f"(cao hơn mức ngân sách **{budget_fmt}** anh/chị đề xuất). "
-                    f"Anh/chị có muốn tham khảo các mẫu sản phẩm khác phù hợp với mức giá {budget_fmt} không ạ?"
-                )
-            else:
-                # Extract dynamic quantity from user message (e.g. "2 chiếc", "3 sp")
-                import re as _re
+                sku = top.sku if hasattr(top, "sku") else top.get("sku", "")
+                name = top.name if hasattr(top, "name") else top.get("name", "")
+                stmt = select(Product).where(Product.id == product_id)
+                product_row = (await db.execute(stmt)).scalar_one_or_none()
+                price = float(product_row.price) if product_row else 0.0
 
-                qty = _extract_quantity_from_text(user_msg)
-                phone_match = _re.search(
-                    r"(?:sđt|số điện thoại|phone|tel|đt)?\s*(0[35789][0-9]{8})\b",
-                    user_msg,
-                    _re.IGNORECASE,
-                )
-                phone = phone_match.group(1) if phone_match else None
-                addr_match = _re.search(
-                    r"(?:địa chỉ|đc|ở|tại)\s*[:\s]\s*([^,\n]+(?:,[^,\n]+)*)",
-                    user_msg,
-                    _re.IGNORECASE,
-                )
-                address = addr_match.group(1).strip() if addr_match else None
+                desc = product_row.description if product_row else ""
+                is_match, req_var, avail_var = _check_variant_match(user_msg, name, desc)
+                stated_budget = _extract_budget_from_text(user_msg)
 
-                result["order_info"] = {
-                    "product_id": str(product_id),
-                    "sku": sku,
-                    "name": name,
-                    "product_name": name,
-                    "price": price,
-                    "unit_price": price,
-                    "approved_price": price,
-                    "total_price": price * qty,
-                    "quantity": qty,
-                    "phone": phone,
-                    "address": address,
-                    "status": "pending",
-                    "items": [
-                        {
-                            "product_id": str(product_id),
-                            "product_name": name,
-                            "sku": sku,
-                            "quantity": qty,
-                            "unit_price": price,
-                        }
-                    ],
-                }
+                if not is_match:
+                    price_fmt = f"{price:,.0f} VND".replace(",", ".") if price > 0 else ""
+                    avail_str = f"bản **{avail_var}**" if avail_var else f"bản **{name}**"
+                    result["variant_mismatch_msg"] = (
+                        f"Xin lỗi, shop hiện không có sẵn phiên bản **{req_var}** cho {name} "
+                        f"(shop chỉ có sẵn {avail_str} với giá {price_fmt}). "
+                        f"Bạn có muốn đổi sang đặt phiên bản này không ạ?"
+                    )
+                elif stated_budget and price > stated_budget * 1.1:
+                    price_fmt = f"{price:,.0f} VND".replace(",", ".")
+                    budget_fmt = f"{stated_budget:,.0f} VND".replace(",", ".")
+                    result["variant_mismatch_msg"] = (
+                        f"Sản phẩm **{name}** hiện có giá niêm yết là **{price_fmt}** "
+                        f"(cao hơn mức ngân sách **{budget_fmt}** anh/chị đề xuất). "
+                        f"Anh/chị có muốn tham khảo các mẫu sản phẩm khác phù hợp với mức giá {budget_fmt} không ạ?"
+                    )
+                else:
+                    qty = _extract_quantity_from_text(user_msg)
+                    phone = phone_found
+                    address = addr_found
+
+                    result["order_info"] = {
+                        "product_id": str(product_id),
+                        "sku": sku,
+                        "name": name,
+                        "product_name": name,
+                        "price": price,
+                        "unit_price": price,
+                        "approved_price": price,
+                        "total_price": price * qty,
+                        "quantity": qty,
+                        "phone": phone,
+                        "address": address,
+                        "status": "pending",
+                        "items": [
+                            {
+                                "product_id": str(product_id),
+                                "product_name": name,
+                                "sku": sku,
+                                "quantity": qty,
+                                "unit_price": price,
+                            }
+                        ],
+                    }
 
     return result
 

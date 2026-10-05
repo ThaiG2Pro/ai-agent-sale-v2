@@ -155,3 +155,70 @@ def apply_transition(
         )
 
     return classification.model_copy(update={"intent_shift": True}), 0
+
+
+def extract_phone(text: str) -> str | None:
+    """Extracts and normalizes a Vietnamese 10-digit mobile number from text."""
+    if not text:
+        return None
+    patterns = [
+        r"(?:sđt|số điện thoại|phone|tel|đt)?\s*(?:(?:\+?84|\b0)\s*[35789](?:[\s.-]?[0-9]){8})\b",
+        r"\b(?:(?:\+?84|\b0)\s*[35789](?:[\s.-]?[0-9]){8})\b",
+        r"\b(0[35789][0-9]{8})\b",
+        r"\b(0[1-9][0-9]{8})\b",
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            raw = m.group(0)
+            digits = re.sub(r"\D", "", raw)
+            if digits.startswith("84") and len(digits) == 11:
+                digits = "0" + digits[2:]
+            if len(digits) == 10 and digits.startswith("0"):
+                return digits
+    return None
+
+
+def extract_address(text: str) -> str | None:
+    """Extracts fulfillment delivery address from customer message."""
+    if not text:
+        return None
+
+    # 1. Explicit keyword prefix: "địa chỉ: ...", "ở ...", "giao tại...", "giao về...", "ship đến..."
+    m = re.search(
+        r"(?:địa chỉ|đc|đ/c|ở|tại|giao (?:về|đến|tới)|nhận tại|ship (?:đến|về|tới))\s*[:\s-]\s*([^,\n]+(?:,[^,\n]+)*)",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        addr = m.group(1).strip()
+        # Remove phone from address if included
+        addr = re.sub(
+            r"(?:sđt|số điện thoại|phone|tel|đt)?\s*(?:\+?84|0)[35789\d][\d\s.-]{7,12}\b",
+            "",
+            addr,
+            flags=re.IGNORECASE,
+        ).strip()
+        addr = re.sub(r"^[,\s.-]+|[,\s.-]+$", "", addr)
+        if len(addr) >= 3:
+            return addr
+
+    # 2. Contains location/administrative markers
+    loc_kw = r"\b(?:quận|huyện|phường|xã|đường|phố|thành phố|tp|tỉnh|hà nội|hcm|hồ chí minh|đà nẵng|hải phòng|cần thơ|bình dương|đồng nai|nguyễn |lê |trần |hai bà trưng|hoàng diệu|cầu giấy|hoàn kiếm|ba đình|đống đa|thanh xuân|bình thạnh|gò vấp|tân bình|thủ đức)\b"
+    if re.search(loc_kw, text, re.IGNORECASE):
+        cleaned = re.sub(
+            r"(?:sđt|số điện thoại|phone|tel|đt)?\s*(?:\+?84|0)[35789\d][\d\s.-]{7,12}\b",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        ).strip()
+        cleaned = re.sub(r"^[,\s.-]+|[,\s.-]+$", "", cleaned)
+        if len(cleaned) >= 4:
+            return cleaned
+
+    # 3. Starts with house number + street (e.g., "123 Lê Lợi", "45/2 Nguyễn Huệ")
+    m_num = re.search(r"^\s*(\d+[A-Za-z]?/\d+[A-Za-z]?|\d+[A-Za-z]?)\s+([A-Za-zÀ-ỹ\s,.-]+)$", text)
+    if m_num:
+        return text.strip()
+
+    return None

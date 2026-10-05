@@ -311,7 +311,8 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
         "hitl_freshness_valid": False,
         "estimated_token_cost": 0,
         "variant_mismatch_msg": None,
-        "order_info": None,
+        # order_info is cross-turn (checkpointer channel) → deliberately omitted
+        # so in-flight orders are not wiped on subsequent turns.
         "pending_info_questions": None,
         "cached_answer": None,
         "canonical_query": None,

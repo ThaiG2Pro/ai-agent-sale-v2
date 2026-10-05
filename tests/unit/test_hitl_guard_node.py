@@ -9,6 +9,11 @@ from core.agent.nodes.hitl_guard import hitl_guard_node
 from core.agent.state import HITLReasonEnum
 
 
+@pytest.fixture(autouse=True)
+def disable_risk_hitl(monkeypatch):
+    monkeypatch.setattr("core.agent.nodes.hitl_guard.settings.RISK_HITL_ENABLED", False)
+
+
 @pytest.fixture
 def mock_db():
     db = AsyncMock()

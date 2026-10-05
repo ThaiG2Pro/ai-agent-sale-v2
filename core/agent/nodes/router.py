@@ -17,6 +17,8 @@ from langgraph.types import Command
 from core.agent.intent_transitions import (
     HESITATION_FLIP_SOURCES,
     apply_transition,
+    extract_address,
+    extract_phone,
     is_hesitation,
     normalize_priority,
 )
@@ -259,6 +261,47 @@ async def router_node(state: AgentState) -> Command:
                     "intent_disagreement_count": 0,
                 }
             ),
+        )
+
+    # In-flight ORDER_PLACEMENT follow-up: customer providing phone or address
+    phone_extracted = extract_phone(user_msg)
+    addr_extracted = extract_address(user_msg)
+    is_order_in_flight = previous_intent == IntentEnum.ORDER_PLACEMENT.value or bool(
+        state.get("order_info")
+    )
+
+    if is_order_in_flight and (
+        phone_extracted
+        or addr_extracted
+        or (
+            state.get("order_info")
+            and not (state["order_info"].get("phone") and state["order_info"].get("address"))
+            and len(user_msg.split()) <= 15
+            and not any(
+                kw in user_msg_lower
+                for kw in (
+                    "mua",
+                    "tìm",
+                    "sản phẩm khác",
+                    "bán",
+                    "giá",
+                    "tư vấn",
+                    "bao nhiêu",
+                    "thông số",
+                )
+            )
+        )
+    ):
+        logger.info("router_node checkout fulfillment follow-up: msg=%r", user_msg[:60])
+        return Command(
+            goto="confidence_node",
+            update={
+                "intent": IntentEnum.ORDER_PLACEMENT.value,
+                "secondary_intents": [],
+                "intent_confidence": 0.95,
+                "intent_shift": False,
+                "intent_disagreement_count": 0,
+            },
         )
 
     # 2026-22-8 report §3/§5 giai đoạn 1: the NEGOTIATION/ORDER_PLACEMENT

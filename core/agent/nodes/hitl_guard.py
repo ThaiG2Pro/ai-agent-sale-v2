@@ -229,17 +229,40 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
         order_info = state["order_info"]
         has_phone = bool(order_info.get("phone"))
         has_address = bool(order_info.get("address"))
-        if not has_phone or not has_address:
-            missing_items = []
-            if not has_phone:
-                missing_items.append("số điện thoại")
-            if not has_address:
-                missing_items.append("địa chỉ nhận hàng")
-            missing_str = " và ".join(missing_items)
-            p_name = order_info.get("name") or order_info.get("product_name") or "sản phẩm"
+        phone = order_info.get("phone")
+        address = order_info.get("address")
+        p_name = order_info.get("name") or order_info.get("product_name") or "sản phẩm"
+
+        if not has_phone and not has_address:
             req_msg = (
                 f"Dạ em đã ghi nhận bạn muốn đặt mua **{p_name}**. "
-                f"Bạn vui lòng cung cấp thêm **{missing_str}** để shop hỗ trợ tạo đơn giao tận nơi cho bạn nhé! 😊"
+                f"Bạn vui lòng cung cấp thêm **số điện thoại và địa chỉ nhận hàng** để shop hỗ trợ tạo đơn giao tận nơi cho bạn nhé! 😊"
+            )
+            return Command(
+                goto="answer_node",
+                update={
+                    "response": req_msg,
+                    "hitl_paused": False,
+                    "hitl_triggered": False,
+                },
+            )
+        elif has_phone and not has_address:
+            req_msg = (
+                f"Dạ em đã nhận được số điện thoại **{phone}**. "
+                f"Bạn vui lòng cung cấp thêm **địa chỉ nhận hàng** để shop hỗ trợ tạo đơn giao tận nơi cho bạn nhé! 😊"
+            )
+            return Command(
+                goto="answer_node",
+                update={
+                    "response": req_msg,
+                    "hitl_paused": False,
+                    "hitl_triggered": False,
+                },
+            )
+        elif has_address and not has_phone:
+            req_msg = (
+                f"Dạ em đã nhận được địa chỉ: **{address}**. "
+                f"Bạn vui lòng cung cấp thêm **số điện thoại liên hệ** để shop hỗ trợ hoàn tất đơn hàng nhé! 😊"
             )
             return Command(
                 goto="answer_node",
@@ -503,9 +526,19 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                 f"Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên, shop sẽ phản hồi sớm nhất có thể. Cảm ơn bạn đã kiên nhẫn! 🙏"
             )
         else:
+            p_name = (
+                (order_info or {}).get("name")
+                or (order_info or {}).get("product_name")
+                or "sản phẩm"
+            )
+            phone_str = (
+                f" qua SĐT **{(order_info or {}).get('phone')}**"
+                if (order_info or {}).get("phone")
+                else ""
+            )
             holding_msg = (
-                "Yêu cầu đặt hàng của bạn đang chờ xác nhận từ nhân viên. "
-                "Chúng tôi sẽ phản hồi sớm nhất có thể. Cảm ơn bạn đã kiên nhẫn!"
+                f"Dạ yêu cầu đặt mua **{p_name}** của bạn đã được ghi nhận và đang chờ nhân viên kiểm tra xác nhận{phone_str}. "
+                "Shop sẽ liên hệ hỗ trợ bạn sớm nhất nhé! Cảm ơn bạn rất nhiều! 🙏"
             )
 
         # Call interrupt() (FR-001)

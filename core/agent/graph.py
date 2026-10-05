@@ -31,7 +31,7 @@ from core.agent.nodes.memory_retrieval import memory_retrieval_node
 from core.agent.nodes.order_execution import order_execution_node
 from core.agent.nodes.queue_consumer import queue_consumer_node
 from core.agent.nodes.retrieval import retrieval_node
-from core.agent.nodes.router import _route_after_router, router_node
+from core.agent.nodes.router import router_node
 from core.agent.nodes.state_freshness import state_freshness_validator_node
 from core.agent.state import AgentState, NodeStreamEvent
 from core.config import settings
@@ -235,22 +235,8 @@ def build_graph(checkpointer=None):
     for node_name, node_func in _NODE_FUNCS.items():
         builder.add_node(node_name, traced_node(node_name, node_func))
 
-    # START → router_node (router returns Command with goto)
+    # START → router_node (router returns Command with goto dynamically)
     builder.add_edge(START, "router_node")
-
-    # router_node returns Command(goto=...) which handles routing
-    # For diagram rendering, add conditional edges that mirror the routing logic
-    builder.add_conditional_edges(
-        "router_node",
-        _route_after_router,
-        {
-            "retrieval_node": "retrieval_node",
-            "memory_retrieval_node": "memory_retrieval_node",
-            "escalation_node": "escalation_node",
-            "answer_node": "answer_node",
-            "hitl_guard_node": "hitl_guard_node",
-        },
-    )
 
     # retrieval_node → memory_retrieval_node (T136: inject past context before confidence)
     builder.add_edge("retrieval_node", "memory_retrieval_node")
