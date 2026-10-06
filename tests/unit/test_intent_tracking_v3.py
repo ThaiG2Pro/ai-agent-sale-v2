@@ -267,7 +267,7 @@ async def test_router_prompt_includes_previous_intent_and_history(monkeypatch):
     user_content = mock_llm.call_args.kwargs["messages"][1]["content"]
     assert "Previous turn intent: PRICING" in user_content
     assert "laptop dưới 25 triệu" in user_content
-    assert user_content.rstrip().endswith("thôi để xem thêm")
+    assert user_content.rstrip().endswith("thôi để xem thêm\n</customer_message>")
 
 
 @pytest.mark.asyncio

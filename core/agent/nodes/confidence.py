@@ -93,8 +93,12 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     intent = state.get("intent", None)
     is_declined = fused < confidence_threshold
 
-    # Do not decline if cross-session memory context exists
-    if state.get("memory_context"):
+    # Memory rescues a borderline score only when it actually resolved what the
+    # customer meant (resolved_query) or on FOLLOW_UP (no retrieval ran). Any
+    # memory_context used to disable Layer 2 — with the recall digest that is
+    # nearly every returning customer.
+    memory_resolved = bool(state.get("resolved_query")) or intent == "FOLLOW_UP"
+    if memory_resolved and state.get("memory_context"):
         is_declined = False
 
     # WP-V3-4: Expand clarify loop to borderline INFO_QUERY, AVAILABILITY, COMPARISON
@@ -111,7 +115,7 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
         fused < confidence_threshold
         and settings.CLARIFY_ENABLED
         and intent not in ("ORDER_PLACEMENT", "FOLLOW_UP")
-        and not state.get("memory_context")
+        and not memory_resolved
         and clarify_count < clarify_quota
     ):
         if intent in borderline_clarify_intents:
@@ -216,8 +220,14 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
 
             user_msg = state.get("user_message", "")
             desc = product_row.description if product_row else ""
-            is_match, req_var, avail_var = _check_variant_match(user_msg, name, desc)
-            stated_budget = _extract_budget_from_text(user_msg)
+            from core.agent.order_slots import extract_slots, variant_mismatch
+
+            # One structured extraction for every order field this turn (LLM +
+            # regex fallback); the full-number budget regex stays as backup.
+            slots = await extract_slots(user_msg)
+            stated_budget = slots.budget_vnd or _extract_budget_from_text(user_msg)
+            mismatch, avail_var = variant_mismatch(slots.storage_variant, f"{name} {desc or ''}")
+            is_match, req_var = not mismatch, slots.storage_variant
 
             if not is_match:
                 price_fmt = f"{price:,.0f} VND".replace(",", ".") if price > 0 else ""
@@ -236,22 +246,9 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
                     f"Anh/chị có muốn tham khảo các mẫu sản phẩm khác phù hợp với mức giá {budget_fmt} không ạ?"
                 )
             else:
-                # Extract dynamic quantity from user message (e.g. "2 chiếc", "3 sp")
-                import re as _re
-
-                qty = _extract_quantity_from_text(user_msg)
-                phone_match = _re.search(
-                    r"(?:sđt|số điện thoại|phone|tel|đt)?\s*(0[35789][0-9]{8})\b",
-                    user_msg,
-                    _re.IGNORECASE,
-                )
-                phone = phone_match.group(1) if phone_match else None
-                addr_match = _re.search(
-                    r"(?:địa chỉ|đc|ở|tại)\s*[:\s]\s*([^,\n]+(?:,[^,\n]+)*)",
-                    user_msg,
-                    _re.IGNORECASE,
-                )
-                address = addr_match.group(1).strip() if addr_match else None
+                qty = slots.quantity or 1
+                phone = slots.phone
+                address = slots.address
 
                 result["order_info"] = {
                     "product_id": str(product_id),
@@ -276,65 +273,15 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
                         }
                     ],
                 }
+                # Contact info the customer already gave for an earlier draft
+                # this session (pending_order) is reused, not asked again.
+                from core.agent.order_slots import carry_contact
+
+                result["order_info"] = carry_contact(
+                    result["order_info"], state.get("pending_order")
+                )
 
     return result
-
-
-def _check_variant_match(
-    user_msg: str, product_name: str, product_desc: str
-) -> tuple[bool, str | None, str | None]:
-    """Checks if user requested a specific storage variant (e.g. 256GB) that is not in the catalog product."""
-    import re
-
-    msg_lower = user_msg.lower()
-    product_all = f"{product_name} {product_desc}".lower()
-
-    storage_matches = re.findall(r"\b(64|128|256|512)\s*(?:gb|g)\b|\b(1|2)\s*tb\b", msg_lower)
-    if not storage_matches:
-        return True, None, None
-
-    requested_variants = []
-    for m in storage_matches:
-        val = next(v for v in m if v)
-        unit = "TB" if val in ("1", "2") and "tb" in msg_lower else "GB"
-        requested_variants.append(f"{val}{unit}".lower())
-
-    for req in requested_variants:
-        if req not in product_all:
-            avail_match = re.findall(
-                r"\b(64|128|256|512)\s*(?:gb|g)\b|\b(1|2)\s*tb\b", product_all
-            )
-            avail_var = None
-            if avail_match:
-                aval_val = next(v for v in avail_match[0] if v)
-                avail_var = f"{aval_val}GB"
-            return False, req.upper(), avail_var
-
-    return True, None, None
-
-
-def _extract_quantity_from_text(text: str) -> int:
-    import re
-
-    if not text:
-        return 1
-    m_unit = re.search(r"(\d+)\s*(?:chiếc|cái|sp|sản\s+phẩm|bộ|máy|quả|bản)", text.lower())
-    if m_unit:
-        try:
-            val = int(m_unit.group(1))
-            if 1 <= val <= 100:
-                return val
-        except ValueError:
-            pass
-    m_kw = re.search(r"(?:mua|đặt|lấy|sl|số\s+lượng)\s+(\d+)", text.lower())
-    if m_kw:
-        try:
-            val = int(m_kw.group(1))
-            if 1 <= val <= 100:
-                return val
-        except ValueError:
-            pass
-    return 1
 
 
 def _route_after_confidence(state: AgentState) -> str:

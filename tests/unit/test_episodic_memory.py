@@ -169,7 +169,8 @@ class TestMemoryRetrievalNodeWiring:
         entry = update["memory_context"][0]
         assert entry["source"] == "episodic"
         assert "Dell XPS 15" in entry["summary_text"]
-        assert update["declined"] is False  # memory context overrides decline
+        # Memory no longer flips a retrieval decline (only on the FOLLOW_UP path).
+        assert "declined" not in update
 
     @pytest.mark.asyncio
     async def test_no_time_reference_skips_episodic(self):

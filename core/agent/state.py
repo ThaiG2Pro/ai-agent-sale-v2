@@ -6,7 +6,6 @@ What it does: Provides typed state, enums, and I/O contracts used by all nodes.
 
 from __future__ import annotations
 
-import operator
 import time
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -187,7 +186,16 @@ class AgentState(TypedDict):
     intent_shift: bool
     intent_disagreement_count: int
     retrieved_chunks: list[dict]
-    citations: Annotated[list, operator.add]
+    # Per-turn (last value wins, reset by make_initial_state). Was operator.add,
+    # which accumulated every past turn's citations — "nó" then resolved to the
+    # OLDEST product of the session and answers/cache listed stale sources.
+    citations: list
+    # Cross-turn (omitted from make_initial_state): product names of the last
+    # non-declined retrieval, rank order — what "nó" / "mẫu 2" refer to next turn.
+    recent_products: list[str]
+    # Per-turn: the query retrieval actually searched after pronoun/memory
+    # resolution (None when unchanged) — memory search + answer prompt reuse it.
+    resolved_query: str | None
     similarity_score: float
     similarity_gap: float
     rerank_score: float | None
@@ -209,6 +217,10 @@ class AgentState(TypedDict):
     hitl_freshness_valid: bool
     estimated_token_cost: int
     order_info: dict | None
+    # Cross-turn (omitted from make_initial_state): an order draft parked by
+    # hitl_guard_node while it waits for phone/address. The next message that
+    # carries those slots resumes the order instead of starting over.
+    pending_order: dict | None
     # SC5: INFO questions queued during HITL pause; answered alongside order confirmation
     pending_info_questions: str | None
     # Retrieval pipeline fields (set by retrieval_node, used by answer_node)
@@ -292,6 +304,7 @@ def make_initial_state(user_message: str, session_id: str, customer_id: str) -> 
         "intent_shift": False,
         "retrieved_chunks": [],
         "citations": [],
+        "resolved_query": None,
         "similarity_score": 0.0,
         "similarity_gap": 0.0,
         "rerank_score": None,

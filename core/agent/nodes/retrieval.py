@@ -11,6 +11,8 @@ Enhancements (2026):
 - SC10 fix: COMPARISON intent → split by "và/vs" and merge sub-query results
 - WP-V2-3: clarify-reply merge (awaiting_clarification turn) + LLM query
   decomposition for declined multi-intent queries (regex split kept as fallback)
+- Memory recall: a referential query naming no product ("con đó", "cái máy hôm
+  qua em tư vấn") is resolved from customer memory BEFORE searching the catalog
 """
 
 from __future__ import annotations
@@ -95,25 +97,41 @@ async def _decompose_query(query: str) -> list[str] | None:
     return parts
 
 
-def _get_citation_name(citations: list, index: int) -> str | None:
-    """Safely extract product name from citation at 0-based index."""
-    if not citations or index < 0 or index >= len(citations):
+def _citation_names(citations: list) -> list[str]:
+    """Unique product names from citations, rank order preserved."""
+    names: list[str] = []
+    for c in citations or []:
+        name = c.get("name") if isinstance(c, dict) else getattr(c, "name", None)
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _previous_products(state: AgentState) -> list[str]:
+    """Products the previous turn showed — what "nó" / "mẫu 2" point at.
+
+    recent_products is the cross-turn channel; citations is the fallback for
+    direct calls (citations is per-turn, so in a live graph it is empty here).
+    """
+    return list(state.get("recent_products") or []) or _citation_names(state.get("citations"))
+
+
+def _get_citation_name(names: list[str], index: int) -> str | None:
+    """Safely extract product name at 0-based index."""
+    if not names or index < 0 or index >= len(names):
         return None
-    item = citations[index]
-    if isinstance(item, dict):
-        return item.get("name")
-    return getattr(item, "name", None)
+    return names[index]
 
 
 def _expand_pronoun_query(query: str, state: AgentState) -> str:
-    """SC09 & Ordinal index fix: expand pronouns and ordinal references using citations in state.
+    """SC09 & Ordinal index fix: expand pronouns and ordinal references to the previous turn's products.
 
     E.g. 1: "Nó có phù hợp không?" + citations=[Dell XPS 15] → "Dell XPS 15 có phù hợp không?"
     E.g. 2: "so sánh 1 và 2" + citations=[ASUS VivoBook, Lenovo ThinkPad] →
             "so sánh ASUS VivoBook và Lenovo ThinkPad"
     E.g. 3: "lap 1" + citations=[ASUS VivoBook] → "ASUS VivoBook"
     """
-    citations = state.get("citations") or []
+    citations = _previous_products(state)
     if not citations:
         return query
 
@@ -145,6 +163,41 @@ def _expand_pronoun_query(query: str, state: AgentState) -> str:
     return query
 
 
+async def _resolve_from_memory(query: str, state: AgentState, db) -> str:
+    """Prefix a referential query with the product the customer most likely means.
+
+    Sources, newest first: this thread's previous products, then the customer's
+    episodic events and conversation summaries (services.memory.recall). A
+    time-referenced query ("hôm qua", "lần trước") prefers earlier threads over
+    what was just said in this one. Returns the query unchanged when it is not
+    referential or nothing is recalled.
+    """
+    from services.memory.episodic import has_time_reference
+    from services.memory.recall import is_referential, recall_products
+
+    customer_id = state.get("customer_id")
+    if not settings.MEMORY_RECALL_ENABLED or not customer_id or not is_referential(query):
+        return query
+
+    thread_products = _previous_products(state)
+    if has_time_reference(query):
+        names = (
+            await recall_products(
+                customer_id=customer_id, db=db, exclude_thread_id=state.get("session_id")
+            )
+            or thread_products
+            or await recall_products(customer_id=customer_id, db=db)
+        )
+    else:
+        names = thread_products or await recall_products(customer_id=customer_id, db=db)
+
+    if not names:
+        return query
+    resolved = f"{names[0]} {query}"
+    logger.info("Memory recall: %r → %r", query, resolved)
+    return resolved
+
+
 def _build_result_dict(result, citations_cls) -> dict:
     """Build state-update dict from a RetrievalResult."""
     from core.agent.state import Citation
@@ -159,7 +212,7 @@ def _build_result_dict(result, citations_cls) -> dict:
             citations.append(Citation(**c))
         except Exception:
             pass
-    return {
+    update = {
         "retrieved_chunks": retrieved_chunks,
         "citations": citations,
         "similarity_score": result.best_similarity,
@@ -169,6 +222,9 @@ def _build_result_dict(result, citations_cls) -> dict:
         "canonical_query": result.canonical_query,
         "query_vector": result.query_vector,
     }
+    if not result.declined and citations:
+        update["recent_products"] = _citation_names(citations)
+    return update
 
 
 async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
@@ -232,12 +288,7 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
             "được",
         }
         if user_reply_clean in affirmation_words:
-            citations = state.get("citations") or []
-            cand_names = [
-                c.get("name") if isinstance(c, dict) else getattr(c, "name", None)
-                for c in citations
-            ]
-            cand_names = [n for n in cand_names if n]
+            cand_names = _previous_products(state)
             cand_note = f" ({', '.join(cand_names[:2])})" if cand_names else ""
             raw_query = f"{orig_q}{cand_note} {raw_query}"
         else:
@@ -252,8 +303,20 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
             "clarify_count": 0,
         }
 
-    # SC09: expand pronoun queries with previous citation context
-    query = _expand_pronoun_query(raw_query, state)
+    # SC09: expand pronoun queries with the previous turn's products. A time-
+    # referenced query skips this — "nó hôm qua" means an earlier conversation.
+    # Memory recall: still-vague referential queries are resolved from customer
+    # memory BEFORE the catalog search (memory_retrieval_node runs after this
+    # node, too late to fix the search query).
+    from services.memory.episodic import has_time_reference
+
+    query = raw_query
+    if not has_time_reference(raw_query):
+        query = _expand_pronoun_query(raw_query, state)
+    if query == raw_query:
+        query = await _resolve_from_memory(raw_query, state, db)
+    if query != state["user_message"]:
+        clarify_updates["resolved_query"] = query
 
     retrieve = make_retrieval_tool(db)
 
@@ -347,6 +410,7 @@ async def _merge_subquery_results(db, parts: list[str]) -> dict | None:
     return {
         "retrieved_chunks": retrieved_chunks,
         "citations": citations,
+        "recent_products": _citation_names(citations),
         "similarity_score": best_sim,
         "similarity_gap": getattr(last_result, "similarity_gap", 0.0) if last_result else 0.0,
         "declined": False,

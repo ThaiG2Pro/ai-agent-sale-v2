@@ -16,24 +16,6 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# v3-0 P4 (T11 4.4): a time-referenced query needs episodic/semantic memory —
-# never skip retrieval for these tokens.
-_TIME_REFERENCE_TOKENS = (
-    "hôm qua",
-    "hôm trước",
-    "lần trước",
-    "bữa trước",
-    "tuần trước",
-    "tháng trước",
-    "đơn cũ",
-    "lúc nãy",
-    "ban nãy",
-    "yesterday",
-    "last time",
-    "last week",
-    "before",
-)
-
 
 def _empty_update() -> dict:
     """Fresh empty state delta (new lists each call — reducers may mutate)."""
@@ -87,9 +69,10 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
         # latency only). NEVER for FOLLOW_UP or time-referenced queries — this
         # node is what rescues those from borderline confidence.
         if settings.MEMORY_SKIP_ENABLED and primary_intent != IntentEnum.FOLLOW_UP:
-            user_msg_l = (state.get("user_message") or "").lower()
-            has_time_ref = any(tok in user_msg_l for tok in _TIME_REFERENCE_TOKENS)
-            if not has_time_ref and (
+            from services.memory.recall import is_referential
+
+            # Time-referenced or deictic ("con đó") turns always need memory.
+            if not is_referential(state.get("user_message")) and (
                 state.get("cached_answer")
                 or float(state.get("similarity_score") or 0.0) >= settings.MEMORY_SKIP_SIMILARITY
             ):
@@ -110,10 +93,12 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
         user_message = state.get("user_message", "")
         semantic_service = SemanticMemoryService()
 
-        # Query semantic memory (T117, T119, T123)
+        # Query semantic memory (T117, T119, T123). Search with the query
+        # retrieval_node resolved ("Dell XPS 15 con đó giá sao") — the raw
+        # vague message embeds far from any stored summary.
         results = await semantic_service.retrieve(
             customer_id=customer_id,
-            query=user_message,
+            query=state.get("resolved_query") or user_message,
             db=db,
             top_k=settings.MEMORY_TOP_K,  # Adaptive TopK
             min_score=settings.MEMORY_RELEVANCE_THRESHOLD,  # Threshold (T120)
@@ -141,18 +126,21 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
             },
         )
 
-        # WP-V2-4: time-referenced queries ("hôm qua", "lần trước") also pull the
-        # customer's most recent episodic events — the semantic summaries alone
+        # WP-V2-4: time-referenced queries ("hôm qua", "lần trước") — and, with
+        # MEMORY_RECALL_ENABLED, deictic ones ("con đó") — also pull the
+        # customer's most recent episodic events: the semantic summaries alone
         # cannot resolve "cái máy hôm qua em tư vấn ấy". Best-effort: an episodic
         # failure must never break the semantic path.
-        try:
-            from services.memory.episodic import (
-                EpisodicMemoryService,
-                format_event_line,
-                has_time_reference,
-            )
+        from services.memory.episodic import has_time_reference
+        from services.memory.recall import is_referential, recall_digest
 
-            if settings.EPISODIC_MEMORY_ENABLED and has_time_reference(user_message):
+        wants_recall = has_time_reference(user_message) or (
+            settings.MEMORY_RECALL_ENABLED and is_referential(user_message)
+        )
+        try:
+            from services.memory.episodic import EpisodicMemoryService, format_event_line
+
+            if settings.EPISODIC_MEMORY_ENABLED and wants_recall:
                 events = await EpisodicMemoryService().recent_events(
                     customer_id=customer_id, db=db
                 )
@@ -173,9 +161,22 @@ async def memory_retrieval_node(state: "AgentState", config: "RunnableConfig") -
         except Exception:
             logger.error("Episodic memory retrieval failed", exc_info=True)
 
+        # Memory recall: structured digest (products discussed, budget,
+        # preference, open questions) from conversation summaries — columns the
+        # summary_text-only semantic search never surfaces. Goes first so the
+        # answer prompt (and _compress_context) leads with it.
+        if settings.MEMORY_RECALL_ENABLED and wants_recall:
+            digest = await recall_digest(customer_id=customer_id, db=db)
+            if digest:
+                memory_context.insert(0, {"summary_text": digest, "source": "recall_digest"})
+                scores.insert(0, 1.0)
+
         update_dict = {"memory_context": memory_context, "memory_retrieval_scores": scores}
-        if memory_context:
-            # Past cross-session memory retrieved — allow answer_node to process context
+        # Memory may only lift a decline when retrieval did NOT run (FOLLOW_UP
+        # path: router → memory). On the retrieval path a decline means the
+        # catalog has nothing to ground on — memory text alone used to flip it
+        # and the LLM answered product questions with zero product context.
+        if memory_context and primary_intent == IntentEnum.FOLLOW_UP:
             update_dict["declined"] = False
 
         return update_dict

@@ -199,6 +199,10 @@ async def test_answer_node_economy_failure_keeps_error_path(monkeypatch):
         with patch("core.agent.nodes.answer._write_model_trace", new_callable=AsyncMock):
             result = await answer_node(state, {"configurable": {}})
 
-    assert "Lỗi khi tạo phản hồi" in result["response"]
+    # Generic customer-facing text — the raw exception is never shown.
+    from core.agent.nodes.answer import GENERATION_ERROR_MESSAGE
+
+    assert result["response"] == GENERATION_ERROR_MESSAGE
+    assert "all models down" not in result["response"]
     assert result["model_used"] is None
     assert mock_llm.call_count == 1

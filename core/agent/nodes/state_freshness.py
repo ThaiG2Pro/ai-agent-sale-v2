@@ -41,7 +41,16 @@ async def state_freshness_validator_node(state: AgentState, config: RunnableConf
             goto="customer_support_node", update={"hitl_rejection_reason": "product_not_found"}
         )
 
-    if product.stock_quantity <= 0:
+    # Compare against the ORDERED quantity, not just > 0 — stock 1 vs order of 3
+    # used to pass here and fail only after the human had approved.
+    from services.draft_orders import normalize_items
+
+    ordered_qty = sum(
+        int(i.get("quantity") or 1)
+        for i in normalize_items(order_info)
+        if str(i.get("product_id")) == str(product_id)
+    ) or int(order_info.get("quantity") or 1)
+    if product.stock_quantity < ordered_qty:
         return Command(
             goto="customer_support_node", update={"hitl_rejection_reason": "out_of_stock"}
         )

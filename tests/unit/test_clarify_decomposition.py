@@ -103,15 +103,27 @@ class TestClarifyGate:
 
     @pytest.mark.asyncio
     async def test_memory_context_override_wins_over_clarify(self):
-        """Peer behavior preserved: memory context clears the decline entirely."""
+        """Memory that RESOLVED the query (resolved_query) clears the decline entirely."""
+        state = _state(
+            similarity_score=0.60,
+            declined=False,
+            memory_context=[{"summary_text": "khách đã hỏi về Dell XPS"}],
+            resolved_query="Dell XPS câu hỏi mơ hồ",
+        )
+        result = await confidence_node(state, _mock_config())
+        assert result["declined"] is False
+        assert result["needs_clarification"] is False
+
+    @pytest.mark.asyncio
+    async def test_unresolved_memory_context_does_not_suppress_clarify(self):
+        """Memory text alone (nothing resolved) no longer disables Layer 2 / clarify."""
         state = _state(
             similarity_score=0.60,
             declined=False,
             memory_context=[{"summary_text": "khách đã hỏi về Dell XPS"}],
         )
         result = await confidence_node(state, _mock_config())
-        assert result["declined"] is False
-        assert result["needs_clarification"] is False
+        assert result["needs_clarification"] is True
 
     @pytest.mark.asyncio
     async def test_borderline_answer_intents_keep_escalation_path(self):

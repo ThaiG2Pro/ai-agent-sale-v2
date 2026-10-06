@@ -24,6 +24,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def _fail(db: AsyncSession, error: str) -> Command:
+    """Abort the order: roll back any stock decrement, hand the turn to a human.
+
+    Never back to answer_node with just an `error` — the customer must be told the
+    order did NOT go through (an LLM answer there could claim success).
+    """
+    try:
+        await db.rollback()
+    except Exception:
+        logger.warning("rollback after order failure failed", exc_info=True)
+    return Command(
+        goto="customer_support_node",
+        update={"error": error, "hitl_rejection_reason": "order_execution_failed"},
+    )
+
+
 async def order_execution_node(state: AgentState, config: RunnableConfig) -> Command:
     """Performs atomic order execution (Phase 11).
 
@@ -38,6 +54,20 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
     if not order_info or "product_id" not in order_info:
         logger.error(f"Missing order_info for session {session_id}")
         return Command(goto="answer_node", update={"error": "Missing order information"})
+
+    # Idempotency: LangGraph may re-run this node (resume/replay). An order
+    # already confirmed in state must never decrement stock a second time.
+    if order_info.get("status") == "confirmed" and order_info.get("order_id"):
+        logger.warning("order_execution replay for %s — already confirmed", session_id)
+        return Command(
+            goto="answer_node",
+            update={
+                "response": (
+                    f"Đơn hàng `{order_info['order_id']}` của anh/chị đã được xác nhận "
+                    "trước đó rồi ạ."
+                )
+            },
+        )
 
     from services.draft_orders import items_total, normalize_items
 
@@ -66,10 +96,7 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
                 tool_name="order_processing",
             )
             if not stock_result_wrapper.success:
-                return Command(
-                    goto="answer_node",
-                    update={"error": stock_result_wrapper.error or "Order processing timed out"},
-                )
+                return await _fail(db, stock_result_wrapper.error or "Order processing timed out")
             if stock_result_wrapper.data.rowcount == 0:
                 # Stock was insufficient or product missing — compensate.
                 logger.warning(f"Stock exhaustion or race for product {item_pid}")
@@ -136,10 +163,7 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
                 tool_name="order_processing",
             )
             if not order_insert_wrapper.success:
-                return Command(
-                    goto="answer_node",
-                    update={"error": order_insert_wrapper.error or "Order processing timed out"},
-                )
+                return await _fail(db, order_insert_wrapper.error or "Order processing timed out")
 
         # Flush to DB (the graph caller or checkpointer might handle commit,
         # but for business data we should be explicit if we are not sharing tx)
@@ -149,10 +173,10 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
             tool_name="order_processing",
         )
         if not flush_wrapper.success:
-            return Command(
-                goto="answer_node",
-                update={"error": flush_wrapper.error or "Order processing timed out"},
-            )
+            return await _fail(db, flush_wrapper.error or "Order processing timed out")
+        # Commit the order explicitly — previously it rode on answer_node's
+        # trace commit, so a failure in between left a half-applied order.
+        await db.commit()
 
         # v3-0 P4 (T11 4.3 mandatory condition): stock just changed — cached
         # availability/pricing answers are now stale. Best-effort: an
@@ -243,4 +267,4 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
 
     except Exception as e:
         logger.exception(f"Order execution failed for session {session_id}")
-        return Command(goto="answer_node", update={"error": f"Order execution failed: {e!s}"})
+        return await _fail(db, f"Order execution failed: {e!s}")

@@ -254,6 +254,30 @@ class Settings(BaseSettings):
     # (no writes, no retrieval — semantic memory only, pre-V2-4 behavior).
     EPISODIC_MEMORY_ENABLED: bool = True
     EPISODIC_RECENT_LIMIT: int = Field(default=5, ge=1, le=50)
+    # Memory recall: a referential query that names no product ("con đó", "cái
+    # máy hôm qua em tư vấn") is resolved from customer memory (thread products,
+    # episodic events, summary products_discussed) BEFORE the catalog search,
+    # and also pulls a structured customer digest into memory_context.
+    # False = kill switch (pre-fix: search the literal vague query).
+    MEMORY_RECALL_ENABLED: bool = True
+    # answer_node sends the last N in-session messages (customer + agent) to the
+    # LLM so multi-turn references resolve. 0 = pre-fix behavior (current
+    # question only). Each message is truncated to ANSWER_HISTORY_MAX_CHARS.
+    ANSWER_HISTORY_MAX_MESSAGES: int = Field(default=6, ge=0, le=20)
+    ANSWER_HISTORY_MAX_CHARS: int = Field(default=500, ge=50, le=4000)
+    # Order slots (phone/address/quantity/budget) via one structured LLM call on
+    # the light tier, regex as fallback + phone validator. Only on ORDER turns
+    # and while an order is parked waiting for contact info. False = regex only.
+    ORDER_SLOT_LLM_ENABLED: bool = True
+    ORDER_SLOT_LLM_TIMEOUT_S: float = Field(default=4.0, gt=0, le=30)
+    # Input guard: Llama Guard screens every customer message at the router.
+    # On by default; fail-open, so the offline (Ollama) stack without a guard
+    # model just skips it (INPUT_GUARD_MODEL is called via LiteLLM directly).
+    # Fail-open on outage. Empty BLOCK_CATEGORIES = block any "unsafe".
+    INPUT_GUARD_ENABLED: bool = True
+    INPUT_GUARD_MODEL: str = "groq/meta-llama/llama-guard-4-12b"
+    INPUT_GUARD_TIMEOUT_S: float = Field(default=3.0, gt=0, le=30)
+    INPUT_GUARD_BLOCK_CATEGORIES: list[str] = Field(default_factory=list)
     # WP-V2-4: risk-score HITL tiers (anti approval-fatigue). False = kill
     # switch (pre-V2-4 binary triggers: ORDER_PLACEMENT OR low confidence).
     # risk = W_CONF*(1-confidence) + W_VALUE*order_value_norm + W_HISTORY*history

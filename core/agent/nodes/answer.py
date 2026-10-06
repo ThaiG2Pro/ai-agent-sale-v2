@@ -3,10 +3,17 @@
 Why: Universal trace point — all graph paths (accepted AND declined) route here
 to ensure tracing happens (FR-008).
 
-What:
-- Cache hit path: returns cached_answer directly (no LLM call)
-- Declined path: returns DECLINE_MESSAGE (no LLM call)
-- Accepted path: builds context from retrieved_chunks, calls LLM, writes cache
+What: a dispatcher over the answer paths, in priority order —
+  0   business node already responded        → pass through
+  0.5 business node failed (error, no reply)  → fixed error text, no LLM
+  1   cache hit                                → cached answer, no LLM
+  1.2 SMALLTALK fast path                      → template, no LLM
+  1.5 FOLLOW_UP status                         → order status from DB, no LLM
+  2   declined                                 → catalog fallback or DECLINE_MESSAGE
+  3   accepted                                 → LLM generation (_generate)
+Prompt construction lives in core.agent.answer_prompt; template responses and the
+per-turn writes (trace, cache, episodic) in core.agent.answer_support. Trace writes
+stay routed through this module's `_write_model_trace` name (tests patch it).
 
 Cache write happens here (not in retrieval_node) because we only write
 the final answer after the correct model (economy or premium) has generated it.
@@ -14,22 +21,50 @@ the final answer after the correct model (economy or premium) has generated it.
 
 from __future__ import annotations
 
-import sys
+import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import logfire
-from sqlalchemy import insert
 
+from core.agent.answer_prompt import (
+    build_context,
+    build_messages,
+    compress_context as _compress_context,  # noqa: F401
+    history_messages as _history_messages,  # noqa: F401
+)
+from core.agent.answer_support import (
+    degraded_turn_response as _degraded_turn_response,
+    generate_catalog_response as _generate_catalog_response,
+    generate_followup_response as _generate_followup_response,
+    write_cache as _write_cache,
+    write_episodic_event as _write_episodic_event,
+    write_model_trace as _write_model_trace,
+)
 from core.agent.state import EscalationReasonEnum
 from core.config import settings
-from models.schema import ModelTrace
 from services.ai import AIGateway, extract_llm_metrics
 from services.rag.constants import DECLINE_MESSAGE
+
+if TYPE_CHECKING:
+    from langchain_core.runnables import RunnableConfig
+
+    from core.agent.state import AgentState
+    from services.ai import LLMUsageMetrics
+
+logger = logging.getLogger(__name__)
 
 # v3-0 P4 (4.1): only advisory intents ride the tool loop — order/HITL keep
 # the state machine (mirrors core.agent.tool_loop.ADVISORY_INTENTS).
 _ADVISORY_TOOL_LOOP_INTENTS = frozenset({"INFO_QUERY", "PRICING", "COMPARISON", "AVAILABILITY"})
+
+# Customer-facing text when generation fails or a business node reports an
+# error — never the raw exception (conventions: 500 detail stays generic).
+GENERATION_ERROR_MESSAGE = (
+    "Dạ, hệ thống của shop đang gặp chút trục trặc nên em chưa trả lời được ngay. "
+    "Anh/chị vui lòng thử lại sau ít phút, hoặc để lại lời nhắn — nhân viên shop sẽ "
+    "liên hệ hỗ trợ sớm nhất ạ!"
+)
 
 # WP-V2-5: returned instead of an LLM answer when CUSTOMER_DAILY_MSG_CAP is hit.
 CUSTOMER_CAP_MESSAGE = (
@@ -38,170 +73,166 @@ CUSTOMER_CAP_MESSAGE = (
     "nhắn — nhân viên của shop sẽ liên hệ hỗ trợ sớm nhất nhé! 🙏"
 )
 
-if TYPE_CHECKING:
-    from langchain_core.runnables import RunnableConfig
-    from sqlalchemy.ext.asyncio import AsyncSession
+SMALLTALK_TEMPLATE = (
+    "Xin chào! Em là trợ lý bán hàng của shop 🤗 Em có thể tư vấn sản "
+    "phẩm điện tử, báo giá và hỗ trợ đặt hàng. Anh/chị đang quan tâm "
+    "sản phẩm nào ạ?"
+)
 
-    from core.agent.state import AgentState
-    from services.ai import LLMUsageMetrics
+_UNSET: Any = object()
+
+
+async def _reply(
+    state: AgentState,
+    db,
+    text: str,
+    *,
+    trace: dict,
+    model_used: Any = _UNSET,
+    episodic: bool = False,
+) -> dict:
+    """Trace + (optional) episodic write + the standard response update."""
+    from langchain_core.messages import AIMessage
+
+    await _write_model_trace(state, db=db, metadata_=trace)
+    if episodic:
+        await _write_episodic_event(state, text, db)
+    update: dict = {"messages": [AIMessage(content=text)], "response": text}
+    if model_used is not _UNSET:
+        update["model_used"] = model_used
+    return update
 
 
 async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
-    """Generate final answer or decline message (T048).
-
-    Universal trace point: writes model_traces regardless of accept/decline (FR-008).
-    DB session injected via config["configurable"]["db"].
-
-    Paths:
-    0. Already responded (response set by business node) → return as-is (tracing only)
-    1. Cache hit (cached_answer set) → return cached answer, no LLM call
-    2. Declined (Layer 1 or Layer 2) → return DECLINE_MESSAGE, no LLM call
-    3. Accepted → LLM call with retrieved_chunks context, then write to cache
-
-    Returns:
-        State update dict with response, model_used
-    """
+    """Generate final answer or decline message (T048) — see module docstring."""
     db = (config.get("configurable") or {}).get("db")
+    escalation_flag = state.get("escalation_flag", False)
 
-    # Path 0: Already responded by a business node (e.g., order_execution or customer_support)
-    # We still want to write a trace for this turn.
+    # Path 0: a business node (order_execution, customer_support, ...) responded.
     if state.get("response"):
-        await _write_model_trace(
+        return await _reply(
             state,
-            db=db,
-            metadata_={
+            db,
+            state["response"],
+            trace={
                 "guard_decision": "BUSINESS_LOGIC",
-                "escalation_flag": state.get("escalation_flag", False),
+                "escalation_flag": escalation_flag,
                 "declined": False,
                 "intended_model": "business_logic",
             },
+            episodic=True,
         )
-        await _write_episodic_event(state, state["response"], db)
-        from langchain_core.messages import AIMessage
 
-        return {
-            "messages": [AIMessage(content=state["response"])],
-            "response": state["response"],
-        }
+    # Path 0.5: a business node failed with no response. An LLM answer here
+    # could claim the order went through. Retrieval errors set declined=True
+    # and keep the decline path below.
+    if state.get("error") and not state.get("declined", False):
+        logger.warning("answer_node: business error surfaced: %s", state.get("error"))
+        return await _reply(
+            state,
+            db,
+            GENERATION_ERROR_MESSAGE,
+            trace={
+                "guard_decision": "BUSINESS_ERROR",
+                "escalation_flag": escalation_flag,
+                "declined": False,
+                "intended_model": "business_error",
+            },
+            model_used=None,
+        )
 
-    # Path 1: Cache hit — use pre-generated answer, skip LLM entirely
+    # Path 1: cache hit.
     cached_answer = state.get("cached_answer")
     if cached_answer and not state.get("declined", False):
-        await _write_model_trace(
+        return await _reply(
             state,
-            db=db,
-            metadata_={
+            db,
+            cached_answer,
+            trace={
                 "guard_decision": "CACHE_HIT",
                 "escalation_reason": state.get("escalation_reason"),
                 "escalation_failure": state.get("escalation_failure", False),
-                "escalation_flag": state.get("escalation_flag", False),
+                "escalation_flag": escalation_flag,
                 "declined": False,
                 "intended_model": "cache",
             },
+            model_used="cache",
+            episodic=True,
         )
-        await _write_episodic_event(state, cached_answer, db)
-        from langchain_core.messages import AIMessage
 
-        return {
-            "messages": [AIMessage(content=cached_answer)],
-            "response": cached_answer,
-            "model_used": "cache",
-        }
-
-    # Path 1.2 — v3-0 P4 (T11 4.2): SMALLTALK fast-path template. The router's
-    # conservative keyword gate matched (full-match, <=4 words, no business
-    # token), so this turn costs ZERO LLM calls. Traced like every other path.
+    # Path 1.2 — v3-0 P4 (T11 4.2): SMALLTALK fast-path template, zero LLM calls.
     if settings.SMALLTALK_FASTPATH_ENABLED and state.get("smalltalk_fastpath"):
-        from langchain_core.messages import AIMessage
-
-        template_resp = (
-            "Xin chào! Em là trợ lý bán hàng của shop 🤗 Em có thể tư vấn sản "
-            "phẩm điện tử, báo giá và hỗ trợ đặt hàng. Anh/chị đang quan tâm "
-            "sản phẩm nào ạ?"
-        )
-        await _write_model_trace(
+        return await _reply(
             state,
-            db=db,
-            metadata_={
+            db,
+            SMALLTALK_TEMPLATE,
+            trace={
                 "guard_decision": "SMALLTALK_FASTPATH",
                 "escalation_flag": False,
                 "declined": False,
                 "intended_model": "template",
             },
+            model_used="template",
         )
-        return {
-            "messages": [AIMessage(content=template_resp)],
-            "response": template_resp,
-            "model_used": "template",
-        }
 
-    # Path 1.5: FOLLOW_UP status inquiry (e.g. "đặt chưa?")
+    # Path 1.5: FOLLOW_UP status inquiry ("đặt chưa?").
     if state.get("intent") == "FOLLOW_UP":
-        from langchain_core.messages import AIMessage
-
         followup_resp = await _generate_followup_response(state, db)
-        await _write_model_trace(
+        return await _reply(
             state,
-            db=db,
-            metadata_={
+            db,
+            followup_resp,
+            trace={
                 "guard_decision": "FOLLOW_UP_STATUS",
                 "escalation_flag": False,
                 "declined": False,
                 "intended_model": "followup_status",
             },
+            model_used="followup_status",
         )
-        return {
-            "messages": [AIMessage(content=followup_resp)],
-            "response": followup_resp,
-            "model_used": "followup_status",
-        }
 
-    # Path 2: Declined (Layer 1 or Layer 2 guard) → return without LLM
+    # Path 2: declined (Layer 1 or Layer 2).
     if state.get("declined", False):
-        from langchain_core.messages import AIMessage
-
-        # SC01 fix: vague browse INFO_QUERY → show product catalog instead of DECLINE_MESSAGE
+        # SC01: vague browse INFO_QUERY → product catalog instead of a decline.
         if state.get("intent") == "INFO_QUERY" and db:
             catalog_response = await _generate_catalog_response(state, db)
             if catalog_response:
-                await _write_model_trace(
+                return await _reply(
                     state,
-                    db=db,
-                    metadata_={
+                    db,
+                    catalog_response,
+                    trace={
                         "guard_decision": "CATALOG_FALLBACK",
                         "escalation_flag": False,
                         "declined": False,
                         "intended_model": "catalog_fallback",
                     },
+                    model_used="catalog_fallback",
                 )
-                return {
-                    "messages": [AIMessage(content=catalog_response)],
-                    "response": catalog_response,
-                    "model_used": "catalog_fallback",
-                }
-
-        await _write_model_trace(
+        return await _reply(
             state,
-            db=db,
-            metadata_={
+            db,
+            DECLINE_MESSAGE,
+            trace={
                 "guard_decision": "REJECTED",
                 "escalation_reason": state.get("escalation_reason"),
                 "escalation_failure": state.get("escalation_failure", False),
-                "escalation_flag": state.get("escalation_flag", False),
+                "escalation_flag": escalation_flag,
                 "intended_model": state.get("model_used"),
             },
+            model_used=None,
         )
-        return {
-            "messages": [AIMessage(content=DECLINE_MESSAGE)],
-            "response": DECLINE_MESSAGE,
-            "model_used": None,
-        }
 
-    # Path 3: Accepted → call LLM with citations context
+    # Path 3: accepted → LLM generation.
+    return await _generate(state, db)
+
+
+async def _generate(state: AgentState, db) -> dict:
+    """Path 3: budget guard → model choice → generation → groundedness → writes."""
     model = state.get("model_used") or "economy-chat"
 
-    # ── WP-V2-5 budget guard: only this path spends LLM tokens. Both checks
-    # are no-ops at default config (limits = 0) and fail open on DB error.
+    # WP-V2-5 budget guard: only this path spends LLM tokens. No-ops at
+    # default config (limits = 0); fails open on DB error.
     from services.costs import check_budget
 
     budget = await check_budget(state.get("customer_id"), db)
@@ -227,115 +258,21 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         model = "light-chat"
         budget_downgrade = True
 
-    # WP-V2-5 routing tune: SMALLTALK has no retrieval context and needs no
-    # reasoning — the light tier answers it at a fraction of the cost.
+    # WP-V2-5 routing tune: SMALLTALK needs no reasoning → light tier.
     if settings.CHEAP_INTENT_LIGHT_ROUTING and state.get("intent") == "SMALLTALK":
         model = "light-chat"
 
-    # Build context from retrieved chunks (use all chunks, not just first)
-    chunks = state.get("retrieved_chunks", [])
-    chunk_text = "\n\n".join(c.get("text", "") for c in chunks if c.get("text"))
+    chunk_text, citations_text = build_context(state)
+    messages = build_messages(state, chunk_text, citations_text)
 
-    citations_text = ""
-    if state.get("citations"):
-        citations_text = "\n\nNguồn tham khảo:\n"
-        for i, citation in enumerate(state["citations"], 1):
-            citations_text += f"{i}. {citation.name} ({citation.sku})\n"
-
-    # SC07 fix: SMALLTALK path — domain guardrail to prevent off-topic answers
-    if state.get("intent") == "SMALLTALK":
-        system_prompt = (
-            "Bạn là trợ lý bán hàng AI chuyên về điện tử tiêu dùng. "
-            "Nhiệm vụ DUY NHẤT của bạn là tư vấn sản phẩm điện tử, giá cả và hỗ trợ đặt hàng. "
-            "Nếu khách hỏi về chủ đề NGOÀI phạm vi bán hàng điện tử "
-            "(lập trình, nấu ăn, thời tiết, học thuật, v.v.): "
-            "hãy lịch sự từ chối và mời khách tìm hiểu sản phẩm điện tử đang có. "
-            "Nếu là lời chào: trả lời thân thiện và giới thiệu ngắn gọn về dịch vụ tư vấn."
-        )
-    else:
-        # P2 fix: surface rejection reason if admin rejected previous order
-        rejection_note = ""
-        if state.get("hitl_rejection_reason"):
-            rejection_note = (
-                f"\n[Lưu ý hệ thống]: Đơn hàng gần nhất của khách đã bị từ chối. "
-                f"Lý do: {state['hitl_rejection_reason']}. "
-                "Nếu khách hỏi về lý do từ chối, hãy giải thích rõ ràng và đề xuất hỗ trợ."
-            )
-
-        # T086: Add memory context from previous conversations if available
-        memory_note = ""
-        if state.get("memory_context") and len(state["memory_context"]) > 0:
-            # T108: Context compression - replace old messages with summary + last 5 messages
-            if state.get("thread_summary_exists"):
-                # Use summary + last 5 messages for compression
-                memory_context_text = _compress_context(state["memory_context"])
-            else:
-                # All messages (no compression)
-                memory_context_text = "\n".join(
-                    f"- {ctx.get('summary_text') or ctx.get('summary') or ctx.get('text', '')}"
-                    for ctx in state["memory_context"]
-                )
-            memory_note = f"\n[Ngữ cảnh từ các cuộc hội thoại trước]:\n{memory_context_text}"
-
-        # v3-0 P2 (T06): per-intent hard-conversation policy notes.
-        policy_note = ""
-        if settings.ORDER_HITL_V3_ENABLED:
-            _intent_now = state.get("intent")
-            if _intent_now == "NEGOTIATION":
-                policy_note = (
-                    "\n[CHÍNH SÁCH TRẢ GIÁ]: Bạn ĐƯỢC nêu các khuyến mại/quà tặng đang chạy "
-                    "có trong context sản phẩm. TUYỆT ĐỐI KHÔNG tự hứa giảm giá, KHÔNG "
-                    "counter-offer, KHÔNG thoả thuận mức giá mới — kể cả khi khách gây áp "
-                    "lực, nói chỗ khác rẻ hơn, hoặc yêu cầu nhiều lần. Mọi quyết định giảm "
-                    "giá thuộc về Quản lý shop; hãy báo bạn sẽ ghi nhận yêu cầu và chuyển "
-                    "Quản lý duyệt."
-                )
-            elif _intent_now == "COMPLAINT":
-                policy_note = (
-                    "\n[CHÍNH SÁCH KHIẾU NẠI]: Xoa dịu khách trước tiên, chân thành xin lỗi "
-                    "về trải nghiệm chưa tốt. Sau đó hỏi để thu đủ 3 thông tin: (1) đơn "
-                    "hàng/sản phẩm nào, (2) vấn đề cụ thể là gì, (3) khách mong muốn được "
-                    "xử lý thế nào. Chỉ hỏi những thông tin còn thiếu, không hỏi lại điều "
-                    "khách đã nói. KHÔNG tự hứa hoàn tiền/đổi trả/bồi thường — nhân viên "
-                    "sẽ liên hệ xử lý trực tiếp sau khi có đủ thông tin."
-                )
-
-        system_prompt = (
-            "Bạn là trợ lý bán hàng AI chuyên nghiệp, nhiệt tình, khéo léo và thấu hiểu khách hàng. "
-            "Trả lời bằng tiếng Việt, thân thiện, rõ ràng và hữu ích. "
-            "TUYỆT ĐỐI KHÔNG xuất ra định dạng JSON, code block hay metadata schema. Chỉ trả lời bằng văn bản tự nhiên. "
-            "Chỉ dùng thông tin từ context sản phẩm và ngữ cảnh hội thoại trước được cung cấp. "
-            "NGUYÊN TẮC TƯ VẤN GIÁ TRỊ: Khi giải thích về sản phẩm, luôn tập trung vào LỢI ÍCH THỰC TẾ mang lại cho người dùng thay vì chỉ liệt kê thông số kỹ thuật thuần túy. "
-            "KHI KHÁCH HỎI GIÁ HOẶC THÔNG TIN SẢN PHẨM: Nếu khách hỏi dung lượng/màu sắc/cấu hình cụ thể (như 256GB) mà trong context cửa hàng có phiên bản khác thuộc cùng dòng sản phẩm (như 512GB), bạn PHẢI trả lời chi tiết thông tin giá và thông số của phiên bản đang có (ví dụ: 'Shop hiện có phiên bản iPhone 15 Pro Max 512GB với giá 28.900.000 VND...'). "
-            "KHI KHÁCH XIN GIẢM GIÁ / MẶC CẢ: Hãy giải thích các ưu đãi/quà tặng hiện có của shop (như Tặng Củ sạc GaN 65W, Miễn phí giao hàng). Nếu khách muốn giảm thêm giá ngoài chính sách, hãy báo bạn sẽ ghi nhận để chuyển Quản lý shop (Admin) duyệt ưu đãi riêng. "
-            "KHI TƯ VẤN SẢN PHẨM / GIÁ CẢ / SO SÁNH: Sau khi cung cấp thông tin, bạn LUÔN LUÔN kết thúc bằng một lời mời chào đặt hàng thân thiện hoặc câu hỏi định hướng (Sales CTA) như: 'Anh/chị có muốn shop giữ hàng và hỗ trợ đặt đơn giao tận nhà cho mình không ạ?' "
-            "TUYỆT ĐỐI KHÔNG báo 'không tìm thấy thông tin' khi context có thông tin về dòng sản phẩm đó. "
-            f"Chỉ báo không tìm thấy khi context hoàn toàn không có thông tin sản phẩm liên quan.{rejection_note}{memory_note}{policy_note}"
-        )
-
-    if state.get("intent") == "SMALLTALK":
-        prompt = state["user_message"]
-    else:
-        user_q = state["user_message"]
-        prompt = f"Context sản phẩm:\n{chunk_text}\n{citations_text}\nCâu hỏi: {user_q}"
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": prompt},
-    ]
-    escalation_failure = state.get("escalation_failure", False)
-
-    # ── WP-V2-1 cascade verification (research §7): intent escalations
-    # (COMPLAINT/NEGOTIATION) answer on economy-chat first; PREMIUM_MODEL is
-    # spent only when the groundedness verdict fails. Requires the groundedness
-    # check as its verifier — with either switch off, premium goes direct (old
-    # behavior). LOW_CONFIDENCE escalations keep premium direct: their trigger
-    # already IS low confidence, so an economy first pass would just be wasted.
+    # WP-V2-1 cascade (research §7): intent escalations (COMPLAINT/NEGOTIATION)
+    # answer on economy-chat first; premium only when groundedness fails.
+    # LOW_CONFIDENCE escalations keep premium direct.
     cascade_target: str | None = None
     if (
         settings.CASCADE_VERIFY_ENABLED
         and settings.GROUNDEDNESS_CHECK_ENABLED
-        and not budget_downgrade  # WP-V2-5: over budget → no premium reserve
+        and not budget_downgrade
         and model not in ("economy-chat", "light-chat")
         and state.get("escalation_reason") == EscalationReasonEnum.INTENT_ESCALATION
         and state.get("intent") != "SMALLTALK"
@@ -343,100 +280,28 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         cascade_target = model
         model = "economy-chat"
 
-    metrics: LLMUsageMetrics | None = None
     start_time = time.perf_counter()
+    gen = await _call_llm(
+        state,
+        db,
+        messages,
+        model=model,
+        cascade_target=cascade_target,
+        budget_downgrade=budget_downgrade,
+        chunk_text=chunk_text,
+        start_time=start_time,
+    )
+    if gen.get("degraded_update") is not None:
+        return gen["degraded_update"]
+    response, model, metrics = gen["response"], gen["model"], gen["metrics"]
+    escalation_failure = gen["escalation_failure"]
 
-    # ── v3-0 P4 (T08 4.1): hybrid escalation — ambiguous advisory turns
-    # (~20%) get the bounded premium tool loop (G1-G8) instead of one fixed
-    # single-shot. (None, None) → fall through to the normal path below.
-    tool_loop_answer: str | None = None
-    if (
-        settings.TOOL_LOOP_ENABLED
-        and db is not None
-        and state.get("escalation_flag")
-        and not budget_downgrade
-        and (state.get("intent") or "") in _ADVISORY_TOOL_LOOP_INTENTS
-    ):
-        from core.agent.tool_loop import run_tool_loop
-
-        tool_loop_answer, tl_model = await run_tool_loop(
-            state["user_message"],
-            db,
-            context_note=chunk_text[:1500],
-        )
-        if tool_loop_answer:
-            response = tool_loop_answer
-            model = tl_model
-
-    # ── v3-0 P3 (T09 3.1/3.2): intent-aware fallback ladder replaces the
-    # single blind economy fallback. Risky intents (ORDER/NEGOTIATION/
-    # COMPLAINT) never accept local/cache answers — full degrade serves the
-    # holding message + support queue (degraded is a 20% signal, 2.3).
-    if tool_loop_answer:
-        pass  # 4.1 answered this turn — skip normal generation
-    elif settings.RESILIENCE_V3_ENABLED:
-        from services import resilience
-
-        turn_started = state.get("turn_started_at") or time.monotonic()
-        ladder_res = await resilience.complete_with_ladder(
-            messages=messages,
-            intent=state.get("intent"),
-            db=db,
-            deadline=turn_started + settings.TURN_BUDGET_S,
-            preferred_model=model,
-        )
-        if ladder_res.response is not None:
-            result = ladder_res.response
-            response = result.choices[0].message.content
-            metrics = extract_llm_metrics(
-                result, latency_ms=(time.perf_counter() - start_time) * 1000
-            )
-            model = ladder_res.model_used
-            if ladder_res.degraded:
-                state["risk_signals"] = [*(state.get("risk_signals") or []), "degraded"]
-        else:
-            return await _degraded_turn_response(state, db)
-    else:
-        try:
-            result = await AIGateway.complete(model=model, messages=messages)
-            response = result.choices[0].message.content
-            metrics = extract_llm_metrics(
-                result, latency_ms=(time.perf_counter() - start_time) * 1000
-            )
-        except Exception as e:
-            # T064 real fallback: premium failed at point of use → degrade to
-            # economy-chat (escalation_failure=True). Cascade inverse: the economy
-            # first pass failed → go straight to the reserved premium target.
-            alt_model = cascade_target if model == "economy-chat" else "economy-chat"
-            if alt_model:
-                try:
-                    model = alt_model
-                    escalation_failure = alt_model == "economy-chat"
-                    result = await AIGateway.complete(model=model, messages=messages)
-                    response = result.choices[0].message.content
-                    metrics = extract_llm_metrics(
-                        result, latency_ms=(time.perf_counter() - start_time) * 1000
-                    )
-                except Exception as e2:
-                    response = f"Lỗi khi tạo phản hồi: {e2!s}"
-                    model = None
-            else:
-                response = f"Lỗi khi tạo phản hồi: {e!s}"
-                model = None
-
-    # Guard against raw JSON schema leaks (e.g. LLM returning IntentClassification JSON string)
+    # Guard against raw JSON schema leaks (IntentClassification JSON as text).
     if response and ("primary_intent" in response or "sensitive_intent" in response):
-        if db:
-            cat_resp = await _generate_catalog_response(state, db)
-            if cat_resp:
-                response = cat_resp
-            else:
-                response = DECLINE_MESSAGE
-        else:
-            response = DECLINE_MESSAGE
+        cat_resp = await _generate_catalog_response(state, db) if db else None
+        response = cat_resp or DECLINE_MESSAGE
 
-    # ── WP-V2-1 groundedness self-check (kill switch: GROUNDEDNESS_CHECK_ENABLED).
-    # Skipped for SMALLTALK (no retrieval context to ground against) and when
+    # WP-V2-1 groundedness self-check. Skipped for SMALLTALK and when
     # generation itself failed (metrics is None).
     grounded_declined = False
     groundedness_meta: dict | None = None
@@ -459,10 +324,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         if grounded_declined:
             response = DECLINE_MESSAGE
 
-    # Write to cache after successful generation (best-effort) — never cache an
-    # answer the groundedness verdict rejected. WP-V2-2 guard: metrics is None
-    # means BOTH generation attempts failed and `response` is the error fallback —
-    # caching it would replay the failure forever.
+    # Cache only real, grounded generations (metrics None = error fallback).
     if (
         response
         and metrics is not None
@@ -473,33 +335,139 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
     ):
         await _write_cache(state, response, db)
 
-    # Universal trace write (FR-008)
-    metadata_ = {
-        "guard_decision": "GROUNDEDNESS_REJECTED" if grounded_declined else "ACCEPTED",
-        "escalation_reason": state.get("escalation_reason"),
-        "escalation_failure": escalation_failure,
-        "escalation_flag": state.get("escalation_flag", False),
-        "declined": grounded_declined,
-        "intended_model": model,
-        "budget_downgrade": budget_downgrade,
-        **(groundedness_meta or {}),
-    }
-    await _write_model_trace(state, db=db, metadata_=metadata_, metrics=metrics)
+    await _write_model_trace(
+        state,
+        db=db,
+        metadata_={
+            "guard_decision": "GROUNDEDNESS_REJECTED" if grounded_declined else "ACCEPTED",
+            "escalation_reason": state.get("escalation_reason"),
+            "escalation_failure": escalation_failure,
+            "escalation_flag": state.get("escalation_flag", False),
+            "declined": grounded_declined,
+            "intended_model": model,
+            "budget_downgrade": budget_downgrade,
+            **(groundedness_meta or {}),
+        },
+        metrics=metrics,
+    )
 
-    # WP-V2-4: record the episodic event for accepted answers only — declines
-    # carry no consultation content worth recalling.
+    # WP-V2-4: episodic memory for accepted answers only.
     if not grounded_declined:
         await _write_episodic_event(state, response, db)
 
     from langchain_core.messages import AIMessage
 
-    return {
+    update = {
         "messages": [AIMessage(content=response)],
         "response": response,
         "model_used": model,
         "escalation_failure": escalation_failure,
         "declined": grounded_declined,
     }
+    if gen["degraded"]:
+        # Returned in the update — mutating `state` in a node is not persisted.
+        update["risk_signals"] = [*(state.get("risk_signals") or []), "degraded"]
+        update["degraded"] = True
+    return update
+
+
+async def _call_llm(
+    state: AgentState,
+    db,
+    messages: list[dict],
+    *,
+    model: str,
+    cascade_target: str | None,
+    budget_downgrade: bool,
+    chunk_text: str,
+    start_time: float,
+) -> dict:
+    """Generation with the tool loop / fallback ladder / single fallback.
+
+    Returns {response, model, metrics, escalation_failure, degraded,
+    degraded_update}; degraded_update is a full node update when every ladder
+    rung failed (holding message + support queue).
+    """
+    out: dict = {
+        "response": None,
+        "model": model,
+        "metrics": None,
+        "escalation_failure": state.get("escalation_failure", False),
+        "degraded": False,
+        "degraded_update": None,
+    }
+
+    def _latency() -> float:
+        return (time.perf_counter() - start_time) * 1000
+
+    # v3-0 P4 (T08 4.1): ambiguous advisory turns get the bounded premium
+    # tool loop (G1-G8) instead of one single-shot.
+    if (
+        settings.TOOL_LOOP_ENABLED
+        and db is not None
+        and state.get("escalation_flag")
+        and not budget_downgrade
+        and (state.get("intent") or "") in _ADVISORY_TOOL_LOOP_INTENTS
+    ):
+        from core.agent.tool_loop import run_tool_loop
+
+        answer, tl_model = await run_tool_loop(
+            state["user_message"], db, context_note=chunk_text[:1500]
+        )
+        if answer:
+            out.update(response=answer, model=tl_model)
+            return out
+
+    # v3-0 P3 (T09): intent-aware fallback ladder.
+    if settings.RESILIENCE_V3_ENABLED:
+        from services import resilience
+
+        turn_started = state.get("turn_started_at") or time.monotonic()
+        ladder_res = await resilience.complete_with_ladder(
+            messages=messages,
+            intent=state.get("intent"),
+            db=db,
+            deadline=turn_started + settings.TURN_BUDGET_S,
+            preferred_model=model,
+        )
+        if ladder_res.response is None:
+            out["degraded_update"] = await _degraded_turn_response(state, db)
+            return out
+        result = ladder_res.response
+        out.update(
+            response=result.choices[0].message.content,
+            metrics=extract_llm_metrics(result, latency_ms=_latency()),
+            model=ladder_res.model_used,
+            degraded=bool(ladder_res.degraded),
+        )
+        return out
+
+    try:
+        result = await AIGateway.complete(model=model, messages=messages)
+        out.update(
+            response=result.choices[0].message.content,
+            metrics=extract_llm_metrics(result, latency_ms=_latency()),
+        )
+        return out
+    except Exception as e:
+        # T064: premium failed → economy-chat (escalation_failure=True).
+        # Cascade inverse: economy first pass failed → reserved premium target.
+        alt_model = cascade_target if model == "economy-chat" else "economy-chat"
+        if not alt_model:
+            logger.error("answer generation failed: %s", e, exc_info=True)
+            out.update(response=GENERATION_ERROR_MESSAGE, model=None)
+            return out
+    try:
+        out.update(model=alt_model, escalation_failure=alt_model == "economy-chat")
+        result = await AIGateway.complete(model=alt_model, messages=messages)
+        out.update(
+            response=result.choices[0].message.content,
+            metrics=extract_llm_metrics(result, latency_ms=_latency()),
+        )
+    except Exception:
+        logger.error("answer generation failed on fallback model", exc_info=True)
+        out.update(response=GENERATION_ERROR_MESSAGE, model=None)
+    return out
 
 
 async def _verify_grounded(
@@ -525,7 +493,10 @@ async def _verify_grounded(
     """
     from services.rag.groundedness import STRICT_GROUNDING_SUFFIX, check_groundedness
 
-    verdict = await check_groundedness(state["user_message"], response, context)
+    # Grade against the resolved question ("Dell XPS 15 con đó giá sao") — the
+    # raw vague message makes every grounded answer look off-topic.
+    question = state.get("resolved_query") or state["user_message"]
+    verdict = await check_groundedness(question, response, context)
     regen_count = 0
     cascade_escalated = False
     budget = settings.GROUNDEDNESS_MAX_REGEN
@@ -549,9 +520,9 @@ async def _verify_grounded(
                     result, latency_ms=(time.perf_counter() - start_time) * 1000
                 )
             except Exception as exc:
-                print(f"[GROUNDEDNESS_REGEN_FAIL] {exc}", file=sys.stderr)
+                logger.warning("groundedness regeneration failed: %s", exc)
                 break
-            verdict = await check_groundedness(state["user_message"], response, context)
+            verdict = await check_groundedness(question, response, context)
 
     declined = not (verdict.answerable and verdict.supported)
     meta = {
@@ -564,311 +535,3 @@ async def _verify_grounded(
         }
     }
     return response, model, metrics, declined, meta
-
-
-async def _generate_catalog_response(state: AgentState, db: AsyncSession) -> str | None:
-    """SC01 fix: generate a product catalog response for vague browse queries.
-
-    Called when INFO_QUERY is declined (no specific product match). Fetches
-    all product names from DB and returns a formatted catalog listing.
-    Only activates for very short / vague queries (≤ 6 words, no product keywords).
-
-    Returns formatted catalog string or None (fall through to DECLINE_MESSAGE).
-    """
-    import re as _re
-
-    query = state.get("user_message", "")
-    words = query.split()
-
-    # Specific product keywords that should NOT trigger generic catalog fallback
-    _specific_keywords = _re.compile(
-        r"\b(laptop|lap|dt|đt|phone|tablet|máy tính|tai nghe|headphone|tai|"
-        r"keyboard|bàn phím|chuột|mouse|ssd|ram|gpu|card|màn hình|monitor|charger|"
-        r"pin|sạc|củ sạc|sạc dự phòng|macbook|mac|iphone|ip|samsung|xiaomi|asus|dell|lenovo|sony|watch|đồng hồ|nguồn|psu)\b",
-        _re.IGNORECASE | _re.UNICODE,
-    )
-
-    # Check category filters
-    is_laptop = bool(_re.search(r"\b(laptop|lap|máy tính|macbook)\b", query, _re.IGNORECASE))
-    is_phone = bool(
-        _re.search(r"\b(điện thoại|phone|dt|đt|iphone|ip|samsung|xiaomi)\b", query, _re.IGNORECASE)
-    )
-
-    # If query is long (> 8 words) or specifies a product that should go through RAG, skip catalog fallback
-    if len(words) > 8 and not (is_laptop or is_phone):
-        return None
-
-    try:
-        from sqlalchemy import text as sql_text
-
-        if is_laptop:
-            sql = "SELECT name, sku FROM agent_v1.products WHERE sku ILIKE 'LAPTOP%' OR name ILIKE '%laptop%' OR name ILIKE '%swift%' OR name ILIKE '%strix%' OR name ILIKE '%vivobook%' OR name ILIKE '%xps%' OR name ILIKE '%envy%' ORDER BY name LIMIT 12"
-            header = "**Các mẫu Laptop hiện có tại shop:**\n"
-        elif is_phone:
-            sql = "SELECT name, sku FROM agent_v1.products WHERE sku ILIKE 'PHONE%' OR name ILIKE '%iphone%' OR name ILIKE '%galaxy%' OR name ILIKE '%xiaomi%' ORDER BY name LIMIT 12"
-            header = "**Các mẫu Điện thoại hiện có tại shop:**\n"
-        else:
-            if _specific_keywords.search(query):
-                return None
-            sql = "SELECT name, sku FROM agent_v1.products ORDER BY name LIMIT 12"
-            header = "**Sản phẩm hiện có tại shop:**\n"
-
-        rows = await db.execute(sql_text(sql))
-        products = rows.fetchall()
-        if not products:
-            return None
-
-        lines = [header]
-        for name, sku in products:
-            lines.append(f"• {name} ({sku})")
-        lines.append(
-            "\nBạn quan tâm đến sản phẩm nào? Hãy hỏi thêm để biết thông tin chi tiết! 😊"
-        )
-        return "\n".join(lines)
-    except Exception as exc:
-        import sys
-
-        print(f"[CATALOG_FALLBACK_FAIL] {exc}", file=sys.stderr)
-        return None
-
-
-async def _write_cache(state: AgentState, response: str, db: AsyncSession) -> None:
-    """Write answer to semantic cache (L1+L2) after successful LLM generation."""
-    try:
-        from core.config import settings
-        from services.rag.fragments import annotate_fragments
-        from services.semantic_cache import set_cache
-
-        citations_for_cache = []
-        for c in state.get("citations") or []:
-            if hasattr(c, "model_dump"):
-                citations_for_cache.append(c.model_dump())
-            elif isinstance(c, dict):
-                citations_for_cache.append(c)
-
-        # WP-V2-2 (FR-011): cached citations carry fragment_text so cache hits
-        # replay fragment-level grounding.
-        citations_for_cache = annotate_fragments(citations_for_cache, response)
-
-        # Cache key stays canonical_query: in the graph path normalize is skipped
-        # (intent pre-classified), so canonical_query == the pronoun-EXPANDED query
-        # that get_l1_cache hashed — deterministic, and context-correct for pronoun
-        # queries ("nó giá bao nhiêu" must not be cached across products).
-        await set_cache(
-            db=db,
-            query=state["canonical_query"],
-            response=response,
-            embedding=state["query_vector"],
-            model_name=settings.EMBED_MODEL,
-            citations=citations_for_cache,
-        )
-    except Exception as exc:
-        print(f"[CACHE_WRITE_FAIL] {exc}", file=sys.stderr)
-
-
-async def _write_episodic_event(state: AgentState, response: str | None, db) -> None:
-    """WP-V2-4: append this turn to the customer's episodic memory (best-effort).
-
-    Skips SMALLTALK (no consultation content) and turns without customer/db.
-    The service handles the EPISODIC_MEMORY_ENABLED kill switch and never raises.
-    """
-    customer_id = state.get("customer_id")
-    if not db or not customer_id or state.get("intent") == "SMALLTALK":
-        return
-    from services.memory.episodic import EpisodicMemoryService
-
-    await EpisodicMemoryService().record_event(
-        customer_id=customer_id,
-        thread_id=state.get("session_id", ""),
-        user_message=state.get("user_message", ""),
-        response=response,
-        intent=state.get("intent"),
-        citations=state.get("citations"),
-        db=db,
-    )
-
-
-async def _write_model_trace(
-    state: AgentState,
-    db: AsyncSession | None = None,
-    metadata_: dict | None = None,
-    metrics: LLMUsageMetrics | None = None,
-) -> None:
-    """Write model trace to agent_v1.model_traces table (T049).
-
-    Called at end of answer_node for both accepted AND declined paths.
-    `metrics` carries real token/cost/latency numbers from the LLM call;
-    None (cache hit / declined / business path) writes zeros — correct,
-    since no LLM call happened.
-    Fail-safe: logs to stderr on error, doesn't block response.
-    """
-    if not db or not metadata_:
-        return
-
-    try:
-        # WP-V2-5: stamp turn identity into the JSONB metadata so /admin/costs
-        # can group by customer and the daily cap can count per-customer calls
-        # (model_traces has no customer column — no migration needed this way).
-        metadata_ = {
-            **metadata_,
-            "customer_id": state.get("customer_id"),
-            "session_id": state.get("session_id"),
-            "intent": state.get("intent"),
-        }
-        message_id = state.get("message_id")
-        stmt = insert(ModelTrace).values(
-            message_id=message_id,
-            model_name=metadata_.get("intended_model") or "declined",
-            prompt_tokens=metrics.prompt_tokens if metrics else 0,
-            completion_tokens=metrics.completion_tokens if metrics else 0,
-            total_tokens=metrics.total_tokens if metrics else 0,
-            latency_ms=metrics.latency_ms if metrics else None,
-            cost=metrics.cost if metrics else 0.00,
-            metadata_=metadata_,
-        )
-        await db.execute(stmt)
-        await db.commit()
-    except Exception as e:
-        print(
-            f"[TRACE_FAIL] session_id={state.get('session_id')}, error={e}",
-            file=sys.stderr,
-        )
-
-
-def _compress_context(memory_context: list[dict]) -> str:
-    """Compress long memory context to summary + last 5 recent messages (T108).
-
-    Reduces token usage by 20-40% while preserving recent context.
-    """
-    if not memory_context:
-        return ""
-
-    # If first item is a summary (has 'summary' field), use it
-    compressed = []
-    first_summary = memory_context[0].get("summary_text") or memory_context[0].get("summary")
-    if first_summary:
-        compressed.append(f"📋 {first_summary}")
-
-    # Add last 5 messages
-    recent_messages = memory_context[-5:] if len(memory_context) > 5 else memory_context
-    for ctx in recent_messages:
-        text_content = ctx.get("summary_text") or ctx.get("summary") or ctx.get("text", "")
-        if text_content and text_content != first_summary:
-            compressed.append(f"- {text_content}")
-
-    return "\n".join(compressed)
-
-
-async def _generate_followup_response(state: AgentState, db: object) -> str:
-    """Generate response for status follow-up queries (e.g. 'đặt chưa?')."""
-    session_id = state.get("session_id")
-    order_info = state.get("order_info")
-
-    # 1. Check order_info in current state
-    if order_info and isinstance(order_info, dict):
-        status = order_info.get("status", "pending")
-        name = order_info.get("name") or order_info.get("product_name") or "sản phẩm"
-        qty = order_info.get("quantity", 1)
-        if status == "confirmed":
-            return (
-                f"Dạ, đơn hàng **{name}** (Số lượng: {qty}) của anh/chị đã được hệ thống "
-                f"xác nhận thành công rồi ạ! Mã đơn: `{session_id}`."
-            )
-        elif status == "pending":
-            return (
-                f"Dạ, yêu cầu đặt hàng **{name}** (Số lượng: {qty}) của anh/chị đã được ghi nhận "
-                "và đang chờ duyệt từ nhân viên shop. Cảm ơn anh/chị đã kiên nhẫn ạ!"
-            )
-
-    # 2. Check DB records if available
-    if db and session_id:
-        from sqlalchemy import select
-
-        from models.schema import HITLMetadata, Order
-
-        # Check Order table
-        ord_stmt = (
-            select(Order)
-            .where(Order.session_id == session_id)
-            .order_by(Order.created_at.desc())
-            .limit(1)
-        )
-        ord_res = (await db.execute(ord_stmt)).scalar_one_or_none()
-        if ord_res:
-            info = ord_res.order_info or {}
-            pname = info.get("name") or info.get("product_name") or "sản phẩm"
-            pqty = info.get("quantity", 1)
-            return (
-                f"Dạ, đơn hàng **{pname}** (Số lượng: {pqty}) của anh/chị đã được đặt thành công "
-                f"trên hệ thống rồi ạ! Mã đơn: `{session_id}`."
-            )
-
-        # Check HITLMetadata table
-        hitl_stmt = (
-            select(HITLMetadata)
-            .where(HITLMetadata.session_id == session_id)
-            .order_by(HITLMetadata.paused_at.desc())
-            .limit(1)
-        )
-        hitl_res = (await db.execute(hitl_stmt)).scalar_one_or_none()
-        if hitl_res:
-            if hitl_res.status in ("paused", "resuming"):
-                return "Dạ, yêu cầu đặt hàng của anh/chị đang được nhân viên shop kiểm tra và xử lý. Shop sẽ phản hồi ngay khi hoàn tất ạ!"
-            elif hitl_res.status == "approved":
-                return f"Dạ, đơn hàng của anh/chị đã được phê duyệt thành công rồi ạ! Mã đơn: `{session_id}`."
-            elif hitl_res.status == "rejected":
-                return f"Dạ, đơn hàng của anh/chị chưa thể hoàn tất do: {hitl_res.pause_reason or 'chưa đủ điều kiện'}. Anh/chị có cần hỗ trợ gì khác không ạ?"
-
-    return "Dạ, hiện tại shop chưa tìm thấy đơn hàng nào được khởi tạo trong phiên chat này. Anh/chị có muốn đặt mua sản phẩm nào không ạ?"
-
-
-async def _degraded_turn_response(state, db) -> dict:
-    """v3-0 P3 (T09): every ladder rung failed for this turn.
-
-    Non-risky intents may fall back to the cached answer (cache-only rung);
-    risky intents — or no cache — get the holding message and land in the
-    support queue so a human picks the turn up (degraded = 20% signal, 2.3).
-    """
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-    from models.schema import SupportQueue
-    from services import resilience
-
-    signals = [*(state.get("risk_signals") or []), "degraded"]
-    intent = (state.get("intent") or "").upper()
-    cached = state.get("cached_answer")
-
-    if cached and intent not in resilience.RISKY_INTENTS:
-        return {
-            "response": cached,
-            "model_used": "cache",
-            "risk_signals": signals,
-            "degraded": True,
-        }
-
-    if db is not None:
-        try:
-            await db.execute(
-                pg_insert(SupportQueue)
-                .values(
-                    session_id=state["session_id"],
-                    reason="degraded"[:50],
-                    context_snapshot={
-                        "user_message": state.get("user_message"),
-                        "intent": state.get("intent"),
-                        "risk_signals": signals,
-                    },
-                    status="pending",
-                )
-                .on_conflict_do_nothing(index_elements=["session_id"])
-            )
-            await db.flush()
-        except Exception:
-            logfire.warn("degraded turn: support_queue insert failed")
-
-    return {
-        "response": resilience.holding_message(),
-        "model_used": None,
-        "risk_signals": signals,
-        "degraded": True,
-    }

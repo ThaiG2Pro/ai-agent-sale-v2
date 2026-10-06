@@ -30,6 +30,11 @@ _REASON_LABELS = {
     ),
     "high_risk_tier3": "đơn hàng cần nhân viên xác nhận trước khi xử lý",
     "max_escalation_reached": "yêu cầu cần nhân viên hỗ trợ trực tiếp",
+    "cancel_confirmed_order": (
+        "đơn hàng đã được xác nhận nên việc hủy cần nhân viên xử lý (hoàn kho, hoàn tiền)"
+    ),
+    "cancel_failed": "hệ thống chưa hủy được đơn tự động, nhân viên sẽ hủy giúp bạn",
+    "order_execution_failed": "hệ thống gặp sự cố khi tạo đơn, nhân viên sẽ kiểm tra và liên hệ bạn",
 }
 
 

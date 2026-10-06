@@ -104,5 +104,29 @@ async def test_db_exception_surfaces_as_error_response():
     db.execute.side_effect = RuntimeError("connection lost")
     cmd = await order_execution_node(_state(), _config(db))
 
-    assert cmd.goto == "answer_node"
+    # Failure is rolled back and handed to a human — never back to answer_node,
+    # where an LLM answer could claim the order went through.
+    assert cmd.goto == "customer_support_node"
+    assert cmd.update["hitl_rejection_reason"] == "order_execution_failed"
     assert "connection lost" in cmd.update["error"]
+    db.rollback.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_replay_of_confirmed_order_does_not_touch_stock():
+    """Idempotency: a re-run on an already-confirmed order never decrements again."""
+    db = _db(rowcount=1)
+    state = _state()
+    state["order_info"] = {**state["order_info"], "status": "confirmed", "order_id": "ORD-1"}
+    cmd = await order_execution_node(state, _config(db))
+
+    assert cmd.goto == "answer_node"
+    assert "ORD-1" in cmd.update["response"]
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_successful_order_commits():
+    db = _db(rowcount=1)
+    await order_execution_node(_state(), _config(db))
+    db.commit.assert_awaited()

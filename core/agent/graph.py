@@ -183,7 +183,10 @@ GRAPH_NODES = set(_NODE_FUNCS)
 #      clarify-exhausted → customer_support_node handoff edge
 # 009: v3-0 P3/P4 (T09/T11/T08) adds turn_started_at + degraded +
 #      smalltalk_fastpath channels; router gains zero-LLM fast paths
-GRAPH_SCHEMA_VERSION = "009"
+# 010: memory recall fix — citations becomes per-turn (was operator.add, which
+#      accumulated across turns); adds recent_products + resolved_query channels;
+#      node hardening adds the cross-turn pending_order channel
+GRAPH_SCHEMA_VERSION = "010"
 
 # Article X: max 5 turns per conversation. One turn traverses at most ~4 graph
 # super-steps (router → retrieval → memory → confidence → escalation/hitl → answer),
