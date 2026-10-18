@@ -35,9 +35,27 @@ _PRONOUN_RE = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
-# Ordinal / Index references to previous citations (e.g. '1', '2', 'lap 1', 'mẫu 1', 'số 2')
+# Cardinal pair references to previous citations (e.g. '2 mẫu', 'hai mẫu', 'cả 2 máy', '2 cái này')
+_CARDINAL_PAIR_RE = re.compile(
+    r"\b(?:cả\s+)?(2|hai)\s+(?:mẫu|máy|sản\s+phẩm|cái|thiết\s+bị)(?:\s+(?:này|trên|đó|đi))?\b",
+    re.IGNORECASE | re.UNICODE,
+)
+
+# Ordinal / Index references to previous citations (e.g. 'lap 1', 'mẫu 1', 'số 2')
 _ORDINAL_RE = re.compile(
-    r"\b(?:lap|mẫu|sản\s+phẩm|cái|số)\s*([1-9])\b|\b([1-9])\b",
+    r"\b(?:lap|máy|mẫu|sản\s+phẩm|cái|số)\s*([1-9])\b",
+    re.IGNORECASE | re.UNICODE,
+)
+
+# Selection pair references (e.g. 'so sánh 1 và 2', '1 với 2', '1 vs 2')
+_SELECTION_PAIR_RE = re.compile(
+    r"\b([1-9])\s*(?:và|với|vs\.?|hoặc)\s*([1-9])\b",
+    re.IGNORECASE | re.UNICODE,
+)
+
+# Selection single references (e.g. 'chọn 1', 'lấy 2', 'tư vấn 1')
+_SELECTION_SINGLE_RE = re.compile(
+    r"\b(?:chọn|lấy|mua|xem|tư\s+vấn)\s+([1-9])\b",
     re.IGNORECASE | re.UNICODE,
 )
 
@@ -106,35 +124,77 @@ def _get_citation_name(citations: list, index: int) -> str | None:
 
 
 def _expand_pronoun_query(query: str, state: AgentState) -> str:
-    """SC09 & Ordinal index fix: expand pronouns and ordinal references using citations in state.
+    """SC09 & Ordinal/Cardinal index fix: expand pronouns and references using citations in state.
 
     E.g. 1: "Nó có phù hợp không?" + citations=[Dell XPS 15] → "Dell XPS 15 có phù hợp không?"
     E.g. 2: "so sánh 1 và 2" + citations=[ASUS VivoBook, Lenovo ThinkPad] →
             "so sánh ASUS VivoBook và Lenovo ThinkPad"
-    E.g. 3: "lap 1" + citations=[ASUS VivoBook] → "ASUS VivoBook"
+    E.g. 3: "so sánh 2 mẫu đi" + citations=[POCO F6, Galaxy A55] →
+            "so sánh POCO F6 và Galaxy A55 đi"
+    E.g. 4: "lap 1" + citations=[ASUS VivoBook] → "ASUS VivoBook"
     """
     citations = state.get("citations") or []
     if not citations:
         return query
 
-    # 1. Expand ordinal / index references (e.g., '1', '2', 'lap 1', 'mẫu 1', 'số 2')
-    def replace_ordinal(match: re.Match) -> str:
-        num_str = match.group(1) or match.group(2)
-        if not num_str:
-            return match.group(0)
-        num = int(num_str)
-        citation_name = _get_citation_name(citations, num - 1)
-        if citation_name:
-            return citation_name
-        return match.group(0)
+    # 1. Expand cardinal pair references (e.g., 'so sánh 2 mẫu đi', 'cả 2 máy này')
+    if _CARDINAL_PAIR_RE.search(query) and len(citations) >= 2:
+        name1 = _get_citation_name(citations, 0)
+        name2 = _get_citation_name(citations, 1)
+        if name1 and name2:
+            expanded = _CARDINAL_PAIR_RE.sub(f"{name1} và {name2}", query)
+            logger.info("Cardinal pair expansion: %r → %r", query, expanded)
+            return expanded
 
+    # 2. Expand selection pair references (e.g., 'so sánh 1 và 2', '1 với 2')
+    if _SELECTION_PAIR_RE.search(query):
+
+        def replace_pair(match: re.Match) -> str:
+            i1 = int(match.group(1)) - 1
+            i2 = int(match.group(2)) - 1
+            name1 = _get_citation_name(citations, i1)
+            name2 = _get_citation_name(citations, i2)
+            if name1 and name2:
+                return f"{name1} và {name2}"
+            return match.group(0)
+
+        new_query = _SELECTION_PAIR_RE.sub(replace_pair, query)
+        if new_query != query:
+            logger.info("Selection pair expansion: %r → %r", query, new_query)
+            return new_query
+
+    # 3. Expand explicit ordinal references (e.g., 'lap 1', 'mẫu 1', 'số 2')
     if _ORDINAL_RE.search(query):
+
+        def replace_ordinal(match: re.Match) -> str:
+            num = int(match.group(1))
+            citation_name = _get_citation_name(citations, num - 1)
+            if citation_name:
+                return citation_name
+            return match.group(0)
+
         new_query = _ORDINAL_RE.sub(replace_ordinal, query)
         if new_query != query:
             logger.info("Ordinal expansion: %r → %r", query, new_query)
             return new_query
 
-    # 2. Expand general pronouns (e.g. 'nó', 'cái đó', 'mẫu này') to citations[0]
+    # 4. Expand single selection (e.g., 'chọn 1', 'tư vấn 2')
+    if _SELECTION_SINGLE_RE.search(query):
+
+        def replace_single(match: re.Match) -> str:
+            num = int(match.group(1))
+            citation_name = _get_citation_name(citations, num - 1)
+            if citation_name:
+                verb = match.group(0).split()[0]
+                return f"{verb} {citation_name}"
+            return match.group(0)
+
+        new_query = _SELECTION_SINGLE_RE.sub(replace_single, query)
+        if new_query != query:
+            logger.info("Single selection expansion: %r → %r", query, new_query)
+            return new_query
+
+    # 5. Expand general pronouns (e.g. 'nó', 'cái đó', 'mẫu này') to citations[0]
     if _PRONOUN_RE.search(query):
         first_name = _get_citation_name(citations, 0)
         if first_name:
@@ -252,8 +312,21 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
             "clarify_count": 0,
         }
 
-    # SC09: expand pronoun queries with previous citation context
+    # 1. Fast-path index/pronoun expansion (instant, zero-LLM)
     query = _expand_pronoun_query(raw_query, state)
+
+    # 2. Contextual Query Rewriter (2026 Production Standard):
+    # If turn >= 2 (prior messages exist) and query was not already transformed by fast-path
+    messages = state.get("messages") or []
+    if query == raw_query and len(messages) > 1:
+        from services.rag.query import rewrite_contextual_query
+
+        rewritten = await rewrite_contextual_query(
+            raw_query, messages=messages, citations=state.get("citations")
+        )
+        if rewritten and rewritten != raw_query:
+            logger.info("Contextual query rewrite: %r → %r", raw_query, rewritten)
+            query = rewritten
 
     retrieve = make_retrieval_tool(db)
 

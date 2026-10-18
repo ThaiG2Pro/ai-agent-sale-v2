@@ -166,7 +166,7 @@
       <div class="p-4 border-b border-white/10 flex items-center justify-between bg-dark-850/40 shrink-0">
         <div class="flex items-center gap-2">
           <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i>
-          <h2 class="font-bold text-sm tracking-tight text-slate-200">Admin Operations & HITL Queue</h2>
+          <h2 class="font-bold text-sm tracking-tight text-slate-200">Admin Zone & HITL Queue</h2>
           <span id="pendingBadge" class="px-2 py-0.5 text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">0</span>
         </div>
         <button onclick="fetchPendingHITL()" class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-300 bg-white/5 hover:bg-white/10 border border-white/10 rounded-md transition-all">
@@ -176,26 +176,26 @@
       </div>
 
       <!-- Real-Time Metrics Strip -->
-      <div class="grid grid-cols-4 gap-2 p-3 border-b border-white/10 bg-dark-950/40 text-center shrink-0">
+      <div id="metricsStrip" class="grid grid-cols-4 gap-2 p-3 border-b border-white/10 bg-dark-950/40 text-center shrink-0">
         <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
           <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Deflection</div>
           <div id="mDeflection" class="text-sm font-bold text-emerald-400 font-mono mt-0.5">85%</div>
           <div class="text-[9px] text-slate-500">Auto-resolved</div>
         </div>
         <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
-          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">HITL Queue</div>
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Queue</div>
+          <div id="mQueue" class="text-sm font-bold text-indigo-400 font-mono mt-0.5">0</div>
+          <div class="text-[9px] text-slate-500">Queued items</div>
+        </div>
+        <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">HITL Paused</div>
           <div id="mPaused" class="text-sm font-bold text-amber-400 font-mono mt-0.5">0</div>
           <div class="text-[9px] text-slate-500">Pending review</div>
         </div>
         <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
-          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">L1 Cache</div>
-          <div id="mCache" class="text-sm font-bold text-indigo-400 font-mono mt-0.5">&lt; 100ms</div>
-          <div class="text-[9px] text-slate-500">0$ token cost</div>
-        </div>
-        <div class="p-2 rounded-md bg-white/[0.02] border border-white/5">
-          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Engine</div>
-          <div class="text-sm font-bold text-purple-400 font-mono mt-0.5">Groq+ONNX</div>
-          <div class="text-[9px] text-slate-500">Hybrid Local/API</div>
+          <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Degraded</div>
+          <div id="mDegraded" class="text-sm font-bold text-purple-400 font-mono mt-0.5">0</div>
+          <div class="text-[9px] text-slate-500">Fallback state</div>
         </div>
       </div>
 
@@ -892,9 +892,24 @@
       return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
+    async function updateMetrics() {
+      try {
+        const res = await fetch('/admin/metrics');
+        if (res.ok) {
+          const d = await res.json();
+          if (d.deflection_rate !== undefined) document.getElementById('mDeflection').textContent = Math.round(d.deflection_rate * 100) + '%';
+          if (d.queue_length !== undefined) document.getElementById('mQueue').textContent = d.queue_length;
+          if (d.paused_count !== undefined) document.getElementById('mPaused').textContent = d.paused_count;
+          if (d.degraded_count !== undefined) document.getElementById('mDegraded').textContent = d.degraded_count;
+        }
+      } catch (e) {}
+    }
+
     // Polling Queue & Initial load
     fetchPendingHITL();
+    updateMetrics();
     setInterval(fetchPendingHITL, 10000);
+    setInterval(updateMetrics, 15000);
     refreshIcons();
   </script>
 </body>

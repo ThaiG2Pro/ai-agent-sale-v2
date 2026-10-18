@@ -119,9 +119,13 @@ async def post_agent_query(
     Execution path: router → {retrieval + escalation + answer} → response
     """
     # ── Observability Trace Tagging (SME Pro 2026) ──
-    # Link this request to the conversation session in Phoenix
+    # Name the root span cleanly and tag with OpenInference attributes for Phoenix
     current_span = trace.get_current_span()
+    current_span.update_name(f"Agent Turn: {request.message[:40]}")
+    current_span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "CHAIN")
     current_span.set_attribute(SpanAttributes.SESSION_ID, request.session_id)
+    current_span.set_attribute(SpanAttributes.USER_ID, request.customer_id)
+    current_span.set_attribute(SpanAttributes.INPUT_VALUE, request.message)
 
     # T056: Paused Session Gateway
     pause_info = await check_paused_session(request.session_id, request.message, db)
@@ -163,6 +167,13 @@ async def post_agent_query(
         # attribute alone is invisible to Phoenix's Sessions view.
         with using_attributes(session_id=request.session_id, user_id=request.customer_id):
             final_state = await graph.ainvoke(initial_state, config=config)
+
+        if final_state.get("response"):
+            current_span.set_attribute(
+                SpanAttributes.OUTPUT_VALUE, str(final_state.get("response"))
+            )
+        if final_state.get("intent"):
+            current_span.set_attribute("intent", str(final_state.get("intent")))
 
         elapsed_ms = (time.time() - start_time) * 1000
 
@@ -339,7 +350,11 @@ async def post_agent_stream(
     # ── Observability Trace Tagging (SME Pro 2026) ──
     # Link this request to the conversation session in Phoenix
     current_span = trace.get_current_span()
+    current_span.update_name(f"Agent Stream: {request.message[:40]}")
+    current_span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "CHAIN")
     current_span.set_attribute(SpanAttributes.SESSION_ID, request.session_id)
+    current_span.set_attribute(SpanAttributes.USER_ID, request.customer_id)
+    current_span.set_attribute(SpanAttributes.INPUT_VALUE, request.message)
 
     # T056: Paused Session Gateway
     pause_info = await check_paused_session(request.session_id, request.message, db)

@@ -94,18 +94,39 @@ async def test_hitl_happy_path_approve_execute(monkeypatch):
     happy path uses an order above HITL_HIGH_VALUE_ORDER_THRESHOLD (5M VND), which
     always pauses regardless of tier (safety invariant).
     """
-    # 1. Setup mocks
+    from datetime import UTC, datetime
+
+    from uuid_utils import uuid7
+
     mock_db = AsyncMock()
-    # Configure execute() result so scalars().all() returns [] (no queued messages)
-    # and scalar_one_or_none() returns the mock product (for state_freshness_validator).
-    mock_exec_result = MagicMock(rowcount=1)
-    mock_exec_result.scalars.return_value.all.return_value = []
     mock_product = MagicMock()
     mock_product.id = "prod_1"
     mock_product.price = 10_000_000.0
     mock_product.stock_quantity = 10
-    mock_exec_result.scalar_one_or_none.return_value = mock_product
-    mock_db.execute.return_value = mock_exec_result
+
+    mock_order = MagicMock()
+    mock_order.id = uuid7()
+    mock_order.status = "pending_review"
+    mock_order.created_at = datetime.now(UTC)
+
+    async def mock_execute(stmt, *args, **kwargs):
+        res = MagicMock(rowcount=1)
+        stmt_str = str(stmt).lower() if stmt is not None else ""
+        if "hitl_metadata" in stmt_str:
+            res.scalar_one_or_none.return_value = None
+            res.scalars.return_value.all.return_value = []
+        elif "orders" in stmt_str:
+            res.scalar_one_or_none.return_value = mock_order
+            res.scalars.return_value.all.return_value = [mock_order]
+        elif "products" in stmt_str:
+            res.scalar_one_or_none.return_value = mock_product
+            res.scalars.return_value.all.return_value = [mock_product]
+        else:
+            res.scalar_one_or_none.return_value = None
+            res.scalars.return_value.all.return_value = []
+        return res
+
+    mock_db.execute.side_effect = mock_execute
 
     # Mock router
     mock_router_resp = _make_router_response("ORDER_PLACEMENT")
@@ -116,7 +137,13 @@ async def test_hitl_happy_path_approve_execute(monkeypatch):
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-happy", "db": mock_db}}
     state = make_initial_state("Tôi muốn mua sản phẩm A", "test-happy", "cust-happy")
-    state["order_info"] = {"product_id": "prod_1", "quantity": 1, "price": 10_000_000.0}
+    state["order_info"] = {
+        "product_id": "prod_1",
+        "quantity": 1,
+        "price": 10_000_000.0,
+        "phone": "0988111222",
+        "address": "123 Lê Lợi, TP HCM",
+    }
 
     with patch("services.ai.ai_router.acompletion", return_value=mock_router_resp):
         with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):
@@ -142,7 +169,10 @@ async def test_hitl_happy_path_approve_execute(monkeypatch):
                 # 4. Assert
                 assert final_state["hitl_approved"] is True
                 assert final_state["order_info"]["status"] == "confirmed"
-                assert "successfully placed" in final_state["response"]
+                assert (
+                    "thành công" in final_state["response"].lower()
+                    or "successfully placed" in final_state["response"].lower()
+                )
 
 
 @pytest.mark.asyncio
@@ -162,28 +192,32 @@ async def test_hitl_reject_to_support(monkeypatch):
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-reject", "db": mock_db}}
     state = make_initial_state("Mua đồ", "test-reject", "cust-reject")
-    state["order_info"] = {"product_id": "prod_1", "quantity": 1}
+    state["order_info"] = {
+        "product_id": "prod_1",
+        "quantity": 1,
+        "phone": "0988111222",
+        "address": "123 Lê Lợi, TP HCM",
+    }
 
-    with patch("services.ai.ai_router.acompletion", return_value=mock_router_resp):
-        with patch("litellm.acompletion", return_value=mock_support_resp):
-            with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):
-                with patch("litellm.token_counter", return_value=100):
-                    # 1. Pause
-                    await graph.ainvoke(state, config)
+    with patch(
+        "services.ai.ai_router.acompletion", side_effect=[mock_router_resp, mock_support_resp]
+    ):
+        with patch("core.agent.nodes.retrieval.make_retrieval_tool", mock_retrieval):
+            with patch("litellm.token_counter", return_value=100):
+                # 1. Pause
+                await graph.ainvoke(state, config)
 
-                    # 2. Reject
-                    payload = ApprovalPayload(
-                        action="reject", admin_user_id="admin_1", reason_or_comment="suspicious"
-                    )
+                # 2. Reject
+                payload = ApprovalPayload(
+                    action="reject", admin_user_id="admin_1", reason_or_comment="suspicious"
+                )
 
-                    final_result = await graph.ainvoke(
-                        Command(resume=payload.model_dump()), config
-                    )
+                final_result = await graph.ainvoke(Command(resume=payload.model_dump()), config)
 
-                    # 3. Assert
-                    assert final_result["hitl_approved"] is False
-                    assert final_result["hitl_rejection_reason"] == "suspicious"
-                    assert "Rejected" in final_result["response"]
+                # 3. Assert
+                assert final_result["hitl_approved"] is False
+                assert final_result["hitl_rejection_reason"] == "suspicious"
+                assert "Rejected" in final_result["response"]
 
 
 @pytest.mark.asyncio
@@ -223,7 +257,13 @@ async def test_hitl_cancel_during_pause(monkeypatch):
     graph = build_graph(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "test-cancel", "db": mock_db}}
     state = make_initial_state("Mua cái này", "test-cancel", "cust-cancel")
-    state["order_info"] = {"product_id": "prod_1", "quantity": 1, "price": 100.0}
+    state["order_info"] = {
+        "product_id": "prod_1",
+        "quantity": 1,
+        "price": 100.0,
+        "phone": "0988111222",
+        "address": "123 Lê Lợi, TP HCM",
+    }
 
     with patch("services.ai.ai_router.acompletion", return_value=mock_router_resp):
         with patch("litellm.acompletion", return_value=mock_classify_resp):
@@ -244,4 +284,7 @@ async def test_hitl_cancel_during_pause(monkeypatch):
 
                     # 3. Assert
                     assert final_state["order_info"]["status"] == "cancelled"
-                    assert "cancelled" in final_state["response"].lower()
+                    assert (
+                        "hủy" in final_state["response"].lower()
+                        or "cancelled" in final_state["response"].lower()
+                    )

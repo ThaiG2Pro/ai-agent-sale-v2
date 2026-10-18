@@ -528,7 +528,7 @@ async def test_semantic_recall_through_real_compiled_graph(db_session) -> None:
             patch("services.ai.ai_router.acompletion", mock_llm),
             patch(
                 "core.agent.nodes.retrieval.make_retrieval_tool",
-                _mock_retrieval_tool(similarity_score=0.9),
+                _mock_retrieval_tool(similarity_score=0.7),
             ),
             # Faithful shape: AIGateway.embed returns a BATCH (list[list[float]])
             patch(

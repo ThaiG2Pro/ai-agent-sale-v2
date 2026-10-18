@@ -468,6 +468,8 @@ async def router_node(state: AgentState) -> Command:
         "intent_confidence": classification.confidence,
         "intent_shift": classification.intent_shift,
         "intent_disagreement_count": disagreement_count,
+        "router_reasoning": classification.reasoning,
+        "router_model": "light-chat",
     }
 
     # H6 (T06): mixed info+order in one message — handle the highest-priority

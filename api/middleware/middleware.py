@@ -29,13 +29,12 @@ class TimingMiddleware(BaseHTTPMiddleware):
         # Article XII: Performance Goals - Health check latency monitoring
         response.headers["X-Process-Time"] = str(process_time)
 
-        with logfire.span(
+        logfire.info(
             "{method} {path} processed in {duration:.4f}s",
             method=request.method,
             path=request.url.path,
             duration=process_time,
-        ):
-            pass
+        )
 
         return response
 

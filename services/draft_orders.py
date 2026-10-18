@@ -179,9 +179,11 @@ async def confirm_draft(
     caller must re-quote instead of confirming a stale draft (T05 rule 3;
     state_freshness still re-validates price/stock upstream).
     """
-    row = (
-        await db.execute(select(Order).where(Order.id == UUID(str(draft_id))))
-    ).scalar_one_or_none()
+    try:
+        draft_uuid = UUID(str(draft_id))
+    except (ValueError, TypeError, AttributeError):
+        return False
+    row = (await db.execute(select(Order).where(Order.id == draft_uuid))).scalar_one_or_none()
     if row is None or row.status not in ACTIVE_DRAFT_STATUSES or is_draft_expired(row):
         return False
     await db.execute(

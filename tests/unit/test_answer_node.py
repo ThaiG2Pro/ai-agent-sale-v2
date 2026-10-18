@@ -259,3 +259,29 @@ async def test_answer_node_no_compression_without_summary():
     assert system_content is not None
     for i in range(1, 6):
         assert f"Memory entry {i}" in system_content
+
+
+@pytest.mark.asyncio
+async def test_answer_node_empty_llm_response_fallback():
+    """Verify that an empty response from LLM never returns empty string to user."""
+    state = make_initial_state(
+        user_message="so sánh về mặt khác vấn đề pin",
+        session_id="t001",
+        customer_id="cust_001",
+    )
+    state["intent"] = "COMPARISON"
+    state["retrieved_chunks"] = []
+    state["model_used"] = "economy-chat"
+
+    config = {"configurable": {}}
+    with patch("services.ai.AIGateway.complete", new_callable=AsyncMock) as mock_llm:
+        mock_response = AsyncMock()
+        mock_response.choices = [AsyncMock(message=AsyncMock(content="", reasoning="thinking..."))]
+        mock_llm.return_value = mock_response
+
+        with patch("core.agent.nodes.answer._write_model_trace", new_callable=AsyncMock):
+            result = await answer_node(state, config)
+
+    assert result["response"] != ""
+    assert len(result["response"].strip()) > 0
+    assert result["declined"] is False

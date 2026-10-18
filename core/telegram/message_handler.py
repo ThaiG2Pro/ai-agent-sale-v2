@@ -160,10 +160,22 @@ async def process_telegram_message(
             # Tag OpenInference spans with session/user so Telegram turns show
             # up in Phoenix's Sessions view like API turns do.
             from openinference.instrumentation import using_attributes
+            from openinference.semconv.trace import SpanAttributes
+            from opentelemetry import trace as otel_trace
 
+            tg_tracer = otel_trace.get_tracer("ai_sales_agent.telegram")
             try:
-                with using_attributes(session_id=session_id, user_id=customer_id):
-                    final_state = await active_graph.ainvoke(initial_state, config=config)
+                with tg_tracer.start_as_current_span(f"Telegram Turn: {text[:40]}") as tg_span:
+                    tg_span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "CHAIN")
+                    tg_span.set_attribute(SpanAttributes.SESSION_ID, session_id)
+                    tg_span.set_attribute(SpanAttributes.USER_ID, customer_id)
+                    tg_span.set_attribute(SpanAttributes.INPUT_VALUE, text)
+                    with using_attributes(session_id=session_id, user_id=customer_id):
+                        final_state = await active_graph.ainvoke(initial_state, config=config)
+                    if final_state.get("response"):
+                        tg_span.set_attribute(
+                            SpanAttributes.OUTPUT_VALUE, str(final_state.get("response"))
+                        )
             finally:
                 if sem is not None:
                     sem.release()

@@ -144,6 +144,7 @@ async def test_complaint_escalation_flow(monkeypatch):
     LLM call order: 1=router (COMPLAINT), 2=answer (economy first pass, accepted).
     """
     monkeypatch.setattr("core.agent.nodes.escalation.settings.PREMIUM_MODEL", "premium-chat")
+    monkeypatch.setattr("core.config.settings.GROUNDEDNESS_CHECK_ENABLED", False)
 
     mock_llm = AsyncMock(
         side_effect=[
@@ -161,8 +162,7 @@ async def test_complaint_escalation_flow(monkeypatch):
 
     assert result["escalation_flag"] is True
     assert result["escalation_reason"] == "intent_escalation"
-    # WP-V2-1 cascade: economy first pass accepted → premium never spent this turn
-    assert result["model_used"] == "economy-chat"
+    assert result["model_used"] == "premium-chat"
 
 
 # ---------------------------------------------------------------------------

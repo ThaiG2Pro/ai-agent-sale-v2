@@ -423,31 +423,46 @@ async def post_turn_tasks(
         async with db_factory() as db:
             await check_checkpoint_size(thread_id, db)
 
-    results = await asyncio.gather(
-        _checkpoint_task(),
-        _maybe_extract_intent(customer_id, thread_id, state, db_factory),
-        _summarize_and_embed(customer_id, thread_id, state, db_factory),
-        return_exceptions=True,
-    )
+    from openinference.semconv.trace import SpanAttributes
+    from opentelemetry import context, trace
 
-    # Log any exceptions by task index
-    task_names = [
-        "checkpoint_size",
-        "intent_extraction",
-        "summarize_and_embed",
-    ]
-    for task_idx, result in enumerate(results):
-        if isinstance(result, Exception):
-            logger.error(
-                f"Background task {task_names[task_idx]} failed",
-                # result is a collected exception object (gather), not the
-                # active exception — pass it explicitly for its traceback.
-                exc_info=result,
-                extra={
-                    "customer_id": customer_id,
-                    "thread_id": thread_id,
-                    "task_index": task_idx,
-                    "error": str(result),
-                    "error_type": type(result).__name__,
-                },
+    # Detach from caller's trace context so background memory execution runs in
+    # its own isolated trace and does not leak onto the user's interactive turn.
+    token = context.attach(context.Context())
+    try:
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span(f"background.post_turn_tasks:{customer_id}") as span:
+            span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "CHAIN")
+            span.set_attribute("customer_id", customer_id)
+            span.set_attribute("thread_id", thread_id)
+
+            results = await asyncio.gather(
+                _checkpoint_task(),
+                _maybe_extract_intent(customer_id, thread_id, state, db_factory),
+                _summarize_and_embed(customer_id, thread_id, state, db_factory),
+                return_exceptions=True,
             )
+
+            # Log any exceptions by task index
+            task_names = [
+                "checkpoint_size",
+                "intent_extraction",
+                "summarize_and_embed",
+            ]
+            for task_idx, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(
+                        f"Background task {task_names[task_idx]} failed",
+                        # result is a collected exception object (gather), not the
+                        # active exception — pass it explicitly for its traceback.
+                        exc_info=result,
+                        extra={
+                            "customer_id": customer_id,
+                            "thread_id": thread_id,
+                            "task_index": task_idx,
+                            "error": str(result),
+                            "error_type": type(result).__name__,
+                        },
+                    )
+    finally:
+        context.detach(token)

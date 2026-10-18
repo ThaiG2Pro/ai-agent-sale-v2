@@ -237,6 +237,21 @@ def _setup_logfire_with_phoenix() -> None:
         insecure=True,  # no TLS needed for local Phoenix
     )
 
+    class _PhoenixSpanProcessor(BatchSpanProcessor):
+        """Filter out Logfire internal log spans before exporting to Phoenix.
+
+        Logfire represents logfire.info/debug/warn calls as OTel spans with
+        `logfire.span_type == 'log'`. Phoenix renders these as 0ms spans on the
+        waterfall, cluttering the trace tree. This processor discards them so only
+        real execution spans (HTTP requests, agent nodes, LLM calls, embeddings)
+        flow to Phoenix.
+        """
+
+        def on_end(self, span) -> None:
+            if span.attributes and span.attributes.get("logfire.span_type") == "log":
+                return
+            super().on_end(span)
+
     logfire.configure(
         service_name=settings.OTEL_SERVICE_NAME,
         token=None,
@@ -248,7 +263,10 @@ def _setup_logfire_with_phoenix() -> None:
         # propagate context from CLI → API → Phoenix for end-to-end traces.
         distributed_tracing=True,
         console=logfire.ConsoleOptions(verbose=False),
-        additional_span_processors=[BatchSpanProcessor(phoenix_exporter)],
+        # Disable aggressive default scrubbing that masks session_id / thread_id
+        # with "[Scrubbed due to 'session']". PII masking is handled by mask_pii.
+        scrubbing=False,
+        additional_span_processors=[_PhoenixSpanProcessor(phoenix_exporter)],
     )
 
 
@@ -273,11 +291,12 @@ def _register_instrumentors() -> None:
 
     HTTPXClientInstrumentor().instrument()
 
-    # LangChain/LangGraph → OpenInference spans for each agent node
-    # Produces spans visible in Phoenix's "LLM Traces" panel
-    from openinference.instrumentation.langchain import LangChainInstrumentor
-
-    LangChainInstrumentor().instrument()
+    # LangChain/LangGraph auto-instrumentor is intentionally disabled because it
+    # creates duplicate spans for every node and dumps the raw 40-field AgentState.
+    # The application uses custom `traced_node` (core/agent/graph.py) which produces
+    # clean, signal-rich OpenInference spans (`node.<name>`) without noise.
+    # from openinference.instrumentation.langchain import LangChainInstrumentor
+    # LangChainInstrumentor().instrument()
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +313,14 @@ def instrument_fastapi(app) -> None:
     """
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-    FastAPIInstrumentor.instrument_app(app)
+    # Filter out Docker healthchecks, static assets, docs, and polling endpoints
+    # from clogging Arize Phoenix with noise. Exclude ASGI receive/send spans to
+    # keep Phoenix trace waterfalls focused on the HTTP turn and agent nodes.
+    FastAPIInstrumentor.instrument_app(
+        app,
+        excluded_urls="health.*,readiness,ui.*,static/.*,docs,openapi.json,favicon.ico,hitl/.*,admin/.*",
+        exclude_spans=["receive", "send"],
+    )
 
 
 def instrument_sqlalchemy(engine) -> None:
@@ -304,6 +330,9 @@ def instrument_sqlalchemy(engine) -> None:
         from core.logging import instrument_sqlalchemy
         instrument_sqlalchemy(engine.sync_engine)
     """
+    if not settings.OTEL_SQL_SPANS_ENABLED:
+        return
+
     from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
     SQLAlchemyInstrumentor().instrument(engine=engine)

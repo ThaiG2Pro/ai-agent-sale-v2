@@ -72,7 +72,7 @@ def _litellm_params(model_str: str, **extra: Any) -> dict[str, Any]:
     # 1. Resolve app alias shortcuts if set in env (e.g. PREMIUM_MODEL=premium-chat)
     if model_str == "premium-chat":
         if settings.GROQ_API_KEY and settings.GROQ_API_KEY not in ("", "sk-no-key-required"):
-            model_str = "groq/llama-3.3-70b-versatile"
+            model_str = "groq/openai/gpt-oss-120b"
         elif settings.GEMINI_API_KEY and settings.GEMINI_API_KEY not in ("", "sk-no-key-required"):
             model_str = "gemini/gemini-2.5-flash"
         elif settings.OPENAI_API_KEY and settings.OPENAI_API_KEY not in ("", "sk-no-key-required"):
@@ -176,13 +176,13 @@ LITELLM_CONFIG = {
             "model_info": {"id": "premium-chat-model"},
             "litellm_params": _litellm_params(settings.PREMIUM_MODEL, stream=False),
         },
-        # ── v3-0 P3 (T09): middle rung of the fallback ladder (Groq 8b).
+        # ── v3-0 P3 (T09): middle rung of the fallback ladder (Groq 120b).
         # Without a GROQ key _litellm_params degrades this to CHAT_MODEL, so
         # the alias always resolves to something callable.
         {
             "model_name": "fallback-chat-8b",
             "model_info": {"id": "fallback-chat-8b-model"},
-            "litellm_params": _litellm_params("groq/llama-3.1-8b-instant", stream=False),
+            "litellm_params": _litellm_params("groq/openai/gpt-oss-120b", stream=False),
         },
         # ── Universal Embedding Tier: dynamically configured via EMBED_MODEL ───────
         {
@@ -192,20 +192,27 @@ LITELLM_CONFIG = {
         },
     ],
     "routing_strategy": "simple-shuffle",
+    # Model group fallbacks: if a model group encounters 429/errors, router shifts to the fallback group
+    "fallbacks": [
+        {"economy-chat": ["fallback-chat-8b", "light-chat"]},
+        {"premium-chat": ["economy-chat", "fallback-chat-8b"]},
+        {"powerful-chat": ["economy-chat", "fallback-chat-8b"]},
+        {"light-chat": ["fallback-chat-8b"]},
+    ],
     # v3-0 P3 (T09): free-tier 429s persist for hours — cool the deployment
     # down instead of hammering it (pre-P3 value was 0 = no cooldown).
     "cooldown_time": 60 if settings.RESILIENCE_V3_ENABLED else 0,
 }
 
 # v3-0 P3 (T09): per-exception retry policy — transient network/timeout gets
-# ONE retry; 429 and auth errors get ZERO (429 → cooldown + jump rung).
+# ONE retry; 429 gets up to 2 retries for sub-second resets before cooling down.
 if settings.RESILIENCE_V3_ENABLED:
     try:
         from litellm.router import RetryPolicy
 
         LITELLM_CONFIG["retry_policy"] = RetryPolicy(
             TimeoutErrorRetries=1,
-            RateLimitErrorRetries=0,
+            RateLimitErrorRetries=2,
             AuthenticationErrorRetries=0,
             BadRequestErrorRetries=0,
             InternalServerErrorRetries=1,

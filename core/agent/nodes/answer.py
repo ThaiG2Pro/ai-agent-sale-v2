@@ -319,8 +319,28 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
         user_q = state["user_message"]
         prompt = f"Context sản phẩm:\n{chunk_text}\n{citations_text}\nCâu hỏi: {user_q}"
 
+    history_messages = []
+    prior_msgs = list(state.get("messages") or [])
+    if prior_msgs and getattr(prior_msgs[-1], "content", None) == state["user_message"]:
+        prior_msgs = prior_msgs[:-1]
+
+    for m in prior_msgs[-4:]:
+        content = getattr(m, "content", None) or (
+            m.get("content") if isinstance(m, dict) else str(m)
+        )
+        if not content:
+            continue
+        is_human = (
+            getattr(m, "type", "") == "human"
+            or getattr(m, "role", "") == "user"
+            or m.__class__.__name__ == "HumanMessage"
+        )
+        role = "user" if is_human else "assistant"
+        history_messages.append({"role": role, "content": str(content)[:400]})
+
     messages = [
         {"role": "system", "content": system_prompt},
+        *history_messages,
         {"role": "user", "content": prompt},
     ]
     escalation_failure = state.get("escalation_failure", False)
@@ -384,6 +404,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             db=db,
             deadline=turn_started + settings.TURN_BUDGET_S,
             preferred_model=model,
+            max_tokens=1500,
         )
         if ladder_res.response is not None:
             result = ladder_res.response
@@ -398,7 +419,7 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             return await _degraded_turn_response(state, db)
     else:
         try:
-            result = await AIGateway.complete(model=model, messages=messages)
+            result = await AIGateway.complete(model=model, messages=messages, max_tokens=1500)
             response = result.choices[0].message.content
             metrics = extract_llm_metrics(
                 result, latency_ms=(time.perf_counter() - start_time) * 1000
@@ -412,7 +433,9 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
                 try:
                     model = alt_model
                     escalation_failure = alt_model == "economy-chat"
-                    result = await AIGateway.complete(model=model, messages=messages)
+                    result = await AIGateway.complete(
+                        model=model, messages=messages, max_tokens=1500
+                    )
                     response = result.choices[0].message.content
                     metrics = extract_llm_metrics(
                         result, latency_ms=(time.perf_counter() - start_time) * 1000
@@ -423,6 +446,19 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             else:
                 response = f"Lỗi khi tạo phản hồi: {e!s}"
                 model = None
+
+    # Guard against empty/whitespace response (e.g. reasoning model exhausted tokens before output)
+    if not response or not response.strip():
+        if db:
+            cat_resp = await _generate_catalog_response(state, db)
+            if cat_resp:
+                response = cat_resp
+        if not response or not response.strip():
+            response = (
+                "Dạ shop có thể hỗ trợ tư vấn và so sánh chi tiết hơn về các dòng sản phẩm "
+                "(về hiệu năng, màn hình, camera hoặc thời lượng pin). Bạn đang quan tâm "
+                "đặc biệt đến tính năng nào nhất của sản phẩm ạ?"
+            )
 
     # Guard against raw JSON schema leaks (e.g. LLM returning IntentClassification JSON string)
     if response and ("primary_intent" in response or "sensitive_intent" in response):
@@ -460,17 +496,34 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             response = DECLINE_MESSAGE
 
     # Write to cache after successful generation (best-effort) — never cache an
-    # answer the groundedness verdict rejected. WP-V2-2 guard: metrics is None
-    # means BOTH generation attempts failed and `response` is the error fallback —
-    # caching it would replay the failure forever.
-    if (
+    # answer the groundedness verdict rejected.
+    # Anti-poisoning guard (2026): Never cache clarification questions, unanswerable queries,
+    # non-advisory intents, or short elliptical queries without product context.
+    can_cache = (
         response
         and metrics is not None
         and not grounded_declined
+        and (groundedness_meta or {}).get("groundedness", {}).get("answerable", True)
+        and not (
+            "?" in response
+            or any(
+                w in response.lower()
+                for w in ["bạn muốn", "bạn có thể", "cho mình biết", "mẫu nào", "sản phẩm nào"]
+            )
+        )
         and db
         and state.get("canonical_query")
         and state.get("query_vector")
-    ):
+        and state.get("intent") in ("INFO_QUERY", "PRICING", "COMPARISON", "AVAILABILITY")
+    )
+    if can_cache and state.get("canonical_query"):
+        q_norm = state["canonical_query"].strip().lower()
+        if len(q_norm.split()) < 3 or any(
+            p in q_norm for p in ["nó", "cái đó", "mẫu này", "mẫu đó", "cái này", "mẫu 1", "mẫu 2"]
+        ):
+            can_cache = False
+
+    if can_cache:
         await _write_cache(state, response, db)
 
     # Universal trace write (FR-008)
@@ -543,7 +596,9 @@ async def _verify_grounded(
                 model = cascade_target
                 cascade_escalated = True
             try:
-                result = await AIGateway.complete(model=model, messages=strict_messages)
+                result = await AIGateway.complete(
+                    model=model, messages=strict_messages, max_tokens=1500
+                )
                 response = result.choices[0].message.content
                 metrics = extract_llm_metrics(
                     result, latency_ms=(time.perf_counter() - start_time) * 1000
@@ -553,7 +608,16 @@ async def _verify_grounded(
                 break
             verdict = await check_groundedness(state["user_message"], response, context)
 
-    declined = not (verdict.answerable and verdict.supported)
+    is_clarifying_or_question = "?" in response or any(
+        w in response.lower()
+        for w in ["bạn muốn", "bạn có thể", "cho mình biết", "mẫu nào", "sản phẩm nào"]
+    )
+    if not verdict.supported:
+        declined = True
+    elif not verdict.answerable and not is_clarifying_or_question:
+        declined = True
+    else:
+        declined = False
     meta = {
         "groundedness": {
             "answerable": verdict.answerable,

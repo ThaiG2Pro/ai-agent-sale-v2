@@ -411,3 +411,34 @@ class TestOrdinalExpansion:
         }
         res = _expand_pronoun_query("cho tôi thông tin mẫu 2", state)
         assert res == "cho tôi thông tin Lenovo ThinkPad X1 Carbon Gen 12"
+
+    def test_expand_cardinal_pair_query(self):
+        from core.agent.nodes.retrieval import _expand_pronoun_query
+
+        state = {
+            "citations": [
+                {"name": "POCO F6 256GB"},
+                {"name": "Samsung Galaxy A55 128GB"},
+            ]
+        }
+        res = _expand_pronoun_query("so sánh 2 mẫu đi.", state)
+        assert res == "so sánh POCO F6 256GB và Samsung Galaxy A55 128GB."
+
+        res2 = _expand_pronoun_query("2 mẫu này khác gì nhau", state)
+        assert res2 == "POCO F6 256GB và Samsung Galaxy A55 128GB khác gì nhau"
+
+        res3 = _expand_pronoun_query("so sánh cả 2 mẫu", state)
+        assert res3 == "so sánh POCO F6 256GB và Samsung Galaxy A55 128GB"
+
+    def test_unit_and_price_numbers_not_expanded_as_ordinals(self):
+        from core.agent.nodes.retrieval import _expand_pronoun_query
+
+        state = {
+            "citations": [
+                {"name": "POCO F6 256GB"},
+                {"name": "Samsung Galaxy A55 128GB"},
+            ]
+        }
+        assert _expand_pronoun_query("điện thoại dưới 5 triệu", state) == "điện thoại dưới 5 triệu"
+        assert _expand_pronoun_query("laptop ram 8gb ổ 1tb", state) == "laptop ram 8gb ổ 1tb"
+        assert _expand_pronoun_query("bảo hành 1 năm", state) == "bảo hành 1 năm"

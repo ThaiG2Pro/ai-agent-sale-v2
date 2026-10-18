@@ -7,6 +7,7 @@ What: Atomic transaction to decrement stock and insert order record.
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import TYPE_CHECKING, cast
 
 from langgraph.types import Command
@@ -89,14 +90,15 @@ async def order_execution_node(state: AgentState, config: RunnableConfig) -> Com
         # a draft row, CONFIRM transitions that row (status → confirmed) instead
         # of inserting a parallel record; an expired draft (TTL 24h) is never
         # confirmed — the agent re-quotes instead.
-        import uuid
-
         from core.config import settings as _settings
         from services.draft_orders import confirm_draft
 
         draft_id = order_info.get("draft_order_id") if _settings.ORDER_HITL_V3_ENABLED else None
 
-        order_uuid = uuid.UUID(str(draft_id)) if draft_id else uuid.uuid4()
+        try:
+            order_uuid = uuid.UUID(str(draft_id)) if draft_id else uuid.uuid4()
+        except (ValueError, TypeError, AttributeError):
+            order_uuid = uuid.uuid4()
         order_code = f"ORD-{str(order_uuid)[:8].upper()}"
         order_info = {**order_info, "items": items, "order_id": order_code, "status": "confirmed"}
 

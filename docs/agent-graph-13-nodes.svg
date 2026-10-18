@@ -1,0 +1,425 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1780 1020" width="100%" height="100%" style="background:#0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080c14"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <!-- Node Headers Gradients -->
+    <linearGradient id="hdr-blue" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1e40af"/><stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="hdr-cyan" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0e7490"/><stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="hdr-amber" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#b45309"/><stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="hdr-red" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#991b1b"/><stop offset="100%" stop-color="#ef4444"/>
+    </linearGradient>
+    <linearGradient id="hdr-green" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#065f46"/><stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="hdr-purple" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#581c87"/><stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="hdr-gray" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#334155"/><stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+
+    <!-- Markers -->
+    <marker id="m-cyan" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#22d3ee"/>
+    </marker>
+    <marker id="m-blue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#60a5fa"/>
+    </marker>
+    <marker id="m-amber" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#fbbf24"/>
+    </marker>
+    <marker id="m-green" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#34d399"/>
+    </marker>
+    <marker id="m-red" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f87171"/>
+    </marker>
+    <marker id="m-purple" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#a78bfa"/>
+    </marker>
+    <marker id="m-gray" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#94a3b8"/>
+    </marker>
+
+    <!-- Card Shadow -->
+    <filter id="f-card" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <rect width="100%" height="100%" fill="url(#bg)"/>
+
+  <!-- ================= HEADER ================= -->
+  <g transform="translate(60, 45)">
+    <text x="0" y="0" fill="#f8fafc" font-size="24" font-weight="800" letter-spacing="-0.5px">LangGraph 13-Node State Graph Architecture</text>
+    <text x="0" y="24" fill="#94a3b8" font-size="13">Clean 3-Track Layout · Strict Separation of Concerns · Non-overlapping Tracing Rails</text>
+    
+    <g transform="translate(1080, -15)">
+      <rect x="0" y="0" width="130" height="26" rx="13" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <circle cx="15" cy="13" r="5" fill="#38bdf8"/>
+      <text x="28" y="17" fill="#e2e8f0" font-size="11" font-weight="600">RAG Pipeline</text>
+
+      <rect x="145" y="0" width="145" height="26" rx="13" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <circle cx="160" cy="13" r="5" fill="#fbbf24"/>
+      <text x="173" y="17" fill="#e2e8f0" font-size="11" font-weight="600">Disambiguation</text>
+
+      <rect x="305" y="0" width="135" height="26" rx="13" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <circle cx="320" cy="13" r="5" fill="#34d399"/>
+      <text x="333" y="17" fill="#e2e8f0" font-size="11" font-weight="600">HITL &amp; Orders</text>
+
+      <rect x="455" y="0" width="130" height="26" rx="13" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <circle cx="470" cy="13" r="5" fill="#a78bfa"/>
+      <text x="483" y="17" fill="#e2e8f0" font-size="11" font-weight="600">Answer Synth</text>
+    </g>
+  </g>
+
+  <!-- ================= SWIMLANES (TRACK BACKGROUNDS) ================= -->
+  <!-- Track 1: Knowledge & RAG -->
+  <rect x="40" y="100" width="1700" height="240" rx="16" fill="#0f172a" fill-opacity="0.5" stroke="#1e293b" stroke-width="1"/>
+  <rect x="40" y="100" width="6" height="240" rx="3" fill="#06b6d4"/>
+  <text x="60" y="130" fill="#38bdf8" font-size="12" font-weight="700" letter-spacing="1px">TRACK 1: RETRIEVAL &amp; MEMORY REASONING</text>
+
+  <!-- Track 2: Intent & Disambiguation -->
+  <rect x="40" y="360" width="1700" height="290" rx="16" fill="#0f172a" fill-opacity="0.5" stroke="#1e293b" stroke-width="1"/>
+  <rect x="40" y="360" width="6" height="290" rx="3" fill="#f59e0b"/>
+  <text x="60" y="390" fill="#fbbf24" font-size="12" font-weight="700" letter-spacing="1px">TRACK 2: INTENT ROUTING, ESCALATION &amp; SYNTHESIS</text>
+
+  <!-- Track 3: Transaction & HITL -->
+  <rect x="40" y="670" width="1700" height="290" rx="16" fill="#0f172a" fill-opacity="0.5" stroke="#1e293b" stroke-width="1"/>
+  <rect x="40" y="670" width="6" height="290" rx="3" fill="#10b981"/>
+  <text x="60" y="700" fill="#34d399" font-size="12" font-weight="700" letter-spacing="1px">TRACK 3: RISK-GATED HUMAN-IN-THE-LOOP &amp; ORDERS</text>
+
+
+  <!-- ================= WIRING RAILS & CONNECTIONS (DRAWN BEHIND NODES) ================= -->
+
+  <!-- START -> router_node -->
+  <path d="M 125 490 L 175 490" fill="none" stroke="#60a5fa" stroke-width="2.5" marker-end="url(#m-blue)"/>
+
+  <!-- [1] router_node -> [2] retrieval_node -->
+  <!-- Exits top of router (x=275, y=420) -> up to y=220 -> right to retrieval (x=445, y=220) -->
+  <path d="M 275 420 L 275 220 L 442 220" fill="none" stroke="#38bdf8" stroke-width="2" marker-end="url(#m-cyan)"/>
+  <rect x="290" y="208" width="125" height="20" rx="5" fill="#090d16" stroke="#0e7490" stroke-width="1"/>
+  <text x="352" y="222" fill="#38bdf8" font-size="10" font-weight="700" text-anchor="middle">INFO / ORDER_QUERY</text>
+
+  <!-- [1] router_node -> [6] escalation_node -->
+  <!-- Exits right of router (x=370, y=470) -> right to escalation (x=712, y=470) -->
+  <path d="M 370 470 L 712 470" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#m-amber)"/>
+  <rect x="480" y="458" width="145" height="20" rx="5" fill="#090d16" stroke="#b45309" stroke-width="1"/>
+  <text x="552" y="472" fill="#fbbf24" font-size="10" font-weight="700" text-anchor="middle">COMPLAINT / NEGOTIATE</text>
+
+  <!-- [1] router_node -> [12] cancellation_node -->
+  <!-- Exits bottom of router (x=275, y=560) -> down to y=595 -> right to cancellation (x=442, y=595) -->
+  <path d="M 275 560 L 275 595 L 442 595" fill="none" stroke="#f87171" stroke-width="2" marker-end="url(#m-red)"/>
+  <rect x="310" y="583" width="95" height="20" rx="5" fill="#090d16" stroke="#991b1b" stroke-width="1"/>
+  <text x="357" y="597" fill="#f87171" font-size="10" font-weight="700" text-anchor="middle">CANCEL_INTENT</text>
+
+  <!-- [1] router_node -> [7] answer_node (Smalltalk Fastpath) -->
+  <!-- Leaves router bottom-right, routes along corridor y=415 straight to answer_node -->
+  <path d="M 370 440 L 415 440 L 415 415 L 1262 415" fill="none" stroke="#a78bfa" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#m-purple)"/>
+  <rect x="580" y="405" width="165" height="20" rx="5" fill="#090d16" stroke="#6b21a8" stroke-width="1"/>
+  <text x="662" y="419" fill="#c084fc" font-size="10" font-weight="700" text-anchor="middle">SMALLTALK (ZERO-LLM PATH)</text>
+
+  <!-- [2] retrieval_node -> [3] memory_retrieval_node -->
+  <path d="M 645 220 L 712 220" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#m-cyan)"/>
+
+  <!-- [3] memory_retrieval_node -> [4] confidence_node -->
+  <path d="M 915 220 L 982 220" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#m-cyan)"/>
+
+  <!-- [4] confidence_node -> [13] customer_support_node (Clarify exhausted) -->
+  <path d="M 1185 190 L 1262 190" fill="none" stroke="#f87171" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#m-red)"/>
+  <rect x="1190" y="178" width="65" height="18" rx="4" fill="#090d16" stroke="#991b1b" stroke-width="1"/>
+  <text x="1222" y="191" fill="#fca5a5" font-size="9" font-weight="700" text-anchor="middle">EXHAUSTED</text>
+
+  <!-- [4] confidence_node -> [5] clarify_node (Ambiguous) -->
+  <path d="M 1085 270 L 1085 412" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#m-amber)"/>
+  <rect x="1092" y="325" width="80" height="20" rx="5" fill="#090d16" stroke="#b45309" stroke-width="1"/>
+  <text x="1132" y="339" fill="#fbbf24" font-size="10" font-weight="700" text-anchor="middle">AMBIGUOUS</text>
+
+  <!-- [4] confidence_node -> [6] escalation_node (Borderline 0.45 <= score < 0.70) -->
+  <!-- Exits left of confidence (x=985, y=240) -> left to x=945 -> down to y=450 -> left to escalation right (x=918, y=450) -->
+  <path d="M 985 240 L 945 240 L 945 450 L 922 450" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#m-amber)"/>
+  <rect x="915" y="300" width="60" height="18" rx="4" fill="#090d16" stroke="#b45309" stroke-width="1"/>
+  <text x="945" y="313" fill="#fbbf24" font-size="9" font-weight="700" text-anchor="middle">BORDER</text>
+
+  <!-- [4] confidence_node -> [7] answer_node (Confident) -->
+  <!-- Exits right of confidence (x=1185, y=240) -> right to x=1220 -> down to y=450 -> right to answer_node (x=1262, y=450) -->
+  <path d="M 1185 240 L 1225 240 L 1225 450 L 1262 450" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#m-green)"/>
+  <rect x="1195" y="330" width="60" height="20" rx="5" fill="#090d16" stroke="#065f46" stroke-width="1"/>
+  <text x="1225" y="344" fill="#34d399" font-size="10" font-weight="700" text-anchor="middle">CONFIDENT</text>
+
+  <!-- [4] confidence_node -> [8] hitl_guard_node (ORDER_PLACEMENT / Low Conf) -->
+  <!-- Exits bottom (x=1050, y=270) -> down to corridor y=305 -> left to x=415 -> down to y=785 -> right to hitl_guard (x=442, y=785) -->
+  <path d="M 1030 270 L 1030 300 L 415 300 L 415 785 L 442 785" fill="none" stroke="#f87171" stroke-width="2" marker-end="url(#m-red)"/>
+  <rect x="425" y="685" width="135" height="20" rx="5" fill="#090d16" stroke="#991b1b" stroke-width="1"/>
+  <text x="492" y="699" fill="#fca5a5" font-size="10" font-weight="700" text-anchor="middle">ORDER / HIGH RISK</text>
+
+  <!-- [5] clarify_node -> [7] answer_node -->
+  <path d="M 1185 470 L 1262 470" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#m-amber)"/>
+
+  <!-- [6] escalation_node -> [7] answer_node -->
+  <!-- Routes along corridor y=490 -->
+  <path d="M 915 490 L 985 490 L 985 510 L 1262 510" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#m-amber)"/>
+
+  <!-- [12] cancellation_node -> [7] answer_node -->
+  <!-- Routes along corridor y=595 -> right to x=1220 -> up to y=535 -> to answer_node (x=1262, y=535) -->
+  <path d="M 645 595 L 1225 595 L 1225 535 L 1262 535" fill="none" stroke="#f87171" stroke-width="2" marker-end="url(#m-red)"/>
+
+  <!-- [9] queue_consumer_node -> [8] hitl_guard_node -->
+  <path d="M 370 820 L 442 820" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#m-gray)"/>
+  <rect x="375" y="808" width="60" height="18" rx="4" fill="#090d16" stroke="#475569" stroke-width="1"/>
+  <text x="405" y="821" fill="#cbd5e1" font-size="9" font-weight="600" text-anchor="middle">RESUME</text>
+
+  <!-- [8] hitl_guard_node -> [10] state_freshness_validator_node -->
+  <path d="M 645 810 L 712 810" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#m-green)"/>
+  <rect x="650" y="798" width="60" height="18" rx="4" fill="#090d16" stroke="#065f46" stroke-width="1"/>
+  <text x="680" y="811" fill="#34d399" font-size="9" font-weight="700" text-anchor="middle">APPROVED</text>
+
+  <!-- [8] hitl_guard_node -> [7] answer_node (Pause / Reject Notice) -->
+  <!-- Exits bottom of hitl_guard (x=545, y=865) -> down to y=920 -> right to x=1235 -> up to answer_node bottom (x=1320, y=605) -->
+  <path d="M 545 865 L 545 920 L 1320 920 L 1320 612" fill="none" stroke="#f87171" stroke-width="1.8" stroke-dasharray="4 4" marker-end="url(#m-red)"/>
+  <rect x="850" y="910" width="130" height="20" rx="5" fill="#090d16" stroke="#991b1b" stroke-width="1"/>
+  <text x="915" y="924" fill="#fca5a5" font-size="10" font-weight="700" text-anchor="middle">PAUSED / REJECT MSG</text>
+
+  <!-- [10] state_freshness_validator_node -> [11] order_execution_node -->
+  <path d="M 915 810 L 982 810" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#m-green)"/>
+  <rect x="922" y="798" width="55" height="18" rx="4" fill="#090d16" stroke="#065f46" stroke-width="1"/>
+  <text x="949" y="811" fill="#34d399" font-size="9" font-weight="700" text-anchor="middle">IN-STOCK</text>
+
+  <!-- [10] state_freshness_validator_node -> [7] answer_node (Stale Price / Out of Stock) -->
+  <!-- Exits top of freshness (x=815, y=755) -> up to corridor y=640 -> right to answer_node bottom (x=1360, y=608) -->
+  <path d="M 815 755 L 815 640 L 1360 640 L 1360 612" fill="none" stroke="#f87171" stroke-width="1.8" stroke-dasharray="4 4" marker-end="url(#m-red)"/>
+  <rect x="990" y="630" width="130" height="20" rx="5" fill="#090d16" stroke="#991b1b" stroke-width="1"/>
+  <text x="1055" y="644" fill="#fca5a5" font-size="10" font-weight="700" text-anchor="middle">OUT_OF_STOCK ERROR</text>
+
+  <!-- [11] order_execution_node -> [7] answer_node (Order Success Receipt) -->
+  <!-- Exits top of order_execution (x=1085, y=755) -> up to corridor y=660 -> right to answer_node bottom (x=1400, y=608) -->
+  <path d="M 1085 755 L 1085 660 L 1400 660 L 1400 612" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#m-green)"/>
+  <rect x="1190" y="650" width="115" height="20" rx="5" fill="#090d16" stroke="#065f46" stroke-width="1"/>
+  <text x="1247" y="664" fill="#34d399" font-size="10" font-weight="700" text-anchor="middle">RECEIPT CREATED</text>
+
+  <!-- [13] customer_support_node -> END -->
+  <path d="M 1465 190 L 1572 190" fill="none" stroke="#f87171" stroke-width="2" marker-end="url(#m-red)"/>
+
+  <!-- [7] answer_node -> END -->
+  <path d="M 1495 500 L 1572 500" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#m-purple)"/>
+
+
+  <!-- ================= NODES RENDERING ================= -->
+
+  <!-- START Terminal -->
+  <g transform="translate(45, 468)" filter="url(#f-card)">
+    <rect width="80" height="44" rx="22" fill="#0284c7" stroke="#38bdf8" stroke-width="2"/>
+    <text x="40" y="27" fill="#ffffff" font-size="13" font-weight="800" text-anchor="middle">START</text>
+  </g>
+
+  <!-- Node 1: router_node -->
+  <g transform="translate(180, 420)" filter="url(#f-card)">
+    <rect width="190" height="140" rx="10" fill="#131c31" stroke="#3b82f6" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 180 0 Q 190 0 190 10 L 190 32 L 0 32 Z" fill="url(#hdr-blue)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">1. router_node</text>
+    <rect x="145" y="8" width="35" height="16" rx="4" fill="#1e3a8a"/>
+    <text x="162" y="20" fill="#93c5fd" font-size="9" font-weight="700" text-anchor="middle">ROUTER</text>
+
+    <text x="14" y="55" fill="#94a3b8" font-size="11">Intent Classification</text>
+    <text x="14" y="73" fill="#94a3b8" font-size="11">Priority Normalizer (H6)</text>
+    <text x="14" y="91" fill="#94a3b8" font-size="11">Sticky Intent Hysteresis</text>
+    <text x="14" y="109" fill="#94a3b8" font-size="11">Multi-Intent Decomp.</text>
+    <rect x="10" y="117" width="170" height="16" rx="3" fill="#1e293b"/>
+    <text x="95" y="129" fill="#38bdf8" font-size="9" font-weight="600" text-anchor="middle">Command(goto=...) dynamic</text>
+  </g>
+
+  <!-- Node 2: retrieval_node -->
+  <g transform="translate(450, 165)" filter="url(#f-card)">
+    <rect width="195" height="110" rx="10" fill="#131c31" stroke="#06b6d4" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-cyan)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">2. retrieval_node</text>
+    <rect x="145" y="8" width="40" height="16" rx="4" fill="#164e63"/>
+    <text x="165" y="20" fill="#67e8f9" font-size="9" font-weight="700" text-anchor="middle">RETRIEVE</text>
+
+    <text x="14" y="54" fill="#94a3b8" font-size="11">Hybrid Vector + FTS (RRF)</text>
+    <text x="14" y="72" fill="#94a3b8" font-size="11">Bounded Retry Loop (≤2)</text>
+    <text x="14" y="90" fill="#94a3b8" font-size="11">Adaptive Top-K Bins</text>
+  </g>
+
+  <!-- Node 3: memory_retrieval_node -->
+  <g transform="translate(720, 165)" filter="url(#f-card)">
+    <rect width="195" height="110" rx="10" fill="#131c31" stroke="#06b6d4" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-cyan)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">3. memory_retrieval</text>
+    <rect x="145" y="8" width="40" height="16" rx="4" fill="#164e63"/>
+    <text x="165" y="20" fill="#67e8f9" font-size="9" font-weight="700" text-anchor="middle">MEMORY</text>
+
+    <text x="14" y="54" fill="#94a3b8" font-size="11">Cross-session History</text>
+    <text x="14" y="72" fill="#94a3b8" font-size="11">Buyer Intent &amp; Budget</text>
+    <text x="14" y="90" fill="#94a3b8" font-size="11">Episodic Memory Fetch</text>
+  </g>
+
+  <!-- Node 4: confidence_node -->
+  <g transform="translate(990, 155)" filter="url(#f-card)">
+    <rect width="195" height="130" rx="10" fill="#131c31" stroke="#06b6d4" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-cyan)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">4. confidence_node</text>
+    <rect x="145" y="8" width="40" height="16" rx="4" fill="#164e63"/>
+    <text x="165" y="20" fill="#67e8f9" font-size="9" font-weight="700" text-anchor="middle">GATING</text>
+
+    <text x="14" y="54" fill="#94a3b8" font-size="11">Fused Score: (1-α)S + αR</text>
+    <text x="14" y="72" fill="#94a3b8" font-size="11">Layer 1 &amp; Layer 2 Gating</text>
+    <text x="14" y="90" fill="#94a3b8" font-size="11">Budget / Stated Match</text>
+    <text x="14" y="108" fill="#38bdf8" font-size="10" font-weight="600">5-Way Conditional Branch</text>
+  </g>
+
+  <!-- Node 5: clarify_node -->
+  <g transform="translate(990, 420)" filter="url(#f-card)">
+    <rect width="195" height="100" rx="10" fill="#131c31" stroke="#f59e0b" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-amber)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">5. clarify_node</text>
+    <rect x="135" y="8" width="50" height="16" rx="4" fill="#78350f"/>
+    <text x="160" y="20" fill="#fde68a" font-size="9" font-weight="700" text-anchor="middle">CLARIFY</text>
+
+    <text x="14" y="54" fill="#94a3b8" font-size="11">1-Question Disambiguate</text>
+    <text x="14" y="72" fill="#94a3b8" font-size="11">Anti-loop Quota (≤2)</text>
+    <text x="14" y="90" fill="#fbbf24" font-size="10" font-weight="600">Exhausted $	o$ Handoff</text>
+  </g>
+
+  <!-- Node 6: escalation_node -->
+  <g transform="translate(720, 420)" filter="url(#f-card)">
+    <rect width="195" height="100" rx="10" fill="#131c31" stroke="#f59e0b" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-amber)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">6. escalation_node</text>
+    <rect x="130" y="8" width="55" height="16" rx="4" fill="#78350f"/>
+    <text x="157" y="20" fill="#fde68a" font-size="9" font-weight="700" text-anchor="middle">ESCALATE</text>
+
+    <text x="14" y="54" fill="#94a3b8" font-size="11">Borderline Info / Pricing</text>
+    <text x="14" y="72" fill="#94a3b8" font-size="11">Complaint / Negotiation</text>
+    <text x="14" y="90" fill="#fbbf24" font-size="10" font-weight="600">Promotes to Premium Tier</text>
+  </g>
+
+  <!-- Node 12: cancellation_node -->
+  <g transform="translate(450, 545)" filter="url(#f-card)">
+    <rect width="195" height="100" rx="10" fill="#131c31" stroke="#ef4444" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-red)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">12. cancellation</text>
+    <rect x="140" y="8" width="45" height="16" rx="4" fill="#7f1d1d"/>
+    <text x="162" y="20" fill="#fca5a5" font-size="9" font-weight="700" text-anchor="middle">CANCEL</text>
+
+    <text x="14" y="54" fill="#94a3b8" font-size="11">Order Existence Check</text>
+    <text x="14" y="72" fill="#94a3b8" font-size="11">Revert Inventory Commit</text>
+    <text x="14" y="90" fill="#f87171" font-size="10" font-weight="600">State Transition Guard</text>
+  </g>
+
+  <!-- Node 9: queue_consumer_node -->
+  <g transform="translate(180, 765)" filter="url(#f-card)">
+    <rect width="190" height="100" rx="10" fill="#131c31" stroke="#64748b" stroke-width="1.8" stroke-dasharray="4 3"/>
+    <path d="M 0 10 Q 0 0 10 0 L 180 0 Q 190 0 190 10 L 190 32 L 0 32 Z" fill="url(#hdr-gray)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">9. queue_consumer</text>
+    <rect x="140" y="8" width="40" height="16" rx="4" fill="#1e293b"/>
+    <text x="160" y="20" fill="#cbd5e1" font-size="9" font-weight="700" text-anchor="middle">ASYNC</text>
+
+    <text x="14" y="54" fill="#94a3b8" font-size="11">Polls Resumed Sessions</text>
+    <text x="14" y="72" fill="#94a3b8" font-size="11">Telegram Webhook Ingress</text>
+    <text x="14" y="90" fill="#94a3b8" font-size="10" font-weight="600">Dispatches Pending State</text>
+  </g>
+
+  <!-- Node 8: hitl_guard_node -->
+  <g transform="translate(450, 755)" filter="url(#f-card)">
+    <rect width="195" height="110" rx="10" fill="#131c31" stroke="#ef4444" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-red)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">8. hitl_guard_node</text>
+    <rect x="145" y="8" width="40" height="16" rx="4" fill="#7f1d1d"/>
+    <text x="165" y="20" fill="#fca5a5" font-size="9" font-weight="700" text-anchor="middle">GUARD</text>
+
+    <text x="14" y="52" fill="#94a3b8" font-size="11">Risk: 0.4(1-C)+0.4V+0.2H</text>
+    <text x="14" y="70" fill="#94a3b8" font-size="11">Tier 1: Auto-approve small</text>
+    <text x="14" y="88" fill="#94a3b8" font-size="11">Tier 2/3: Pause &amp; Review</text>
+    <text x="14" y="104" fill="#f87171" font-size="10" font-weight="600">Order &gt; 5M MUST Pause</text>
+  </g>
+
+  <!-- Node 10: state_freshness_validator_node -->
+  <g transform="translate(720, 755)" filter="url(#f-card)">
+    <rect width="195" height="110" rx="10" fill="#131c31" stroke="#10b981" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-green)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">10. state_freshness</text>
+    <rect x="145" y="8" width="40" height="16" rx="4" fill="#064e3b"/>
+    <text x="165" y="20" fill="#a7f3d0" font-size="9" font-weight="700" text-anchor="middle">STOCK</text>
+
+    <text x="14" y="52" fill="#94a3b8" font-size="11">Real-time DB Stock Check</text>
+    <text x="14" y="70" fill="#94a3b8" font-size="11">Detect Price Changes</text>
+    <text x="14" y="88" fill="#94a3b8" font-size="11">Postgres Row Locking</text>
+    <text x="14" y="104" fill="#34d399" font-size="10" font-weight="600">Prevents Stale Checkout</text>
+  </g>
+
+  <!-- Node 11: order_execution_node -->
+  <g transform="translate(990, 755)" filter="url(#f-card)">
+    <rect width="195" height="110" rx="10" fill="#131c31" stroke="#10b981" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-green)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">11. order_execution</text>
+    <rect x="140" y="8" width="45" height="16" rx="4" fill="#064e3b"/>
+    <text x="162" y="20" fill="#a7f3d0" font-size="9" font-weight="700" text-anchor="middle">COMMIT</text>
+
+    <text x="14" y="52" fill="#94a3b8" font-size="11">Atomic Stock Decrement</text>
+    <text x="14" y="70" fill="#94a3b8" font-size="11">Order Created in DB</text>
+    <text x="14" y="88" fill="#94a3b8" font-size="11">Emit Draft &amp; Receipt</text>
+    <text x="14" y="104" fill="#34d399" font-size="10" font-weight="600">Postgres Transaction</text>
+  </g>
+
+  <!-- Node 13: customer_support_node -->
+  <g transform="translate(1270, 145)" filter="url(#f-card)">
+    <rect width="195" height="90" rx="10" fill="#131c31" stroke="#ef4444" stroke-width="2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 185 0 Q 195 0 195 10 L 195 32 L 0 32 Z" fill="url(#hdr-red)"/>
+    <text x="12" y="21" fill="#ffffff" font-size="13" font-weight="700">13. customer_support</text>
+    <rect x="145" y="8" width="40" height="16" rx="4" fill="#7f1d1d"/>
+    <text x="165" y="20" fill="#fca5a5" font-size="9" font-weight="700" text-anchor="middle">TICKET</text>
+
+    <text x="14" y="52" fill="#94a3b8" font-size="11">Human Handoff Package</text>
+    <text x="14" y="70" fill="#94a3b8" font-size="11">Holding Message to User</text>
+    <text x="14" y="84" fill="#f87171" font-size="10" font-weight="600">Routes to END Directly</text>
+  </g>
+
+  <!-- Node 7: answer_node -->
+  <g transform="translate(1270, 395)" filter="url(#f-card)">
+    <rect width="225" height="210" rx="12" fill="#161530" stroke="#8b5cf6" stroke-width="2.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 213 0 Q 225 0 225 12 L 225 36 L 0 36 Z" fill="url(#hdr-purple)"/>
+    <text x="14" y="24" fill="#ffffff" font-size="15" font-weight="800">7. answer_node</text>
+    <rect x="155" y="10" width="55" height="18" rx="4" fill="#4c1d95"/>
+    <text x="182" y="23" fill="#ddd6fe" font-size="10" font-weight="700" text-anchor="middle">SYNTHESIS</text>
+
+    <text x="14" y="60" fill="#cbd5e1" font-size="11.5">• Groundedness Cascade Check</text>
+    <text x="14" y="80" fill="#cbd5e1" font-size="11.5">• Fragment Footnote Citations</text>
+    <text x="14" y="100" fill="#cbd5e1" font-size="11.5">• Structured Pydantic Output</text>
+    <text x="14" y="120" fill="#cbd5e1" font-size="11.5">• PII Masking (Email / Phone)</text>
+
+    <!-- 3-Tier Fallback Ladder Box -->
+    <rect x="12" y="132" width="201" height="66" rx="6" fill="#0d0920" stroke="#7c3aed" stroke-width="1.2"/>
+    <text x="112" y="150" fill="#c4b5fd" font-size="10" font-weight="800" text-anchor="middle">3-TIER MODEL FALLBACK LADDER</text>
+    <text x="112" y="167" fill="#e2e8f0" font-size="9.5" text-anchor="middle">Groq 70B $	o$ Groq 8B $	o$ Ollama Local</text>
+    <text x="112" y="184" fill="#94a3b8" font-size="9" text-anchor="middle">Daily Token &amp; Cost Guard Protection</text>
+  </g>
+
+  <!-- END Terminal (Support) -->
+  <g transform="translate(1580, 168)" filter="url(#f-card)">
+    <rect width="80" height="44" rx="22" fill="#475569" stroke="#94a3b8" stroke-width="2"/>
+    <text x="40" y="27" fill="#ffffff" font-size="13" font-weight="800" text-anchor="middle">END</text>
+  </g>
+
+  <!-- END Terminal (Main) -->
+  <g transform="translate(1580, 478)" filter="url(#f-card)">
+    <rect width="80" height="44" rx="22" fill="#6366f1" stroke="#818cf8" stroke-width="2.5"/>
+    <text x="40" y="27" fill="#ffffff" font-size="13" font-weight="800" text-anchor="middle">END</text>
+  </g>
+
+  <!-- ================= FOOTER ================= -->
+  <g transform="translate(60, 990)">
+    <text x="0" y="0" fill="#64748b" font-size="12">PostgreSQL Checkpointer (ai_agent_sales_v2) · Recursion Limit: 20 · Max Turns: 5 · OpenTelemetry Traced · Graph Schema v009</text>
+  </g>
+</svg>

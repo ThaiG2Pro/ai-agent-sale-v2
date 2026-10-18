@@ -71,7 +71,11 @@ async def check_groundedness(query: str, answer: str, context: str) -> Groundedn
     caller's behavior is then identical to the pre-WP-V2-1 pipeline.
     """
     if not answer.strip():
-        return _PASS_VERDICT
+        return GroundednessVerdict(
+            answerable=False,
+            supported=False,
+            unsupported_claims=["Empty answer generated"],
+        )
 
     start_time = time.perf_counter()
     messages = [
@@ -91,6 +95,7 @@ async def check_groundedness(query: str, answer: str, context: str) -> Groundedn
             messages,
             model="economy-chat",
             temperature=0,
+            max_tokens=600,
         )
         logfire.info(
             "groundedness verdict: answerable={a} supported={s} claims={n} ({t:.2f}s)",

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import functools
 import inspect
+import json
 from typing import TYPE_CHECKING, Any
 
 from langgraph.graph import END, START, StateGraph
@@ -39,6 +40,105 @@ from core.config import settings
 tracer = trace.get_tracer("ai_sales_agent.graph")
 
 
+def _format_clean_node_input(node_name: str, state: Any) -> str:
+    """Format a compact, signal-rich input JSON for Phoenix trace display."""
+    if not isinstance(state, dict):
+        return ""
+    if node_name == "router_node":
+        payload = {
+            "user_message": state.get("user_message"),
+            "previous_intent": state.get("intent"),
+            "customer_id": state.get("customer_id"),
+        }
+    elif node_name == "retrieval_node":
+        payload = {
+            "query": state.get("user_message"),
+            "intent": state.get("intent"),
+            "clarify_count": state.get("clarify_count", 0),
+        }
+    elif node_name == "confidence_node":
+        payload = {
+            "intent": state.get("intent"),
+            "similarity_score": state.get("similarity_score"),
+            "citations_count": len(state.get("citations") or []),
+        }
+    elif node_name == "hitl_guard_node":
+        payload = {
+            "intent": state.get("intent"),
+            "confidence_score": state.get("confidence_score"),
+            "order_info": state.get("order_info"),
+            "risk_signals": state.get("risk_signals", []),
+        }
+    elif node_name == "answer_node":
+        payload = {
+            "intent": state.get("intent"),
+            "confidence_score": state.get("confidence_score"),
+            "citations_count": len(state.get("citations") or []),
+            "declined": state.get("declined", False),
+        }
+    else:
+        payload = {
+            "intent": state.get("intent"),
+            "user_message": state.get("user_message"),
+        }
+    return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+def _format_clean_node_output(node_name: str, res: Any) -> str:
+    """Format a compact, signal-rich output JSON for Phoenix trace display."""
+    update = _unwrap_output_state(res)
+    goto = getattr(res, "goto", None)
+
+    if node_name == "router_node":
+        payload = {
+            "intent": update.get("intent"),
+            "confidence": update.get("intent_confidence"),
+            "reasoning": update.get("router_reasoning") or update.get("reasoning"),
+            "intent_shift": update.get("intent_shift"),
+            "goto": goto,
+        }
+    elif node_name == "retrieval_node":
+        citations = update.get("citations") or []
+        formatted_citations = []
+        for c in citations[:3]:
+            if hasattr(c, "name") and hasattr(c, "sku"):
+                formatted_citations.append({"name": c.name, "sku": c.sku})
+            elif isinstance(c, dict):
+                formatted_citations.append({"name": c.get("name"), "sku": c.get("sku")})
+        payload = {
+            "similarity_score": update.get("similarity_score"),
+            "similarity_gap": update.get("similarity_gap"),
+            "citations_sample": formatted_citations,
+            "total_citations": len(citations),
+        }
+    elif node_name == "confidence_node":
+        payload = {
+            "confidence_score": update.get("confidence_score"),
+            "declined": update.get("declined"),
+            "needs_clarification": update.get("needs_clarification"),
+        }
+    elif node_name == "hitl_guard_node":
+        payload = {
+            "hitl_triggered": update.get("hitl_triggered"),
+            "hitl_approved": update.get("hitl_approved"),
+            "risk_score": update.get("risk_score"),
+            "hitl_pause_id": update.get("hitl_pause_id"),
+            "goto": goto,
+        }
+    elif node_name == "answer_node":
+        resp = update.get("response") or ""
+        payload = {
+            "response": resp[:250] + ("..." if len(resp) > 250 else ""),
+            "model_used": update.get("model_used"),
+            "declined": update.get("declined"),
+        }
+    else:
+        payload = {k: v for k, v in update.items() if not k.startswith("_")}
+        if goto:
+            payload["goto"] = goto
+    return json.dumps(payload, ensure_ascii=False, default=str)
+
+
 def _extract_attributes_from_state(
     state: Any, kwargs: dict[str, Any], args: tuple[Any, ...]
 ) -> dict[str, Any]:
@@ -58,10 +158,12 @@ def _extract_attributes_from_state(
             attrs["intent"] = str(intent)
         if model_used := state.get("model_used"):
             attrs["model_used"] = str(model_used)
+        if router_model := state.get("router_model"):
+            attrs["router_model"] = str(router_model)
+        if reasoning := (state.get("router_reasoning") or state.get("reasoning")):
+            attrs["router_reasoning"] = str(reasoning)
         if (declined := state.get("declined")) is not None:
             attrs["declined"] = bool(declined)
-        # v3-0 P3 (T12 3.6): 80/20 log = span attributes on the existing
-        # Phoenix trace — risk_signals (the four 2.3 signals) and outcome.
         if risk_signals := state.get("risk_signals"):
             attrs["risk_signals"] = ",".join(str(s) for s in risk_signals)
         if state.get("degraded"):
@@ -128,10 +230,16 @@ def traced_node(node_name: str, func: Callable[..., Any]) -> Callable[..., Any]:
                 _annotate_span_start(
                     span, node_name, _extract_attributes_from_state(state, kwargs, args)
                 )
+                span.set_attribute(
+                    SpanAttributes.INPUT_VALUE, _format_clean_node_input(node_name, state)
+                )
                 res = await func(*args, **kwargs)
                 _update_span_attributes(
                     span,
                     _extract_attributes_from_state(_unwrap_output_state(res), kwargs, args),
+                )
+                span.set_attribute(
+                    SpanAttributes.OUTPUT_VALUE, _format_clean_node_output(node_name, res)
                 )
                 return res
     else:
@@ -143,10 +251,16 @@ def traced_node(node_name: str, func: Callable[..., Any]) -> Callable[..., Any]:
                 _annotate_span_start(
                     span, node_name, _extract_attributes_from_state(state, kwargs, args)
                 )
+                span.set_attribute(
+                    SpanAttributes.INPUT_VALUE, _format_clean_node_input(node_name, state)
+                )
                 res = func(*args, **kwargs)
                 _update_span_attributes(
                     span,
                     _extract_attributes_from_state(_unwrap_output_state(res), kwargs, args),
+                )
+                span.set_attribute(
+                    SpanAttributes.OUTPUT_VALUE, _format_clean_node_output(node_name, res)
                 )
                 return res
 

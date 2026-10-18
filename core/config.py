@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     PHOENIX_PROJECT_NAME: str = "ai-sales-agent"
     # WP-V3-2: per-node OTel tracing in LangGraph graph execution
     OTEL_NODE_SPANS_ENABLED: bool = True
+    # Disable raw SQL query spam in Phoenix traces (checkpoints, token_budget, SELECT 1)
+    OTEL_SQL_SPANS_ENABLED: bool = False
 
     # Week 3: Agent Configuration
     LAYER1_CONFIDENCE_THRESHOLD: float = 0.45  # RAG layer threshold (must be ≤ 0.6)

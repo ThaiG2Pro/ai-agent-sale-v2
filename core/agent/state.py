@@ -6,7 +6,6 @@ What it does: Provides typed state, enums, and I/O contracts used by all nodes.
 
 from __future__ import annotations
 
-import operator
 import time
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -186,8 +185,10 @@ class AgentState(TypedDict):
     # disagreements for the sticky-intent escape hatch.
     intent_shift: bool
     intent_disagreement_count: int
+    router_reasoning: str | None
+    router_model: str | None
     retrieved_chunks: list[dict]
-    citations: Annotated[list, operator.add]
+    citations: list
     similarity_score: float
     similarity_gap: float
     rerank_score: float | None

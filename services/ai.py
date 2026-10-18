@@ -324,24 +324,34 @@ async def _embed_local(texts: list[str]) -> list[list[float]]:
     global _local_embedder
     start_time = time.perf_counter()
     model_id = _resolve_local_embed_id(settings.EMBED_MODEL)
-    if _local_embedder is None:
-        from fastembed import TextEmbedding
+    tracer = trace.get_tracer(__name__)
+    with tracer.start_as_current_span(f"embedding.{model_id}") as span:
+        span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "EMBEDDING")
+        span.set_attribute(SpanAttributes.EMBEDDING_MODEL_NAME, model_id)
+        span.set_attribute(SpanAttributes.INPUT_MIME_TYPE, "application/json")
+        try:
+            span.set_attribute(SpanAttributes.INPUT_VALUE, json.dumps(texts, ensure_ascii=False))
+        except Exception:
+            span.set_attribute(SpanAttributes.INPUT_VALUE, str(texts))
 
-        _local_embedder = await asyncio.to_thread(TextEmbedding, model_name=model_id)
-    embedder = _local_embedder
-    vectors = await asyncio.to_thread(lambda: [v.tolist() for v in embedder.embed(texts)])
-    for vec in vectors:
-        if len(vec) != settings.EMBED_DIMENSION:
-            raise ValueError(
-                f"Configuration Error: Model Mismatch — local embedding dimension "
-                f"{len(vec)} (expected {settings.EMBED_DIMENSION})"
-            )
-    logfire.info(
-        "AI Embedding finished: {model} (local), Latency: {latency:.4f}s",
-        model=model_id,
-        latency=time.perf_counter() - start_time,
-    )
-    return vectors
+        if _local_embedder is None:
+            from fastembed import TextEmbedding
+
+            _local_embedder = await asyncio.to_thread(TextEmbedding, model_name=model_id)
+        embedder = _local_embedder
+        vectors = await asyncio.to_thread(lambda: [v.tolist() for v in embedder.embed(texts)])
+        for vec in vectors:
+            if len(vec) != settings.EMBED_DIMENSION:
+                raise ValueError(
+                    f"Configuration Error: Model Mismatch — local embedding dimension "
+                    f"{len(vec)} (expected {settings.EMBED_DIMENSION})"
+                )
+        logfire.info(
+            "AI Embedding finished: {model} (local), Latency: {latency:.4f}s",
+            model=model_id,
+            latency=time.perf_counter() - start_time,
+        )
+        return vectors
 
 
 class AIGateway:
@@ -372,46 +382,89 @@ class AIGateway:
         # rung-to-rung fallback — the legacy in-method recursion must not fire.
         ladder_managed = bool(kwargs.pop("_ladder", False))
 
-        start_time = time.perf_counter()
+        tracer = trace.get_tracer(__name__)
+        span_name = f"llm.{model}"
+        with tracer.start_as_current_span(span_name) as span:
+            span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "LLM")
+            span.set_attribute(SpanAttributes.LLM_MODEL_NAME, model)
+            span.set_attribute(SpanAttributes.INPUT_MIME_TYPE, "application/json")
+            try:
+                span.set_attribute(
+                    SpanAttributes.INPUT_VALUE,
+                    json.dumps(messages, ensure_ascii=False)
+                    if isinstance(messages, (list, dict))
+                    else str(messages),
+                )
+            except Exception:
+                span.set_attribute(SpanAttributes.INPUT_VALUE, str(messages))
 
-        try:
-            logfire.info("AI Completion started: {model}", model=model)
+            start_time = time.perf_counter()
 
-            # Link LiteLLM sub-spans to the conversation session
-            with using_session(session_id) if session_id else contextlib.nullcontext():
-                kwargs.setdefault("max_tokens", 512)
-                await _rpm_limiter.acquire()
-                response = await ai_router.acompletion(
-                    model=model, messages=messages, stream=stream, **kwargs
+            try:
+                logfire.info("AI Completion started: {model}", model=model)
+
+                # Link LiteLLM sub-spans to the conversation session
+                with using_session(session_id) if session_id else contextlib.nullcontext():
+                    kwargs.setdefault("max_tokens", 1500)
+                    await _rpm_limiter.acquire()
+                    response = await ai_router.acompletion(
+                        model=model, messages=messages, stream=stream, **kwargs
+                    )
+
+                latency = time.perf_counter() - start_time
+                logfire.info(
+                    "AI Completion finished: {model}, Latency: {latency:.4f}s",
+                    model=model,
+                    latency=latency,
                 )
 
-            latency = time.perf_counter() - start_time
-            logfire.info(
-                "AI Completion finished: {model}, Latency: {latency:.4f}s",
-                model=model,
-                latency=latency,
-            )
+                if hasattr(response, "choices") and response.choices:
+                    choice = response.choices[0]
+                    content = getattr(choice.message, "content", "") or ""
+                    if not content and getattr(choice.message, "reasoning", None):
+                        logfire.warn(
+                            "AI Completion produced reasoning but empty content ({finish_reason})",
+                            finish_reason=getattr(choice, "finish_reason", "unknown"),
+                        )
+                    span.set_attribute(SpanAttributes.OUTPUT_VALUE, str(content))
+                    span.set_attribute(SpanAttributes.OUTPUT_MIME_TYPE, "text/plain")
 
-            return response
+                metrics = extract_llm_metrics(response, latency_ms=latency * 1000)
+                if metrics.prompt_tokens:
+                    span.set_attribute(
+                        SpanAttributes.LLM_TOKEN_COUNT_PROMPT, metrics.prompt_tokens
+                    )
+                if metrics.completion_tokens:
+                    span.set_attribute(
+                        SpanAttributes.LLM_TOKEN_COUNT_COMPLETION, metrics.completion_tokens
+                    )
+                if metrics.total_tokens:
+                    span.set_attribute(SpanAttributes.LLM_TOKEN_COUNT_TOTAL, metrics.total_tokens)
+                if metrics.cost:
+                    span.set_attribute(SpanAttributes.LLM_COST_TOTAL, metrics.cost)
 
-        except Exception as e:
-            latency = time.perf_counter() - start_time
-            logfire.error(
-                "AI Completion failed: {model}, Latency: {latency:.4f}s, Error: {err}",
-                model=model,
-                latency=latency,
-                err=str(e),
-            )
+                return response
 
-            # FR-015: Manual fallback to economy-chat (local) if model call fails.
-            # Skipped when the P3 ladder manages the call — it decides the next
-            # rung (429 cooldown, intent policy) instead of this blind fallback.
-            if not ladder_managed and model != "economy-chat":
-                logfire.warn("Falling back to economy-chat due to error: {err}", err=str(e))
-                return await AIGateway.complete(
-                    messages=messages, model="economy-chat", stream=stream, **kwargs
+            except Exception as e:
+                latency = time.perf_counter() - start_time
+                span.record_exception(e)
+                span.set_status(trace.StatusCode.ERROR, str(e))
+                logfire.error(
+                    "AI Completion failed: {model}, Latency: {latency:.4f}s, Error: {err}",
+                    model=model,
+                    latency=latency,
+                    err=str(e),
                 )
-            raise e
+
+                # FR-015: Manual fallback to economy-chat (local) if model call fails.
+                # Skipped when the P3 ladder manages the call — it decides the next
+                # rung (429 cooldown, intent policy) instead of this blind fallback.
+                if not ladder_managed and model != "economy-chat":
+                    logfire.warn("Falling back to economy-chat due to error: {err}", err=str(e))
+                    return await AIGateway.complete(
+                        messages=messages, model="economy-chat", stream=stream, **kwargs
+                    )
+                raise e
 
     @staticmethod
     async def complete_json(
@@ -428,7 +481,10 @@ class AIGateway:
         system prompt + response_format={"type": "json_object"} + repair parse.
         Raises only when BOTH steps fail — callers keep their own fallbacks.
         """
-        if schema is not None:
+        # Groq rejects strict Pydantic model response_format (causes 400 json_validate_failed).
+        # Skip step 1 on Groq models to avoid throwing a failed attempt and wasting latency/tokens.
+        is_groq = "groq" in settings.CHAT_MODEL or (isinstance(model, str) and "groq" in model)
+        if schema is not None and not is_groq:
             try:
                 resp = await AIGateway.complete(
                     messages=messages, model=model, response_format=schema, **kwargs
@@ -485,50 +541,64 @@ class AIGateway:
         if _settings.EMBED_MODEL.startswith("local/"):
             return await _embed_local(input_text)
 
-        try:
-            logfire.info("AI Embedding started: {model}", model=model)
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span(f"embedding.{model}") as span:
+            span.set_attribute(SpanAttributes.OPENINFERENCE_SPAN_KIND, "EMBEDDING")
+            span.set_attribute(SpanAttributes.EMBEDDING_MODEL_NAME, model)
+            span.set_attribute(SpanAttributes.INPUT_MIME_TYPE, "application/json")
+            try:
+                span.set_attribute(
+                    SpanAttributes.INPUT_VALUE, json.dumps(input_text, ensure_ascii=False)
+                )
+            except Exception:
+                span.set_attribute(SpanAttributes.INPUT_VALUE, str(input_text))
 
-            with using_session(session_id) if session_id else contextlib.nullcontext():
-                response = await ai_router.aembedding(model=model, input=input_text, **kwargs)
+            try:
+                logfire.info("AI Embedding started: {model}", model=model)
 
-            latency = time.perf_counter() - start_time
-            logfire.info(
-                "AI Embedding finished: {model}, Latency: {latency:.4f}s",
-                model=model,
-                latency=latency,
-            )
+                with using_session(session_id) if session_id else contextlib.nullcontext():
+                    response = await ai_router.aembedding(model=model, input=input_text, **kwargs)
 
-            # Extract embeddings from response
-            from core.config import settings
+                latency = time.perf_counter() - start_time
+                logfire.info(
+                    "AI Embedding finished: {model}, Latency: {latency:.4f}s",
+                    model=model,
+                    latency=latency,
+                )
 
-            expected_dim = settings.EMBED_DIMENSION
-            embeddings = [data["embedding"] for data in response.data]
-            for emb in embeddings:
-                if len(emb) != expected_dim:
-                    logfire.error(
-                        (
-                            "Configuration Error: Model Mismatch — "
-                            "embedding dimension {got} (expected {exp})"
-                        ),
-                        got=len(emb),
-                        exp=expected_dim,
-                        model=model,
-                    )
-                    raise ValueError(
-                        f"Configuration Error: Model Mismatch — "
-                        f"embedding dimension {len(emb)} (expected {expected_dim})"
-                    )
-            return embeddings
+                # Extract embeddings from response
+                from core.config import settings
 
-        except Exception as e:
-            latency = time.perf_counter() - start_time
-            logfire.error(
-                "AI Embedding failed: {model}, Latency: {latency:.4f}s, Error: {err}",
-                model=model,
-                latency=latency,
-                err=str(e),
-            )
-            raise e
+                expected_dim = settings.EMBED_DIMENSION
+                embeddings = [data["embedding"] for data in response.data]
+                for emb in embeddings:
+                    if len(emb) != expected_dim:
+                        logfire.error(
+                            (
+                                "Configuration Error: Model Mismatch — "
+                                "embedding dimension {got} (expected {exp})"
+                            ),
+                            got=len(emb),
+                            exp=expected_dim,
+                            model=model,
+                        )
+                        raise ValueError(
+                            f"Configuration Error: Model Mismatch — "
+                            f"embedding dimension {len(emb)} (expected {expected_dim})"
+                        )
+                return embeddings
+
+            except Exception as e:
+                latency = time.perf_counter() - start_time
+                span.record_exception(e)
+                span.set_status(trace.StatusCode.ERROR, str(e))
+                logfire.error(
+                    "AI Embedding failed: {model}, Latency: {latency:.4f}s, Error: {err}",
+                    model=model,
+                    latency=latency,
+                    err=str(e),
+                )
+                raise e
 
     @staticmethod
     async def normalize_query(query: str) -> NormalizedQuery:
