@@ -514,10 +514,10 @@ async def hitl_guard_node(state: AgentState, config: RunnableConfig) -> Command:
                 user_msg = getattr(m, "content", "")
                 break
 
-        import re as _re
-
-        is_avail_query = bool(
-            _re.search(r"còn\s*(?:hàng|không|k\b|ko\b)|sẵn\s*hàng", user_msg, _re.IGNORECASE)
+        is_avail_query = (
+            state.get("intent") == "AVAILABILITY"
+            or "AVAILABILITY" in (state.get("secondary_intents") or [])
+            or any(w in user_msg.lower() for w in ("còn hàng", "sẵn hàng", "còn k", "còn ko"))
         )
         if is_avail_query and order_info:
             p_name = order_info.get("name") or order_info.get("product_name") or "sản phẩm"

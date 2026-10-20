@@ -80,7 +80,8 @@ async def test_check_groundedness_empty_answer_short_circuits():
     with patch("services.ai.AIGateway.complete", new=AsyncMock()) as complete:
         verdict = await check_groundedness("q", "   ", "ctx")
     complete.assert_not_called()
-    assert verdict.supported is True
+    assert verdict.supported is False
+    assert verdict.answerable is False
 
 
 # ── answer_node: groundedness loop ───────────────────────────────────────────
@@ -390,7 +391,7 @@ async def test_cascade_economy_failure_falls_forward_to_premium(monkeypatch):
     state = _escalated_state()
     calls = {"n": 0}
 
-    async def flaky_complete(model, messages):
+    async def flaky_complete(model, messages, **kwargs):
         calls["n"] += 1
         if model == "economy-chat":
             raise RuntimeError("economy down")

@@ -18,17 +18,30 @@ import re
 from core.agent.state import IntentClassification, IntentEnum
 
 # Hesitation / defer signals (T03 rec 2): deterministic flags for a probable
-# flip out of an in-flight order — "thôi", "để xem thêm", "khoan đã", "chưa
-# vội"... Standalone "thôi" only (word "thôi" also appears in benign phrases
-# like "thôi được"), longer phrases matched anywhere.
-_HESITATION_PATTERNS = re.compile(
-    r"^\s*thôi[.!,\s]*$"
-    r"|thôi\s*(để|khỏi|đừng)"
-    r"|để\s*(xem|suy\s*nghĩ|nghĩ|tính|cân\s*nhắc)\s*(thêm|lại|đã|xíu|chút)?"
-    r"|khoan\s*(đã|nhé|hẵng)?"
-    r"|chưa\s*vội|từ\s*từ\s*đã|suy\s*nghĩ\s*(thêm|đã)"
-    r"|let\s*me\s*think|not\s*now|hold\s*on|wait\s*a\s*(sec|moment)",
-    re.IGNORECASE | re.UNICODE,
+# flip out of an in-flight order — "thôi", "để xem thêm", "khoan đã", "chưa vội"...
+_HESITATION_PHRASES: tuple[str, ...] = (
+    "thôi để",
+    "thôi khỏi",
+    "thôi đừng",
+    "để xem",
+    "để suy nghĩ",
+    "để nghĩ",
+    "để tính",
+    "để cân nhắc",
+    "khoan đã",
+    "khoan nhé",
+    "khoan hẵng",
+    "khoan,",
+    "khoan",
+    "chưa vội",
+    "từ từ đã",
+    "suy nghĩ thêm",
+    "suy nghĩ đã",
+    "let me think",
+    "not now",
+    "hold on",
+    "wait a sec",
+    "wait a moment",
 )
 
 # Only treat hesitation as a flip when a transactional intent is in flight.
@@ -72,7 +85,16 @@ MAX_DISAGREEMENTS = 2
 
 def is_hesitation(text: str) -> bool:
     """True when the message carries a hesitation/defer signal ("thôi", "khoan đã"...)."""
-    return bool(_HESITATION_PATTERNS.search(text or ""))
+    if not text:
+        return False
+    t_clean = text.strip().lower()
+    # Standalone "thôi"
+    if t_clean in ("thôi", "thôi.", "thôi!", "thôi,") or t_clean.rstrip(".!, ") == "thôi":
+        return True
+    # Exception: "thôi được" is agreement, NOT hesitation
+    if "thôi được" in t_clean or "thôi dc" in t_clean:
+        return False
+    return any(p in t_clean for p in _HESITATION_PHRASES)
 
 
 def normalize_priority(classification: IntentClassification) -> IntentClassification:

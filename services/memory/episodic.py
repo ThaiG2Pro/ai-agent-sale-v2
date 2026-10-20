@@ -8,7 +8,6 @@ customer_id and covered by the RTBF cascade.
 from __future__ import annotations
 
 import logging
-import re
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -23,20 +22,40 @@ logger = logging.getLogger(__name__)
 
 # Vietnamese (+ a few English) time-reference markers that signal the customer
 # is pointing back at a PAST conversation, not asking a fresh question.
-_TIME_REFERENCE_RE = re.compile(
-    r"(hôm qua|hôm trước|hôm nọ|bữa trước|lần trước|lúc trước|lúc nãy|khi nãy"
-    r"|tuần trước|tháng trước|trước đó|đã tư vấn|từng hỏi|đã hỏi"
-    r"|yesterday|last time|last week)",
-    re.IGNORECASE,
+# Uses substring token matching instead of regex for consistency and speed.
+_TIME_REFERENCE_TOKENS: tuple[str, ...] = (
+    "hôm qua",
+    "hôm trước",
+    "hôm nọ",
+    "bữa trước",
+    "lần trước",
+    "lúc trước",
+    "lúc nãy",
+    "khi nãy",
+    "ban nãy",
+    "tuần trước",
+    "tháng trước",
+    "trước đó",
+    "đã tư vấn",
+    "từng hỏi",
+    "đã hỏi",
+    "đơn cũ",
+    "yesterday",
+    "last time",
+    "last week",
+    "before",
 )
 
 # Cap stored response text — episodic rows are recall cues, not transcripts.
 _RESPONSE_SUMMARY_MAX_CHARS = 500
 
 
-def has_time_reference(query: str) -> bool:
+def has_time_reference(query: str | None) -> bool:
     """True when the query references a past conversation by time."""
-    return bool(_TIME_REFERENCE_RE.search(query or ""))
+    if not query:
+        return False
+    query_l = query.lower()
+    return any(tok in query_l for tok in _TIME_REFERENCE_TOKENS)
 
 
 class EpisodicMemoryService:

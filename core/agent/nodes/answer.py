@@ -472,14 +472,16 @@ async def answer_node(state: AgentState, config: RunnableConfig) -> dict:
             response = DECLINE_MESSAGE
 
     # ── WP-V2-1 groundedness self-check (kill switch: GROUNDEDNESS_CHECK_ENABLED).
-    # Skipped for SMALLTALK (no retrieval context to ground against) and when
-    # generation itself failed (metrics is None).
+    # Only applied to advisory/factual product queries (INFO_QUERY, PRICING, AVAILABILITY, COMPARISON).
+    # NEVER applied to transactional intents (ORDER_PLACEMENT, CANCEL, NEGOTIATION, SMALLTALK)
+    # to avoid falsely rejecting customer contact details (phone, city address).
     grounded_declined = False
     groundedness_meta: dict | None = None
+    _GROUNDED_ELIGIBLE_INTENTS = {"INFO_QUERY", "PRICING", "AVAILABILITY", "COMPARISON"}
     if (
         metrics is not None
         and settings.GROUNDEDNESS_CHECK_ENABLED
-        and state.get("intent") != "SMALLTALK"
+        and state.get("intent") in _GROUNDED_ELIGIBLE_INTENTS
         and chunk_text
     ):
         response, model, metrics, grounded_declined, groundedness_meta = await _verify_grounded(
@@ -639,24 +641,55 @@ async def _generate_catalog_response(state: AgentState, db: AsyncSession) -> str
 
     Returns formatted catalog string or None (fall through to DECLINE_MESSAGE).
     """
-    import re as _re
+    query_lower = state.get("user_message", "").lower()
+    words = query_lower.split()
 
-    query = state.get("user_message", "")
-    words = query.split()
-
-    # Specific product keywords that should NOT trigger generic catalog fallback
-    _specific_keywords = _re.compile(
-        r"\b(laptop|lap|dt|đt|phone|tablet|máy tính|tai nghe|headphone|tai|"
-        r"keyboard|bàn phím|chuột|mouse|ssd|ram|gpu|card|màn hình|monitor|charger|"
-        r"pin|sạc|củ sạc|sạc dự phòng|macbook|mac|iphone|ip|samsung|xiaomi|asus|dell|lenovo|sony|watch|đồng hồ|nguồn|psu)\b",
-        _re.IGNORECASE | _re.UNICODE,
+    _laptop_keywords = ("laptop", "lap", "máy tính", "macbook")
+    _phone_keywords = ("điện thoại", "phone", "dt", "đt", "iphone", "ip", "samsung", "xiaomi")
+    _specific_keywords = (
+        "laptop",
+        "lap",
+        "dt",
+        "đt",
+        "phone",
+        "tablet",
+        "máy tính",
+        "tai nghe",
+        "headphone",
+        "tai",
+        "keyboard",
+        "bàn phím",
+        "chuột",
+        "mouse",
+        "ssd",
+        "ram",
+        "gpu",
+        "card",
+        "màn hình",
+        "monitor",
+        "charger",
+        "pin",
+        "sạc",
+        "củ sạc",
+        "sạc dự phòng",
+        "macbook",
+        "mac",
+        "iphone",
+        "ip",
+        "samsung",
+        "xiaomi",
+        "asus",
+        "dell",
+        "lenovo",
+        "sony",
+        "watch",
+        "đồng hồ",
+        "nguồn",
+        "psu",
     )
 
-    # Check category filters
-    is_laptop = bool(_re.search(r"\b(laptop|lap|máy tính|macbook)\b", query, _re.IGNORECASE))
-    is_phone = bool(
-        _re.search(r"\b(điện thoại|phone|dt|đt|iphone|ip|samsung|xiaomi)\b", query, _re.IGNORECASE)
-    )
+    is_laptop = any(kw in query_lower for kw in _laptop_keywords)
+    is_phone = any(kw in query_lower for kw in _phone_keywords)
 
     # If query is long (> 8 words) or specifies a product that should go through RAG, skip catalog fallback
     if len(words) > 8 and not (is_laptop or is_phone):
@@ -672,7 +705,7 @@ async def _generate_catalog_response(state: AgentState, db: AsyncSession) -> str
             sql = "SELECT name, sku FROM agent_v1.products WHERE sku ILIKE 'PHONE%' OR name ILIKE '%iphone%' OR name ILIKE '%galaxy%' OR name ILIKE '%xiaomi%' ORDER BY name LIMIT 12"
             header = "**Các mẫu Điện thoại hiện có tại shop:**\n"
         else:
-            if _specific_keywords.search(query):
+            if any(kw in query_lower for kw in _specific_keywords):
                 return None
             sql = "SELECT name, sku FROM agent_v1.products ORDER BY name LIMIT 12"
             header = "**Sản phẩm hiện có tại shop:**\n"

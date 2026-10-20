@@ -224,11 +224,23 @@ async def test_sc5_vietnamese_change_of_mind_no_llm_call(initial_state, mock_con
     mock_result.scalars().all.return_value = [mock_msg]
     mock_db.execute.return_value = mock_result
 
+    from core.agent.schemas.mutation import OrderActionEnum, OrderMutationRequest
+
+    mock_mutation = OrderMutationRequest(
+        action=OrderActionEnum.CHANGE_PRODUCT,
+        target_product_name="Xiaomi 14 ultra",
+        confidence=0.95,
+    )
+
     with (
         patch("litellm.acompletion") as mock_llm,
         patch(
             "core.agent.nodes.queue_consumer._resolve_new_product_from_modify",
             new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "core.agent.order_mutator.parse_order_mutation",
+            new=AsyncMock(return_value=mock_mutation),
         ),
     ):
         result = await queue_consumer_node(initial_state, mock_config)

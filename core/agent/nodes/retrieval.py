@@ -318,7 +318,17 @@ async def retrieval_node(state: AgentState, config: RunnableConfig) -> dict:
     # 2. Contextual Query Rewriter (2026 Production Standard):
     # If turn >= 2 (prior messages exist) and query was not already transformed by fast-path
     messages = state.get("messages") or []
-    if query == raw_query and len(messages) > 1:
+    # Skip contextual query rewriting for ORDER_PLACEMENT or after a clarify merge:
+    # A customer providing fulfillment info (address, phone) or confirming an order
+    # should NOT be rewritten into a product search query like "iPhone 15 giá tại HCM?".
+    # Also, when a clarify merge just constructed the full query, do not overwrite it.
+    is_clarify_merged = bool(state.get("awaiting_clarification") and orig_q)
+    if (
+        query == raw_query
+        and len(messages) > 1
+        and intent != "ORDER_PLACEMENT"
+        and not is_clarify_merged
+    ):
         from services.rag.query import rewrite_contextual_query
 
         rewritten = await rewrite_contextual_query(

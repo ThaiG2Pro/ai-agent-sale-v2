@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, cast
 
 from sqlalchemy import select
 
-from core.agent.intent_transitions import extract_address, extract_phone
 from core.agent.state import AgentState  # noqa: TC001 (required for LangGraph type resolution)
 from core.config import settings
 from models.schema import Product
@@ -170,8 +169,21 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
     # so it lands in the LangGraph checkpoint BEFORE hitl_guard_node calls interrupt().
     # (interrupt() checkpoints state as-received, not mid-node updates)
     if intent == "ORDER_PLACEMENT":
-        phone_found = extract_phone(user_msg)
-        addr_found = extract_address(user_msg)
+        from core.agent.order_mutator import extract_fulfillment_details
+        from core.agent.schemas.mutation import FulfillmentDetails
+
+        has_full_order = bool(
+            state.get("order_info")
+            and state["order_info"].get("phone")
+            and state["order_info"].get("address")
+        )
+        if has_full_order:
+            fulfillment = FulfillmentDetails()
+        else:
+            fulfillment = await extract_fulfillment_details(user_msg)
+
+        phone_found = fulfillment.phone
+        addr_found = fulfillment.address
 
         if state.get("order_info"):
             existing_order = dict(state["order_info"])
@@ -179,6 +191,12 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
                 existing_order["phone"] = phone_found
             if addr_found:
                 existing_order["address"] = addr_found
+            if fulfillment.quantity:
+                existing_order["quantity"] = fulfillment.quantity
+                u_price = float(
+                    existing_order.get("unit_price") or existing_order.get("price") or 0.0
+                )
+                existing_order["total_price"] = u_price * fulfillment.quantity
             result["order_info"] = existing_order
             result["declined"] = False
             result["needs_clarification"] = False
@@ -238,7 +256,7 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
 
                 desc = product_row.description if product_row else ""
                 is_match, req_var, avail_var = _check_variant_match(user_msg, name, desc)
-                stated_budget = _extract_budget_from_text(user_msg)
+                stated_budget = fulfillment.target_budget
 
                 if not is_match:
                     price_fmt = f"{price:,.0f} VND".replace(",", ".") if price > 0 else ""
@@ -257,7 +275,7 @@ async def confidence_node(state: AgentState, config: RunnableConfig) -> dict:
                         f"Anh/chị có muốn tham khảo các mẫu sản phẩm khác phù hợp với mức giá {budget_fmt} không ạ?"
                     )
                 else:
-                    qty = _extract_quantity_from_text(user_msg)
+                    qty = fulfillment.quantity or 1
                     phone = phone_found
                     address = addr_found
 
@@ -292,56 +310,36 @@ def _check_variant_match(
     user_msg: str, product_name: str, product_desc: str
 ) -> tuple[bool, str | None, str | None]:
     """Checks if user requested a specific storage variant (e.g. 256GB) that is not in the catalog product."""
-    import re
-
     msg_lower = user_msg.lower()
     product_all = f"{product_name} {product_desc}".lower()
 
-    storage_matches = re.findall(r"\b(64|128|256|512)\s*(?:gb|g)\b|\b(1|2)\s*tb\b", msg_lower)
-    if not storage_matches:
+    # Look for storage variant tokens in message
+    valid_storage = ("64gb", "128gb", "256gb", "512gb", "1tb", "2tb")
+    requested_variants = [
+        v
+        for v in valid_storage
+        if v in msg_lower
+        or v.replace("gb", " gb") in msg_lower
+        or v.replace("tb", " tb") in msg_lower
+    ]
+    if not requested_variants:
         return True, None, None
 
-    requested_variants = []
-    for m in storage_matches:
-        val = next(v for v in m if v)
-        unit = "TB" if val in ("1", "2") and "tb" in msg_lower else "GB"
-        requested_variants.append(f"{val}{unit}".lower())
-
     for req in requested_variants:
-        if req not in product_all:
-            avail_match = re.findall(
-                r"\b(64|128|256|512)\s*(?:gb|g)\b|\b(1|2)\s*tb\b", product_all
-            )
-            avail_var = None
-            if avail_match:
-                aval_val = next(v for v in avail_match[0] if v)
-                avail_var = f"{aval_val}GB"
-            return False, req.upper(), avail_var
+        req_clean = req.replace(" ", "")
+        if req_clean not in product_all and req_clean.replace("gb", " gb") not in product_all:
+            avail_vars = [
+                v.upper()
+                for v in valid_storage
+                if v in product_all or v.replace("gb", " gb") in product_all
+            ]
+            avail_var = avail_vars[0] if avail_vars else None
+            return False, req_clean.upper(), avail_var
 
     return True, None, None
 
 
 def _extract_quantity_from_text(text: str) -> int:
-    import re
-
-    if not text:
-        return 1
-    m_unit = re.search(r"(\d+)\s*(?:chiếc|cái|sp|sản\s+phẩm|bộ|máy|quả|bản)", text.lower())
-    if m_unit:
-        try:
-            val = int(m_unit.group(1))
-            if 1 <= val <= 100:
-                return val
-        except ValueError:
-            pass
-    m_kw = re.search(r"(?:mua|đặt|lấy|sl|số\s+lượng)\s+(\d+)", text.lower())
-    if m_kw:
-        try:
-            val = int(m_kw.group(1))
-            if 1 <= val <= 100:
-                return val
-        except ValueError:
-            pass
     return 1
 
 
@@ -407,21 +405,4 @@ def _route_after_confidence(state: AgentState) -> str:
 
 
 def _extract_budget_from_text(text: str) -> float | None:
-    """Extracts target budget number (e.g. 15 triệu, 15tr, 15.000.000) from text."""
-    import re
-
-    if not text:
-        return None
-    m_trieu = re.search(r"(\d+(?:\.\d+)?)\s*(?:triệu|tr)\b", text.lower())
-    if m_trieu:
-        try:
-            return float(m_trieu.group(1)) * 1_000_000
-        except ValueError:
-            pass
-    m_full = re.search(r"(\d{1,3}(?:\.\d{3}){2,3})", text)
-    if m_full:
-        try:
-            return float(m_full.group(1).replace(".", ""))
-        except ValueError:
-            pass
     return None

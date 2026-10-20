@@ -13,26 +13,9 @@ if TYPE_CHECKING:
     from core.agent.state import AgentState
 
 from core.config import settings
+from services.memory.episodic import _TIME_REFERENCE_TOKENS
 
 logger = logging.getLogger(__name__)
-
-# v3-0 P4 (T11 4.4): a time-referenced query needs episodic/semantic memory —
-# never skip retrieval for these tokens.
-_TIME_REFERENCE_TOKENS = (
-    "hôm qua",
-    "hôm trước",
-    "lần trước",
-    "bữa trước",
-    "tuần trước",
-    "tháng trước",
-    "đơn cũ",
-    "lúc nãy",
-    "ban nãy",
-    "yesterday",
-    "last time",
-    "last week",
-    "before",
-)
 
 
 def _empty_update() -> dict:

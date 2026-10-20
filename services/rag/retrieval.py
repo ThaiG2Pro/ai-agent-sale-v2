@@ -59,43 +59,12 @@ async def hybrid_search_rrf(
         logfire.error("Vector search timed out (junk/complex query)")
         return []
 
-    # ── FTS search — dynamic tsvector with unaccent & category fallback ──────────
-    import re as _re
-
-    # Clean conversational prefixes and metadata for better FTS keyword extraction
-    clean_qtext = query_text
-    while True:
-        prev = clean_qtext
-        clean_qtext = _re.sub(
-            r"^(?:(?:hôm qua|hôm nay|vừa nãy|trước đó)?\s*shop nhắn(?: tôi)?\s*|trúng khuyến mãi\s*|được mua\s*|có chương trình\s*|tôi muốn mua|tôi mua|mình muốn mua|mình mua|tôi muốn đặt|tôi đặt|đặt cho tôi|đặt giúp tôi|mình muốn đặt|mình đặt|shop có những mẫu|shop có mẫu|shop có|cho tôi|tư vấn|bán cho tôi)\s*",
-            "",
-            clean_qtext,
-            flags=_re.IGNORECASE,
-        ).strip()
-        if clean_qtext == prev:
-            break
-    # Strip contact info and price suffixes so plainto_tsquery gets the core product phrase
-    clean_qtext = _re.sub(
-        r"(?:sđt|số điện thoại|địa chỉ|giá).*$", "", clean_qtext, flags=_re.IGNORECASE
-    ).strip()
+    # ── FTS search — dynamic tsvector with unaccent & fallback ───────────────────
+    # In Ecommerce domain: FTS should search directly across product attributes (name, description, sku)
+    # without brittle regex strip-loops or hardcoded category injections.
+    clean_qtext = (query_text or "").strip()
     if not clean_qtext:
-        clean_qtext = query_text
-
-    is_case_query = bool(
-        _re.search(r"\b(ốp|ốp lưng|bao da|case|silicone)\b", query_text, _re.IGNORECASE)
-    )
-    is_laptop_query = bool(_re.search(r"\b(lap|laptop|máy tính)\b", query_text, _re.IGNORECASE))
-    is_phone_query = not is_case_query and bool(
-        _re.search(r"\b(dt|đt|điện thoại|phone|iphone|samsung)\b", query_text, _re.IGNORECASE)
-    )
-
-    category_filter = ""
-    if is_case_query:
-        category_filter = "OR p.sku ILIKE 'CASE%'"
-    elif is_laptop_query:
-        category_filter = "OR p.sku ILIKE 'LAPTOP%'"
-    elif is_phone_query:
-        category_filter = "OR p.sku ILIKE 'PHONE%'"
+        clean_qtext = "san pham"
 
     fts_sql = text(f"""
         SELECT
@@ -115,7 +84,6 @@ async def hybrid_search_rrf(
         WHERE to_tsvector('simple', {SCHEMA}.immutable_unaccent(coalesce(p.name, '') || ' ' || coalesce(p.description, '') || ' ' || coalesce(p.sku, '')))
               @@ plainto_tsquery('simple', {SCHEMA}.immutable_unaccent(:qtext))
            OR {SCHEMA}.immutable_unaccent(p.name) ILIKE '%' || {SCHEMA}.immutable_unaccent(:qtext) || '%'
-           {category_filter}
         ORDER BY fts_score DESC
         LIMIT :lim
     """)
